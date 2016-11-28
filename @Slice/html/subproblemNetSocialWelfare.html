@@ -1,0 +1,141 @@
+
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html><head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+   <!--
+This HTML was auto-generated from MATLAB code.
+To make changes, update the MATLAB code and republish this document.
+      --><title>subproblemNetSocialWelfare</title><meta name="generator" content="MATLAB 9.1"><link rel="schema.DC" href="http://purl.org/dc/elements/1.1/"><meta name="DC.date" content="2016-11-15"><meta name="DC.source" content="subproblemNetSocialWelfare.m"><style type="text/css">
+html,body,div,span,applet,object,iframe,h1,h2,h3,h4,h5,h6,p,blockquote,pre,a,abbr,acronym,address,big,cite,code,del,dfn,em,font,img,ins,kbd,q,s,samp,small,strike,strong,sub,sup,tt,var,b,u,i,center,dl,dt,dd,ol,ul,li,fieldset,form,label,legend,table,caption,tbody,tfoot,thead,tr,th,td{margin:0;padding:0;border:0;outline:0;font-size:100%;vertical-align:baseline;background:transparent}body{line-height:1}ol,ul{list-style:none}blockquote,q{quotes:none}blockquote:before,blockquote:after,q:before,q:after{content:'';content:none}:focus{outine:0}ins{text-decoration:none}del{text-decoration:line-through}table{border-collapse:collapse;border-spacing:0}
+
+html { min-height:100%; margin-bottom:1px; }
+html body { height:100%; margin:0px; font-family:Arial, Helvetica, sans-serif; font-size:10px; color:#000; line-height:140%; background:#fff none; overflow-y:scroll; }
+html body td { vertical-align:top; text-align:left; }
+
+h1 { padding:0px; margin:0px 0px 25px; font-family:Arial, Helvetica, sans-serif; font-size:1.5em; color:#d55000; line-height:100%; font-weight:normal; }
+h2 { padding:0px; margin:0px 0px 8px; font-family:Arial, Helvetica, sans-serif; font-size:1.2em; color:#000; font-weight:bold; line-height:140%; border-bottom:1px solid #d6d4d4; display:block; }
+h3 { padding:0px; margin:0px 0px 5px; font-family:Arial, Helvetica, sans-serif; font-size:1.1em; color:#000; font-weight:bold; line-height:140%; }
+
+a { color:#005fce; text-decoration:none; }
+a:hover { color:#005fce; text-decoration:underline; }
+a:visited { color:#004aa0; text-decoration:none; }
+
+p { padding:0px; margin:0px 0px 20px; }
+img { padding:0px; margin:0px 0px 20px; border:none; }
+p img, pre img, tt img, li img, h1 img, h2 img { margin-bottom:0px; } 
+
+ul { padding:0px; margin:0px 0px 20px 23px; list-style:square; }
+ul li { padding:0px; margin:0px 0px 7px 0px; }
+ul li ul { padding:5px 0px 0px; margin:0px 0px 7px 23px; }
+ul li ol li { list-style:decimal; }
+ol { padding:0px; margin:0px 0px 20px 0px; list-style:decimal; }
+ol li { padding:0px; margin:0px 0px 7px 23px; list-style-type:decimal; }
+ol li ol { padding:5px 0px 0px; margin:0px 0px 7px 0px; }
+ol li ol li { list-style-type:lower-alpha; }
+ol li ul { padding-top:7px; }
+ol li ul li { list-style:square; }
+
+.content { font-size:1.2em; line-height:140%; padding: 20px; }
+
+pre, code { font-size:12px; }
+tt { font-size: 1.2em; }
+pre { margin:0px 0px 20px; }
+pre.codeinput { padding:10px; border:1px solid #d3d3d3; background:#f7f7f7; }
+pre.codeoutput { padding:10px 11px; margin:0px 0px 20px; color:#4c4c4c; }
+pre.error { color:red; }
+
+@media print { pre.codeinput, pre.codeoutput { word-wrap:break-word; width:100%; } }
+
+span.keyword { color:#0000FF }
+span.comment { color:#228B22 }
+span.string { color:#A020F0 }
+span.untermstring { color:#B20000 }
+span.syscmd { color:#B28C00 }
+
+.footer { width:auto; padding:10px 0px; margin:25px 0px 0px; border-top:1px dotted #878787; font-size:0.8em; line-height:140%; font-style:italic; color:#878787; text-align:left; float:none; }
+.footer p { margin:0px; }
+.footer a { color:#878787; }
+.footer a:hover { color:#878787; text-decoration:underline; }
+.footer a:visited { color:#878787; }
+
+table th { padding:7px 5px; text-align:left; vertical-align:middle; border: 1px solid #d6d4d4; font-weight:bold; }
+table td { padding:7px 5px; text-align:left; vertical-align:top; border:1px solid #d6d4d4; }
+
+
+
+
+
+  </style></head><body><div class="content"><h1>subproblemNetSocialWelfare</h1><!--introduction--><p>subproblemNetSocialWelfare Summary of this function goes here   Detailed explanation goes here</p><!--/introduction--><h2>Contents</h2><div><ul><li><a href="#2">Parameters</a></li><li><a href="#4">gradient of lambda(p,f)</a></li></ul></div><h2 id="2">Parameters</h2><p><tt>lambda.pf</tt> is a matrix and lambda.npf is a 3-D array. <tt>dg_pf</tt> is the inrement of gradient on lambda. Set the feasible start point</p><h2 id="4">gradient of lambda(p,f)</h2><p><tt>z_np = this.I_node_path.*z_npf(index)</tt></p><p><img src="subproblemNetSocialWelfare_eq12043782969032145018.png" alt="$$\alpha_f x_p^{(s)} -&#xA;\sum_{n\in\mathcal{N}^{(s)}}{h_{n,p}^{(s)}z_{n,p,f}^{(s)}}$$"></p><p class="footer"><br><a href="http://www.mathworks.com/products/matlab/">Published with MATLAB&reg; R2016b</a><br></p></div><!--
+##### SOURCE BEGIN #####
+%% subproblemNetSocialWelfare
+% subproblemNetSocialWelfare Summary of this function goes here
+%   Detailed explanation goes here
+
+%%
+function [node_load, link_load, dg_pf] = subproblemNetSocialWelfare( this, lambda )
+%% Parameters
+% |lambda.pf| is a matrix and lambda.npf is a 3-D array.
+% |dg_pf| is the inrement of gradient on lambda.
+% Set the feasible start point
+x0 = zeros(this.num_vars,1);
+x0(1:this.NumberPaths) = 1;
+alpha_f = this.Parent.VNFTable.ProcessEfficiency(this.VNFList);
+x0((this.NumberPaths+1):end) = 1*this.NumberPaths*max(alpha_f);
+lbs = sparse(this.num_vars,1);
+% node_capacity = this.Parent.getNodeField('Capacity', this.VirtualNodes.PhysicalNode);
+% ubs = [inf*ones(this.NumberPaths,1);
+%     repmat(node_capacity, this.NumberPaths*this.NumberVNFs, 1)];
+% Algorithm option
+fmincon_opt = optimoptions(@fmincon);
+fmincon_opt.Algorithm = 'interior-point';
+fmincon_opt.HessianFcn = @(x,la)Slice.fcnHessian(x,la,this);
+fmincon_opt.SpecifyObjectiveGradient = true;
+fmincon_opt.SpecifyConstraintGradient = false;
+fmincon_opt.Display = 'notify';
+[x, fval, exitflag] = fmincon(@(x)Slice.subproblemObjective(x, lambda, this), ...
+    x0, [], [], [], [], lbs, [], [], fmincon_opt);
+fprintf('\tThe optimal net profit of the slice: %G.\n', -fval);
+if exitflag == 1 || exitflag == 2
+    x(x<10^-5) = 0;
+    x_path = x(1:this.NumberPaths);
+    z_npf = x((this.NumberPaths+1):end);
+    % |x_path.*alpha_f'| is a compatible arithmetic operation.
+    dg_pf = x_path.*alpha_f';
+    nz = this.NumberVirtualNodes*this.NumberPaths;
+    z_index = 1:nz;
+    for f = 1:this.NumberVNFs
+        z_npf(z_index) = this.I_node_path(:).*z_npf(z_index);
+        z_np = reshape(z_npf(z_index), this.NumberVirtualNodes, this.NumberPaths);
+        %% gradient of lambda(p,f)
+        % |z_np = this.I_node_path.*z_npf(index)|
+        % 
+        % $$\alpha_f x_p^{(s)} -
+        % \sum_{n\in\mathcal{N}^{(s)}}{h_{n,p}^{(s)}z_{n,p,f}^{(s)}}$$
+        dg_pf(:,f) = dg_pf(:,f) - (sum(z_np, 1))'; 
+        z_index = z_index + nz;
+    end
+    this.link_load = this.getLinkLoad(x_path);
+    this.node_load = this.getNodeLoad(z_npf);
+    this.flow_rate = this.getFlowRate(x_path);
+    node_load = zeros(1, this.Parent.NumberNodes);
+    link_load = zeros(1, this.Parent.NumberLinks);
+    node_load(this.VirtualNodes.PhysicalNode) = this.node_load;
+    link_load(this.VirtualLinks.PhysicalLink) = this.link_load;    
+%     if nargout > 3
+%         g_p = -x_path;
+%     end
+%     if nargout > 4
+%         g_npf = -reshape(z_npf, this.NumberVirtualNodes, this.NumberPaths, this.NumberVNFs);
+%     end
+else
+    warning('abnormal exit with flag %d.',exitflag);
+end
+end
+
+% function [x,z] = optimizeSingleFlow(this)
+% 
+% end
+
+##### SOURCE END #####
+--></body></html>

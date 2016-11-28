@@ -1,0 +1,187 @@
+
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html><head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+   <!--
+This HTML was auto-generated from MATLAB code.
+To make changes, update the MATLAB code and republish this document.
+      --><title>Load network data</title><meta name="generator" content="MATLAB 9.1"><link rel="schema.DC" href="http://purl.org/dc/elements/1.1/"><meta name="DC.date" content="2016-11-05"><meta name="DC.source" content="LoadNetworkData.m"><style type="text/css">
+html,body,div,span,applet,object,iframe,h1,h2,h3,h4,h5,h6,p,blockquote,pre,a,abbr,acronym,address,big,cite,code,del,dfn,em,font,img,ins,kbd,q,s,samp,small,strike,strong,sub,sup,tt,var,b,u,i,center,dl,dt,dd,ol,ul,li,fieldset,form,label,legend,table,caption,tbody,tfoot,thead,tr,th,td{margin:0;padding:0;border:0;outline:0;font-size:100%;vertical-align:baseline;background:transparent}body{line-height:1}ol,ul{list-style:none}blockquote,q{quotes:none}blockquote:before,blockquote:after,q:before,q:after{content:'';content:none}:focus{outine:0}ins{text-decoration:none}del{text-decoration:line-through}table{border-collapse:collapse;border-spacing:0}
+
+html { min-height:100%; margin-bottom:1px; }
+html body { height:100%; margin:0px; font-family:Arial, Helvetica, sans-serif; font-size:10px; color:#000; line-height:140%; background:#fff none; overflow-y:scroll; }
+html body td { vertical-align:top; text-align:left; }
+
+h1 { padding:0px; margin:0px 0px 25px; font-family:Arial, Helvetica, sans-serif; font-size:1.5em; color:#d55000; line-height:100%; font-weight:normal; }
+h2 { padding:0px; margin:0px 0px 8px; font-family:Arial, Helvetica, sans-serif; font-size:1.2em; color:#000; font-weight:bold; line-height:140%; border-bottom:1px solid #d6d4d4; display:block; }
+h3 { padding:0px; margin:0px 0px 5px; font-family:Arial, Helvetica, sans-serif; font-size:1.1em; color:#000; font-weight:bold; line-height:140%; }
+
+a { color:#005fce; text-decoration:none; }
+a:hover { color:#005fce; text-decoration:underline; }
+a:visited { color:#004aa0; text-decoration:none; }
+
+p { padding:0px; margin:0px 0px 20px; }
+img { padding:0px; margin:0px 0px 20px; border:none; }
+p img, pre img, tt img, li img, h1 img, h2 img { margin-bottom:0px; } 
+
+ul { padding:0px; margin:0px 0px 20px 23px; list-style:square; }
+ul li { padding:0px; margin:0px 0px 7px 0px; }
+ul li ul { padding:5px 0px 0px; margin:0px 0px 7px 23px; }
+ul li ol li { list-style:decimal; }
+ol { padding:0px; margin:0px 0px 20px 0px; list-style:decimal; }
+ol li { padding:0px; margin:0px 0px 7px 23px; list-style-type:decimal; }
+ol li ol { padding:5px 0px 0px; margin:0px 0px 7px 0px; }
+ol li ol li { list-style-type:lower-alpha; }
+ol li ul { padding-top:7px; }
+ol li ul li { list-style:square; }
+
+.content { font-size:1.2em; line-height:140%; padding: 20px; }
+
+pre, code { font-size:12px; }
+tt { font-size: 1.2em; }
+pre { margin:0px 0px 20px; }
+pre.codeinput { padding:10px; border:1px solid #d3d3d3; background:#f7f7f7; }
+pre.codeoutput { padding:10px 11px; margin:0px 0px 20px; color:#4c4c4c; }
+pre.error { color:red; }
+
+@media print { pre.codeinput, pre.codeoutput { word-wrap:break-word; width:100%; } }
+
+span.keyword { color:#0000FF }
+span.comment { color:#228B22 }
+span.string { color:#A020F0 }
+span.untermstring { color:#B20000 }
+span.syscmd { color:#B28C00 }
+
+.footer { width:auto; padding:10px 0px; margin:25px 0px 0px; border-top:1px dotted #878787; font-size:0.8em; line-height:140%; font-style:italic; color:#878787; text-align:left; float:none; }
+.footer p { margin:0px; }
+.footer a { color:#878787; }
+.footer a:hover { color:#878787; text-decoration:underline; }
+.footer a:visited { color:#878787; }
+
+table th { padding:7px 5px; text-align:left; vertical-align:middle; border: 1px solid #d6d4d4; font-weight:bold; }
+table td { padding:7px 5px; text-align:left; vertical-align:top; border:1px solid #d6d4d4; }
+
+
+
+
+
+  </style></head><body><div class="content"><h1>Load network data</h1><p>load network data with speicifed network model, link options and node options.</p><pre class="language-matlab">graph_data = LoadNetworkData( model, link_opt, node_opt)
+</pre><p><tt>model</tt>: specifies how to creat network data. See also NetworkModel.</p><p><tt>link_opt</tt>: link options.</p><div><ul><li><b>delay</b> <tt>LinkDelayOption</tt>: how to determine the links delay. See also LinkDelayOption.</li></ul></div><div><ul><li><b>cost</b> <tt>LinkCostOption</tt>: how to decide the unit cost of the links. If <tt>cost=LinkCostOption.NetworkSpecified</tt>, then <tt>link_opt</tt> must contain a field of <tt>link_cost</tt>. See also LinkCostOption.</li></ul></div><div><ul><li><b>link_cost</b>: user specified link cost.</li></ul></div><div><ul><li><b>delay2cost</b> <tt>double</tt>: when <tt>link_opt.cost=LinkCostOption.LengthDependent</tt>, this option specifies the coefficient to convert the delay to unit cost.</li></ul></div><div><ul><li><b>link_cost</b> <tt>double</tt>: unit cost of each link.</li></ul></div><p><tt>node_opt</tt>: node options.</p><div><ul><li><b>capacity</b>: how to specified the network nodes' capacity data. See also NodeCapacityOption.</li></ul></div><p class="footer"><br><a href="http://www.mathworks.com/products/matlab/">Published with MATLAB&reg; R2016b</a><br></p></div><!--
+##### SOURCE BEGIN #####
+%% Load network data
+% load network data with speicifed network model, link options and node options.
+%
+%   graph_data = LoadNetworkData( model, link_opt, node_opt) 
+% 
+% |model|: specifies how to creat network data. See also NetworkModel.
+%
+% |link_opt|: link options.
+%
+% * *delay* |LinkDelayOption|: how to determine the links delay. See also LinkDelayOption.
+%
+% * *cost* |LinkCostOption|: how to decide the unit cost of the links. If
+% |cost=LinkCostOption.NetworkSpecified|, then |link_opt| must contain a field of
+% |link_cost|. See also LinkCostOption. 
+%
+% * *link_cost*: user specified link cost.
+%
+% * *delay2cost* |double|: when |link_opt.cost=LinkCostOption.LengthDependent|, this
+% option specifies the coefficient to convert the delay to unit cost.
+% 
+% * *link_cost* |double|: unit cost of each link.
+%
+% |node_opt|: node options.
+%
+% * *capacity*: how to specified the network nodes' capacity data. See also
+% NodeCapacityOption. 
+%
+% 
+function graph_data = LoadNetworkData( model, link_opt, node_opt)
+switch model
+    case NetworkModel.Sample1
+        link_capacity =  1000*[      % Unit: Mbps
+            0  6  8  0  0 13;
+            7  0  9 14  0  0;
+            9 10  0 10  0  7;
+            0 15 11  0 13  0;
+            0  0  0 14  0  8;
+            14 0  8  0  9  0];
+        node_name = {'Beijing'; 'Shanghai'; 'Wuhan'; 'Guangzhou'; 'Chengdu'; 'Xian'};
+        location = [  40,116;    31,121;    30,114;   23,112;     30,104;   34,108];
+        
+        % node capacity
+        if nargin < 3 || ~isfield(node_opt, 'capacity') || isempty(node_opt)
+            node_opt.capacity = NodeCapacityOption.Default;
+        end
+        switch node_opt.capacity
+            case NodeCapacityOption.Default
+                node_capacity = 1000*[50; 50; 100; 50; 40; 60];
+            case NodeCapacityOption.UserSpecified
+                node_capacity = node_opt.node_capacity;
+            case NodeCapacityOption.BandwidthProportion
+                node_capacity = PhysicalNetwork.AF0 * ...
+                    (sum(link_capacity,2)+sum(link_capacity,1));
+        end
+        [tail, head, link_capacity]=find(link_capacity');
+        
+        % link delay
+        if nargin < 2 || ~isfield(link_opt, 'delay') || isempty(link_opt) 
+            link_opt.delay = LinkDelayOption.BandwidthPropotion;
+        end
+        if link_opt.delay==LinkDelayOption.BandwidthPropotion
+            link_delay = PhysicalNetwork.LinkDelay(link_opt.delay, link_capacity);
+            description = 'The link latency is proportial to the bandwidth, i.e. the longer path has larger bandiwdth';
+        elseif link_opt.delay==LinkDelayOption.BandwidthInverse
+            link_delay = PhysicalNetwork.LinkDelay(link_opt.delay, link_capacity);
+            description = 'The link latency is inverse proportial to the bandwidth, i.e. the short path has larger bandiwdth';
+        elseif link_opt.delay==LinkDelayOption.Constant
+            link_delay = 10*ones(size(link_capacity));
+            description = 'Each link has the same latency';
+        elseif link_opt.delay==LinkDelayOption.Random
+            rng(link_opt.RandomSeed);
+            link_delay = 10*rand(size(link_capacity));
+            description = 'Each link''s latency is random within a range';
+        end
+        
+        graph_data = digraph(head, tail, link_delay, node_name);
+        % Fields of Node Table: Name, Location, Capacity, StaticCost, UnitCost
+        graph_data.Nodes.Location = location;
+        graph_data.Nodes.Capacity = node_capacity;
+        graph_data.Nodes.Properties.UserData = {node_opt};
+        if ~isfield(node_opt, 'delay2cost') || isempty(link_opt.delay2cost)
+            link_opt.delay2cost = 1;
+        end
+        % Fields of Edge Table: EndNodes, Weight, Capacity, UnitCost
+        graph_data.Edges.Properties.VariableDescriptions{2}=description;
+        graph_data.Edges.Properties.UserData = {link_opt};
+        graph_data.Edges.Capacity = link_capacity;
+        if nargin < 2 || ~isfield(link_opt, 'cost') || isempty(link_opt)
+            link_opt.cost = LinkCostOption.LengthDependent;
+        end
+        switch link_opt.cost
+            case LinkCostOption.Uniform
+                link_opt.link_cost = ones(graph_data.numedges,1);
+            case LinkCostOption.LengthDependent
+                if ~isfield(link_opt, 'delay2cost') || isempty(link_opt.delay2cost)
+                    link_opt.delay2cost = 1;
+                end
+                link_opt.link_cost = link_opt.delay2cost .* graph_data.Edges.Weight;
+            case LinkCostOption.NetworkSpecified
+                if ~isfield(link_opt, 'link_cost') || isempty(link_opt.link_cost)
+                    error('Link cost information should be provided.');
+                end
+            otherwise
+                error('invalid link cost option (%d).', link_opt.cost);
+        end
+        graph_data.Edges.UnitCost = link_opt.link_cost;
+        graph_data.Edges.Properties.VariableUnits(2:3)={'ms','Gbps'};
+        
+    otherwise
+        error('cannot process this network model.')
+end
+
+end
+
+##### SOURCE END #####
+--></body></html>
