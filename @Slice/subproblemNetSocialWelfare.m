@@ -23,7 +23,7 @@ lbs = sparse(this.num_vars,1);
 % Algorithm option
 fmincon_opt = optimoptions(@fmincon);
 fmincon_opt.Algorithm = 'interior-point';
-fmincon_opt.HessianFcn = @(x,la)Slice.fcnHessian(x,la,this);
+fmincon_opt.HessianFcn = @(x,lmd)Slice.fcnHessian(x,lmd,this);
 fmincon_opt.SpecifyObjectiveGradient = true;
 fmincon_opt.SpecifyConstraintGradient = false;
 fmincon_opt.Display = 'notify';
@@ -46,7 +46,8 @@ if exitflag == 1 || exitflag == 2
     end
     this.x_path(this.x_path<10^-3) = 0;
     this.z_npf(this.z_npf<10^-3) = 0;
-    if ~this.checkFeasible([this.x_path; this.z_npf])
+    options.Display = 'warn';
+    if ~this.checkFeasible([this.x_path; this.z_npf], options)
         warning('the rounding of variables with small quantity will make the solution infeasible.');
     end
 
@@ -59,6 +60,7 @@ if exitflag == 1 || exitflag == 2
     %         % $$\alpha_f x_p^{(s)} -
     %         % \sum_{n\in\mathcal{N}^{(s)}}{h_{n,p}^{(s)}z_{n,p,f}^{(s)}}$$
     %         %         dg_pf(:,f) = dg_pf(:,f) - (sum(z_np, 1))';
+
     node_load = zeros(1, this.Parent.NumberNodes);
     link_load = zeros(1, this.Parent.NumberLinks);
     node_load(this.VirtualNodes.PhysicalNode) = this.getNodeLoad(this.z_npf);

@@ -7,9 +7,8 @@ classdef NodeCapacityOption < uint32
     end
     
     enumeration
-        UserSpecified(1);
+        NetworkSpecified(1);
         BandwidthProportion(2);
-        Default(2);
     end
     
 end

@@ -3,9 +3,9 @@ link_uc = ss.Parent.getLinkField('UnitCost');
 node_uc = ss.Parent.getNodeField('UnitCost');
 link_load = ss.VirtualLinks.Load;
 node_load = ss.VirtualNodes.Load;
-epsilon = ss.Parent.staticNodeCost;
+epsilon = ss.Parent.unitStaticNodeCost;
 N = ss.Parent.NumberNodes;
-theta = ss.Parent.networkUtilization(node_load, link_load);
+theta = ss.Parent.utilizationRatio(node_load, link_load);
 
 %% single optimization
 utility = sum(ss.FlowTable.Weight.*log(ss.FlowTable.Rate));
@@ -16,16 +16,14 @@ profit = utility - link_cost - node_cost - static_cost;
 disp(profit);
 
 %% single optimization node load
-for f = PN.NumberVNFs
-    for i = ss.FlowTable
-end
+
 
 %% dual decompoistion
 link_load = PN.getLinkField('Load');
 node_load = PN.getNodeField('Load');
 link_cost = PN.getLinkCost;
 node_cost = PN.getNodeCost;
-theta = PN.networkUtilization(node_load, link_load);
+theta = PN.utilizationRatio(node_load, link_load);
 static_cost = epsilon*((N-1)*theta+1);
 utility = 0;
 weight = [100000, 200000, 300000];
@@ -43,3 +41,7 @@ znpf = reshape(PN.slices{2}.Variables.z, PN.slices{2}.NumberVirtualNodes, ...
     PN.slices{2}.NumberPaths, PN.slices{2}.NumberVNFs);
 znpf = reshape(PN.slices{3}.Variables.z, PN.slices{3}.NumberVirtualNodes, ...
     PN.slices{3}.NumberPaths, PN.slices{3}.NumberVNFs);
+
+%%
+(21.7040 - 21.9666)/((21.9666+21.7040)/2)
+(5.2881 - 34.1003)/((5.2881+34.1003)/2)

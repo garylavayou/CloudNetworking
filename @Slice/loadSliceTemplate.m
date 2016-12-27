@@ -11,7 +11,8 @@ end
 %% T1.1
 i = 1;
 if find(type_index==1,1)
-    slice_template(i).Type = FlowP.RandomMultiFlow;
+    slice_template(i).Type = 1;
+    slice_template(i).Pattern = FlowPattern.RandomMultiFlow;
     slice_template(i).Weight = 8;
     slice_template(i).NumberPaths = 3;
     slice_template(i).NumberFlows = 30;
@@ -25,7 +26,8 @@ end
 
 %% T1.2
 if find(type_index==2,1)
-    slice_template(i).Type = SliceType.RandomMultiFlow;
+    slice_template(i).Type = 2;
+    slice_template(i).Pattern = FlowPattern.RandomMultiFlow;
     slice_template(i).Weight = 30;
     slice_template(i).NumberPaths = 3;
     slice_template(i).NumberFlows = 10;
@@ -37,7 +39,8 @@ end
 
 %% T1.3
 if find(type_index==3,1)
-    slice_template(i).Type = SliceType.RandomMultiFlow;
+    slice_template(i).Type = 3;
+    slice_template(i).Pattern = FlowPattern.RandomMultiFlow;
     slice_template(i).Weight = 400;
     slice_template(i).NumberPaths = 1;
     slice_template(i).NumberFlows = 3;
@@ -49,7 +52,8 @@ end
 
 %% T2.1
 if find(type_index==4,1)
-    slice_template(i).Type = SliceType.RandomMultiFlow;
+    slice_template(i).Type = 4;
+    slice_template(i).Pattern = FlowPattern.RandomMultiFlow;
     slice_template(i).Weight = 8;
     slice_template(i).NumberPaths = 3;
     slice_template(i).NumberFlows = 120;
@@ -60,7 +64,8 @@ if find(type_index==4,1)
 end
 %% T2.2
 if find(type_index==5,1)
-    slice_template(i).Type = SliceType.RandomMultiFlow;
+    slice_template(i).Type = 5;
+    slice_template(i).Pattern = FlowPattern.RandomMultiFlow;
     slice_template(i).Weight = 40;
     slice_template(i).NumberPaths = 2;
     slice_template(i).NumberFlows = 40;
@@ -71,7 +76,8 @@ if find(type_index==5,1)
 end
 %% T2.3
 if find(type_index==6,1)
-    slice_template(i).Type = SliceType.RandomMultiFlow;
+    slice_template(i).Type = 6;
+    slice_template(i).Pattern = FlowPattern.RandomMultiFlow;
     slice_template(i).Weight = 400;
     slice_template(i).NumberPaths = 1;
     slice_template(i).NumberFlows = 4;

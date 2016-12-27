@@ -6,7 +6,7 @@
    <!--
 This HTML was auto-generated from MATLAB code.
 To make changes, update the MATLAB code and republish this document.
-      --><title>optimizeResourcePrice</title><meta name="generator" content="MATLAB 9.1"><link rel="schema.DC" href="http://purl.org/dc/elements/1.1/"><meta name="DC.date" content="2016-11-04"><meta name="DC.source" content="optimizeResourcePrice.m"><style type="text/css">
+      --><title>Optimize resource price</title><meta name="generator" content="MATLAB 9.1"><link rel="schema.DC" href="http://purl.org/dc/elements/1.1/"><meta name="DC.date" content="2016-11-30"><meta name="DC.source" content="optimizeResourcePrice.m"><style type="text/css">
 html,body,div,span,applet,object,iframe,h1,h2,h3,h4,h5,h6,p,blockquote,pre,a,abbr,acronym,address,big,cite,code,del,dfn,em,font,img,ins,kbd,q,s,samp,small,strike,strong,sub,sup,tt,var,b,u,i,center,dl,dt,dd,ol,ul,li,fieldset,form,label,legend,table,caption,tbody,tfoot,thead,tr,th,td{margin:0;padding:0;border:0;outline:0;font-size:100%;vertical-align:baseline;background:transparent}body{line-height:1}ol,ul{list-style:none}blockquote,q{quotes:none}blockquote:before,blockquote:after,q:before,q:after{content:'';content:none}:focus{outine:0}ins{text-decoration:none}del{text-decoration:line-through}table{border-collapse:collapse;border-spacing:0}
 
 html { min-height:100%; margin-bottom:1px; }
@@ -66,51 +66,126 @@ table td { padding:7px 5px; text-align:left; vertical-align:top; border:1px soli
 
 
 
-  </style></head><body><div class="content"><h2>Contents</h2><div><ul><li><a href="#1">Optimize resource price</a></li><li><a href="#3">Compute the new resource price</a></li><li><a href="#4">TODO: add the stop condition</a></li></ul></div><h2 id="1">Optimize resource price</h2><p>first, the resource for each slice is the same.</p><h2 id="3">Compute the new resource price</h2><p>First, the resource cost function is assumed to be linear, i.e. <img src="optimizeResourcePrice_eq04814462053468801325.png" alt="$\phi_{l}(e) = \eta_{l}\times y_e$"> and <img src="optimizeResourcePrice_eq05764570126250224560.png" alt="$\phi_{d}(n) = \eta_{n}\times v_n$">.</p><p>Second, the static node cost function is also assumed to be linear, i.e. <img src="optimizeResourcePrice_eq06478299633521684009.png" alt="$N_{VNF}=(N-1)\theta+1$"></p><p>Under the above assumtions, the resource price is only related to the residual capacity of each link and node.</p><h2 id="4">TODO: add the stop condition</h2><p class="footer"><br><a href="http://www.mathworks.com/products/matlab/">Published with MATLAB&reg; R2016b</a><br></p></div><!--
+  </style></head><body><div class="content"><h1>Optimize resource price</h1><!--introduction--><p>first, the resource for each slice is the same.</p><!--/introduction--><h2>Contents</h2><div><ul><li><a href="#1">TODO Resource Cost Model</a></li><li><a href="#2">network data</a></li><li><a href="#3">Initial Price</a></li><li><a href="#5">Compute the new resource price according to the resource consumption</a></li></ul></div><h2 id="1">TODO Resource Cost Model</h2><h2 id="2">network data</h2><h2 id="3">Initial Price</h2><h2 id="5">Compute the new resource price according to the resource consumption</h2><p>First, the resource cost function is assumed to be linear, i.e. <img src="optimizeResourcePrice_eq04814462053468801325.png" alt="$\phi_{l}(e) = \eta_{l}\times y_e$"> and <img src="optimizeResourcePrice_eq05764570126250224560.png" alt="$\phi_{d}(n) = \eta_{n}\times v_n$">. Second, the static node cost function is also assumed to be linear, i.e. <img src="optimizeResourcePrice_eq06478299633521684009.png" alt="$N_{VNF}=(N-1)\theta+1$"></p><p>Under the above assumtions, the resource price is only related to the residual capacity of each link and node. Given the log barrier function <img src="optimizeResourcePrice_eq12688508824912256853.png" alt="$\beta\log{(1-\frac{y_e}{c_e})}$">, the resource price is calculated as follows.</p><p class="footer"><br><a href="http://www.mathworks.com/products/matlab/">Published with MATLAB&reg; R2016b</a><br></p></div><!--
 ##### SOURCE BEGIN #####
 %% Optimize resource price
 % first, the resource for each slice is the same.
+%% TODO Resource Cost Model
 function optimizeResourcePrice(this, init_link_price, init_node_price)
+%% network data
+NN = this.NumberNodes;
+NS = this.NumberSlices;
+NL = this.NumberLinks;
+node_load = zeros(NN, NS);
+link_load = zeros(NL, NS);
+node_uc = this.getNodeField('UnitCost');
+link_uc = this.getLinkField('UnitCost');
+node_capacity = this.getNodeField('Capacity');
+link_capacity = this.getLinkField('Capacity');
+alpha = 0.5;
+delta = this.Delta;
+epsilon = this.staticNodeCost;
+phis_n = epsilon*delta*(NN-1)/this.totalNodeCapacity;
+phis_l = epsilon*(1-delta)*(NN-1)/this.totalLinkCapacity;
+
+%% Initial Price
 if nargin >=2
-    for i = 1:this.NumberSlices
-        this.slices{i}.VirtualLinkMap.Price = init_link_price;
-    end
+    link_price = init_link_price;
+else
+    %     link_price = ones(this.NumberLinks,1);
+    link_price = link_uc + phis_l;
+    beta_link = link_price.*(1/3).*link_capacity;
+    this.setLinkField('Beta', beta_link);
 end
 if nargin >= 3
-    for i = 1:this.NumberSlices
-        this.slices{i}.VirtualNodeMap.Price = init_node_price;
-    end
+    node_price = init_node_price;
+else
+    %     node_price = ones(this.NumberNodes,1);
+    node_price = node_uc + phis_n;
+    beta_node = node_price.*(1/3).*node_capacity;
+    this.setNodeField('Beta', beta_node);
 end
-x = cell(this.NumberSlices,1);
+this.setLinkField('Price', link_price);
+this.setNodeField('Price', node_price);
+
+number_iter = 1;
+utility = zeros(NS,1);
+new_utility = zeros(NS,1);
+rate = cell(NS,1);
+net_welfare = -inf;
 while true
-    % optimize each network slice
-    for i = 1:this.NumberSlices
-        x{i} = this.slices{i}.optimalFlowRate;
+%     alpha = 1/number_iter;
+    % announce the resource price and optimize each network slice
+    for s = 1:NS
+        this.slices{s}.VirtualLinks.Price = ...
+            link_price(this.slices{s}.VirtualLinks.PhysicalLink);
+        this.slices{s}.VirtualNodes.Price = ...
+            node_price(this.slices{s}.VirtualNodes.PhysicalNode);        
+        [rate{s}, new_utility(s), node_load(:,s), link_load(:,s)] ...
+            = this.slices{s}.optimalFlowRate;
     end
-    % update the physical links and nodes' load
-    link_load = zeros(this.NumberEdges,1);
-    node_load = zeros(this.NumberNodes,1);
-    for i = 1:this.NumberSlices
-        nid = this.slices{i}.VirtualLinkMap.PhysicalLink;
-        link_load(nid) = link_load(nid) + this.slices{i}.VirtualLinkMap.Load;
-        node_load(nid) = node_load(nid) + this.slices{i}.VirtualNodeMap.Load;
-    end
-    
-    %% Compute the new resource price
+
+    %% Compute the new resource price according to the resource consumption
     % First, the resource cost function is assumed to be linear, i.e.
     % $\phi_{l}(e) = \eta_{l}\times y_e$ and $\phi_{d}(n) = \eta_{n}\times
     % v_n$.
-    %
     % Second, the static node cost function is also assumed to be linear, i.e.
     % $N_{VNF}=(N-1)\theta+1$
     %
     % Under the above assumtions, the resource price is only related to the
-    % residual capacity of each link and node.
-    
-    
-    %% TODO: add the stop condition
-    break
+    % residual capacity of each link and node. Given the log barrier function
+    % $\beta\log{(1-\frac{y_e}{c_e})}$, the resource price is calculated as follows.
+    %
+    aggr_node_load = sum(node_load, 2);
+    aggr_link_load = sum(link_load, 2);
+    residual_link_capacity = aggr_link_load - link_capacity;
+    b_violate = residual_link_capacity<=0;
+    residual_link_capacity(b_violate) = eps;
+    new_link_price = link_uc + phis_l + this.getLinkField('Beta')./residual_link_capacity;
+    new_link_price(b_violate) = link_price(b_violate)*2;
+    residual_node_capacity = node_capacity - aggr_node_load;
+    b_violate = residual_node_capacity<=0;
+    residual_node_capacity(b_violate) = eps;
+    new_node_price = node_uc + phis_n + this.getNodeField('Beta')./residual_node_capacity;    
+    new_node_price(b_violate) = node_price(b_violate)*2;
+    % compute net social welfare
+    new_net_welfare = 0;
+    for s = 1:NS
+        new_net_welfare = new_net_welfare + this.slices{s}.weight*sum(log(rate{s}));
+    end
+    new_net_welfare = new_net_welfare - this.getNodeCost(aggr_node_load) ...
+        - this.getLinkCost(link_load) - epsilon*...
+        ((N-1)*this.networkUtilization(node_load,link_load)+1);
+    % The stop condition
+    %    (norm(new_link_price-link_price)/this.NumberLinks;
+    stop_cond11 = norm(new_link_price-link_price)/norm(link_price);
+    stop_cond12 = norm(new_node_price-node_price)/norm(node_price);
+    %     norm(new_utility-utility)/NS < 10^-3;
+    stop_cond2 = norm(new_utility-utility)/norm(utility);
+    %     stop_cond3 = norm(new_net_welfare-net_welfare)/NS < 10^-3;
+    stop_cond3 = norm(new_net_welfare-net_welfare)/norm(new_net_welfare);
+    fprintf('\t stop condition 1: (%G,%G).\n', stop_cond11,stop_cond12);
+    fprintf('\t stop condition 2: %G.\n', stop_cond2);
+    fprintf('\t stop condition 3: %G.\n', stop_cond3);
+    if (stop_cond11<10^-3&&stop_cond12<10^-3) || stop_cond2<10^-4 || stop_cond3<10^-4
+        break;
+    else
+        link_price = alpha*new_link_price+(1-alpha)*link_price;
+        node_price = alpha*new_node_price+(1-alpha)*node_price;
+        utility = new_utility;
+        net_welfare = new_net_welfare;
+    end    
+    number_iter = number_iter + 1;
 end
+this.setLinkField('Price', link_price);
+this.setNodeField('Price', node_price);
+this.setNodeField('Load', node_load);
+this.setLinkField('Load', link_load);
+
+% output the optimization results
+disp('Optimization results:');
+fprintf('\tThe optimization procedure contains %d iterations.\n', number_iter);
+fprintf('\tNormalized network utilization is %G.\n', this.networkUtilization);
 end
 ##### SOURCE END #####
 --></body></html>

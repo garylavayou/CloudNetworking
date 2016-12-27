@@ -5,24 +5,15 @@ var_path = var_x(1:S.NumberPaths);
 var_node = var_x((S.NumberPaths+1):end);
 link_load = S.getLinkLoad(var_path);    % the load of virtual links in the slice
 node_load = S.getNodeLoad(var_node);    % the load of virtual nodes in the slice 
-link_uc = S.Parent.getLinkField('UnitCost', S.VirtualLinks.PhysicalLink); % the virtual links's unit cost
-node_uc = S.Parent.getNodeField('UnitCost', S.VirtualNodes.PhysicalNode); % the virtual nodes's unit cost
-delta = S.Parent.Delta;
-epsilon = S.Parent.staticNodeCost;
-N = S.Parent.NumberNodes;
-phis_n = epsilon*delta*(N-1)/S.Parent.totalNodeCapacity;
-phis_l = epsilon*(1-delta)*(N-1)/S.Parent.totalLinkCapacity;
-%% net social welfare in the subproblem
-% when compute the static cost, the Capacity of all physical nodes and links is included,
-% 
-% the constant part of the objective fucntion can be ignored.
-% 
-profit = S.weight*sum(log(S.getFlowRate(var_path))) ...
-    - dot(link_uc, link_load) - dot(node_uc, node_load) ...
-    - (phis_n*sum(node_load)+phis_l*sum(link_load));
+
+%% net profit of a slice
+% The net profit of a slice (objective value) is equal to the utility less the slice cost
+% and the cost introduced by dual variables.
+%
+% *Note*: cannot use _PhysicalNetwork.getNetworkCost_ to calculate the slice cost.
+profit = S.weight*sum(log(S.getFlowRate(var_path))) - S.getSliceCost(node_load, link_load);
 
 %% dual variable cost
-% |S.As_res*lambda.pf(:)| is a compatible arithmetic operation.
 dual_cost = dot(lambda.n, node_load) + dot(lambda.e, link_load);
 % if isfield(lambda, 'p')
 %     dual_cost = dual_cost - dot(lambda.p, var_path);
@@ -30,27 +21,39 @@ dual_cost = dot(lambda.n, node_load) + dot(lambda.e, link_load);
 % if isfield(lambda, 'npf')
 %     dual_cost = dual_cost - dot(lambda.npf(:),var_node);
 % end
+% |S.As_res*lambda.pf(:)| is a compatible arithmetic operation.
 
-% objective value
 fval = -profit + dual_cost;
 
 %% gradient of objective function
-% 
-grad = zeros(length(var_x),1);
-for p = 1:S.NumberPaths
-    i = S.path_owner(p);
-    grad(p) = -S.weight/(S.I_flow_path(i,:)*var_path) + ...
-        dot((link_uc+phis_l+lambda.e),S.I_edge_path(:,p));
+% The upper bound number of non-zero elements in the gradient vector:
+%  the gradient on path variable is nonzeros, so there is |P| components;
+%  whether the gradient on node variable is zeros is depend on the node-path
+%  incidence matrix, so the number of non-zero elements is less than i.e.
+%  |nnz(I_node_path)*F|.  
+if nargout >= 2
+    link_uc = S.Parent.getLinkField('UnitCost', S.VirtualLinks.PhysicalLink);
+    node_uc = S.Parent.getNodeField('UnitCost', S.VirtualNodes.PhysicalNode);
+    delta = S.Parent.delta;
+    epsilon = S.Parent.unitStaticNodeCost;
+    N = S.Parent.NumberNodes;
+    phis_n = epsilon*delta*(N-1)/S.Parent.totalNodeCapacity;
+    phis_l = epsilon*(1-delta)*(N-1)/S.Parent.totalLinkCapacity;
+    grad = spalloc(length(var_x),1, S.NumberPaths+nnz(S.I_node_path)*S.NumberVNFs);
+    for p = 1:S.NumberPaths
+        i = S.path_owner(p);
+        grad(p) = -S.weight/(S.I_flow_path(i,:)*var_path) + ...
+            dot((link_uc+phis_l+lambda.e),S.I_edge_path(:,p)); %#ok<SPRIX>
+    end
+    
+    nz = S.NumberVirtualNodes*S.NumberPaths;
+    z_index = S.NumberPaths+(1:nz);
+    for f = 1:S.NumberVNFs
+        %% Each iteration: find z(:,:,f)'s derivatives.
+        % compatible arithmetic operation: node_unit_cost, s_n and lambda.n is column
+        % vectors and (lambda.pf(:,f))' is a row vectors, the result is a matrix.
+        grad(z_index) = (node_uc + phis_n + lambda.n).*S.I_node_path; %#ok<SPRIX>
+        z_index = z_index + nz;
+    end
 end
-
-nz = S.NumberVirtualNodes*S.NumberPaths;
-z_index = S.NumberPaths+(1:nz);
-for f = 1:S.NumberVNFs
-    %% Each iteration: find z(:,:,f)'s derivatives.
-    % compatible arithmetic operation: node_unit_cost, s_n and lambda.n is column vectors
-    % and (lambda.pf(:,f))' is a row vectors, the result is a matrix.
-    grad(z_index) = (node_uc + phis_n + lambda.n).*S.I_node_path;
-    z_index = z_index + nz;
-end
-
 end

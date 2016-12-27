@@ -77,7 +77,7 @@ end
 % If strong duality holds, dual objective value equals to primal objective value.
 % We calculate the primal objective value by its definition to verify if the dual can
 % primal objective value are consistent.
-epsilon = this.staticNodeCost;
+epsilon = this.unitStaticNodeCost;
 dual_fval = -(prev_dual_fval - epsilon*(NN-1));
 prim_fval = 0;
 for s = 1:NS
@@ -87,10 +87,7 @@ for s = 1:NS
 end
 aggr_node_load = sum(node_load,2);
 aggr_link_load = sum(link_load,2);
-theta = this.networkUtilization(aggr_node_load, aggr_link_load);
-prim_fval = prim_fval - this.getNodeCost(aggr_node_load) ...
-    - this.getLinkCost(aggr_link_load) ...
-    - epsilon*((NN-1)*theta+1);
+prim_fval = prim_fval - this.getNetworkCost(aggr_node_load, aggr_link_load);
 fprintf('Optimal solution: fx = %G, g(¦Ë) = %G.\n', prim_fval, dual_fval);
 fprintf('Iteration number: %d, Evaluation Number: %G.\n', iter_num, eval_num);
 end

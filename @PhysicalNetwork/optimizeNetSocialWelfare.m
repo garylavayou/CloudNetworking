@@ -26,9 +26,9 @@ NS = this.NumberSlices;
 NL = this.NumberLinks;
 node_capacity = this.getNodeField('Capacity');
 link_capacity = this.getLinkField('Capacity');
-epsilon = this.staticNodeCost;
+epsilon = this.unitStaticNodeCost;
 % node_unit_cost = this.getNodeField('UnitCost');
-% phis_n = this.staticNodeCost*this.Delta*(NN-1)/this.totalNodeCapacity;
+% phis_n = this.staticNodeCost*this.delta*(NN-1)/this.totalNodeCapacity;
 % storage for subproblem results
 % the results are mapped from slices to substrate network
 node_load = zeros(NS, NN);
@@ -273,10 +273,7 @@ for i = 1:NS
 end
 aggr_node_load = sum(node_load,1)';
 aggr_link_load = sum(link_load,1)';
-theta = this.networkUtilization(aggr_node_load, aggr_link_load);
-primal_fval = utility - this.getNodeCost(aggr_node_load) ...
-    - this.getLinkCost(aggr_link_load) ...
-    - epsilon*((NN-1)*theta+1);
+primal_fval = utility - this.getNetworkCost(aggr_node_load ,aggr_link_load);
 fprintf('\tOptimal solution: dual objective: %G, primal objective %G.\n', ...
     dual_fval, primal_fval);
 end

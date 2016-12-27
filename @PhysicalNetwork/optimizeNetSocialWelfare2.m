@@ -1,4 +1,10 @@
-function [prim_fval] = optimizeNetSocialWelfare2( this )
+%% Dual decomposition
+% * *step length* when a point is not actually ascent, go backward to the last point, and
+% choosing a shorter step lenght and retry. 
+function [prim_fval] = optimizeNetSocialWelfare2( this, options )
+if nargin <= 1
+    options.Display = 'final';
+end
 %% network data
 NN = this.NumberNodes;
 NS = this.NumberSlices;
@@ -16,10 +22,11 @@ l0 = 10;
 lambda.n = l0*ones(NN, 1)*max(node_capacity)./node_capacity;
 lambda.e = l0*ones(NL, 1)*max(link_capacity)./link_capacity;
 increase_num = 0;
-tol_fun = 10^-3;
-
+tol_fun = 10^-5;
+prev_dual_fval = inf;
 %% Find lambda a feasible point
 while true
+    iter_num = iter_num + 1;
     eval_num = eval_num + 1;
     dual_fval = 0;
     for s = 1:NS
@@ -30,6 +37,13 @@ while true
             this.slices{s}.subproblemNetSocialWelfare(lambda_s);
         dual_fval = dual_fval + fval;
     end
+    dual_fval = dual_fval - dot(lambda.n, node_capacity) - ...
+        dot(lambda.e, link_capacity);
+    if strncmp(options.Display,'iter', 4)
+        fprintf('\tDual problem: new value: %.3e, old value: %.3e, difference: %.3e.\n', ...
+            dual_fval, prev_dual_fval, dual_fval-prev_dual_fval);
+    end
+    prev_dual_fval = dual_fval;
     % check the primal feasibility
     aggr_node_load = sum(node_load, 2);
     b_feasible = true;
@@ -46,7 +60,6 @@ while true
         break;
     end
 end
-prev_dual_fval = dual_fval - dot(lambda.n, node_capacity) - dot(lambda.e, link_capacity);
 this.saveStates;
 
 %% Evaluate the initial step length    
@@ -54,7 +67,7 @@ delta_lambda.n = aggr_node_load - node_capacity;
 delta_lambda.e = aggr_link_load - link_capacity;
 idn = delta_lambda.n<0;
 ide = delta_lambda.e<0;
-step_length = min(min(-lambda.e(ide)./delta_lambda.e(ide)),...
+step_length = 1/32*min(min(-lambda.e(ide)./delta_lambda.e(ide)),...
     min(-lambda.n(idn)./delta_lambda.n(idn)));
 % step_length = 0.001;
 
@@ -79,15 +92,19 @@ while true
         end
         dual_fval = dual_fval - dot(temp_lambda.n, node_capacity) - ...
             dot(temp_lambda.e, link_capacity);
-        fprintf('\tDual problem: new value: %.3e, old value: %.3e, difference: %.3e.\n', ...
-            dual_fval, prev_dual_fval, dual_fval-prev_dual_fval);
+        if strncmp(options.Display,'iter', 4)
+            fprintf('\tDual problem: new value: %.3e, old value: %.3e, difference: %.3e.\n', ...
+                dual_fval, prev_dual_fval, dual_fval-prev_dual_fval);
+        end
         if dual_fval > prev_dual_fval
             lambda = temp_lambda;
             increase_num = increase_num + 1;
 %             this.saveStates;
             if increase_num >= 3
-                step_length = step_length * (1+2/increase_num);
+                step_length = step_length * (1+1/increase_num);
             end
+            break;
+        elseif abs(prev_dual_fval-dual_fval)/abs(dual_fval) < tol_fun
             break;
         else
             step_length = step_length / 2;
@@ -116,7 +133,7 @@ end
 % If strong duality holds, dual objective value equals to primal objective value.
 % We calculate the primal objective value by its definition to verify if the dual can
 % primal objective value are consistent.
-epsilon = this.staticNodeCost;
+epsilon = this.unitStaticNodeCost;
 dual_fval = -(prev_dual_fval - epsilon*(NN-1));
 prim_fval = 0;
 for s = 1:NS
@@ -126,10 +143,11 @@ for s = 1:NS
 end
 this.setNodeField('Load', sum(node_load,2));
 this.setLinkField('Load', sum(link_load,2));
-theta = this.networkUtilization;
-prim_fval = prim_fval - this.getNodeCost - this.getLinkCost ...
-    - epsilon*((NN-1)*theta+1);
-fprintf('Optimal solution: fx = %G, g(¦Ë) = %G.\n', prim_fval, dual_fval);
-fprintf('Iteration number: %d, Evaluation Number: %G.\n', iter_num, eval_num);
+prim_fval = prim_fval - this.getNetworkCost;
+if strncmp(options.Display,'iter', 4) || ...
+        strncmp(options.Display,'notify', 6) || strncmp(options.Display,'final', 5) 
+    fprintf('\tOptimal solution: fx = %G, g(¦Ë) = %G.\n', prim_fval, dual_fval);
+    fprintf('\tIteration number: %d, Evaluation Number: %G.\n', iter_num, eval_num);
+end
 end
 

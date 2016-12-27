@@ -6,7 +6,7 @@
    <!--
 This HTML was auto-generated from MATLAB code.
 To make changes, update the MATLAB code and republish this document.
-      --><title>optimalFlowRate</title><meta name="generator" content="MATLAB 9.1"><link rel="schema.DC" href="http://purl.org/dc/elements/1.1/"><meta name="DC.date" content="2016-11-04"><meta name="DC.source" content="optimalFlowRate.m"><style type="text/css">
+      --><title>optimalFlowRate</title><meta name="generator" content="MATLAB 9.1"><link rel="schema.DC" href="http://purl.org/dc/elements/1.1/"><meta name="DC.date" content="2016-12-20"><meta name="DC.source" content="optimalFlowRate.m"><style type="text/css">
 html,body,div,span,applet,object,iframe,h1,h2,h3,h4,h5,h6,p,blockquote,pre,a,abbr,acronym,address,big,cite,code,del,dfn,em,font,img,ins,kbd,q,s,samp,small,strike,strong,sub,sup,tt,var,b,u,i,center,dl,dt,dd,ol,ul,li,fieldset,form,label,legend,table,caption,tbody,tfoot,thead,tr,th,td{margin:0;padding:0;border:0;outline:0;font-size:100%;vertical-align:baseline;background:transparent}body{line-height:1}ol,ul{list-style:none}blockquote,q{quotes:none}blockquote:before,blockquote:after,q:before,q:after{content:'';content:none}:focus{outine:0}ins{text-decoration:none}del{text-decoration:line-through}table{border-collapse:collapse;border-spacing:0}
 
 html { min-height:100%; margin-bottom:1px; }
@@ -66,105 +66,177 @@ table td { padding:7px 5px; text-align:left; vertical-align:top; border:1px soli
 
 
 
-  </style></head><body><div class="content"><h2>Contents</h2><div><ul><li><a href="#3">Linear constraint without consdiering the bound constraint.</a></li><li><a href="#4">Set the optimization options</a></li><li><a href="#5">Output solution</a></li></ul></div><h2 id="3">Linear constraint without consdiering the bound constraint.</h2><p><tt>As</tt> takes the following form</p><p><img src="optimalFlowRate_eq02320726990159570766.png" alt="$$\left[ \begin{array}{ccccc}&#xA;  I_1     &amp; H_s &amp;      &amp;          &amp;       \\&#xA;  I_2     &amp;     &amp; H_s  &amp;          &amp;       \\&#xA;  \vdots  &amp;     &amp;      &amp;  \ddots  &amp;       \\&#xA;  I_F     &amp;     &amp;      &amp;          &amp; H_s&#xA;\end{array} \right]&#xA;\left[ \begin{array}{c}x\\z_1\\z_2\\z_i\\z_F\end{array}\right] $$"></p><p>where</p><p><img src="optimalFlowRate_eq01745813117052402191.png" alt="$$I_f = \left[ \begin{array}{cccc}&#xA;\alpha_f &amp;          &amp;        &amp;         \\&#xA;         &amp; \alpha_f &amp;        &amp;         \\&#xA;         &amp;          &amp; \ddots &amp;         \\&#xA;         &amp;          &amp;        &amp; \alpha_f&#xA;\end{array} \right],$$&#xA;$$H_s = \left[ \begin{array}{cccccccccc}&#xA;-h_{1,1} &amp; \cdots &amp; -h_{N,1} &amp;          &amp;        &amp;          &amp;        &amp;         &amp;        &amp; \\&#xA;         &amp;        &amp;          &amp; -h_{1,2} &amp; \cdots &amp; -h_{N,2} &amp;        &amp;         &amp;        &amp; \\&#xA;         &amp;        &amp;          &amp;          &amp;        &amp;          &amp; \ddots &amp;         &amp;        &amp; \\&#xA;         &amp;        &amp;          &amp;          &amp;        &amp;          &amp;        &amp;-h_{1,P} &amp; \cdots &amp; -h_{N,P}&#xA;\end{array} \right],$$&#xA;$$ x = \left[\begin{array}{c}x_1\\x_2\\ \vdots\\x_P\end{array}\right]$$&#xA;$$ z_f = \left[\begin{array}{c}z_{1,1,1f}\\ \vdots\\ z_{N,1,f}\\z_{1,2,f}\\&#xA;  \vdots\\ z_{N,2,f}\\ \vdots\\z_{N,P,F}\end{array}\right]$$"></p><p>According to the martix formulation, the number of non-zero elements in <tt>As</tt> is equal to <tt>F*(P+nnz(Hs))</tt>, where <tt>nnz(Hs)</tt> is equal to the number of nonzero elements in <tt>I_node_path</tt>.</p><h2 id="4">Set the optimization options</h2><div><ul><li><b>Algorithm</b> : since the problem contains linear constriants and bound constraints, then <tt>trust-region-reflective</tt> method is not applicable. Hence, we choose the <tt>inteirior point</tt> method. As a result the Hessian matix should be computed separately. is directly returned from the objective function as the second derivatives.</li><li><b>HessianFcn</b> : we comupte Hession using the objective function. Therefore, this option is set as <tt>'objective'</tt>.</li><li><b>SpecifyObjectiveGradient</b> : the gradient can be directly computed from the objective function, so this option is set to <tt>true</tt>.</li><li><b>SpecifyConstraintGradient</b> : since this problem does not contain nonlinear constraint, this option is set to <tt>false</tt>.</li><li><b>Display information</b> : use <tt>'iter'</tt> to display itration information for debug.</li></ul></div><h2 id="5">Output solution</h2><p class="footer"><br><a href="http://www.mathworks.com/products/matlab/">Published with MATLAB&reg; R2016b</a><br></p></div><!--
+  </style></head><body><div class="content"><h2>Contents</h2><div><ul><li><a href="#3">Coefficient for process-rate constriants</a></li><li><a href="#4">Coefficient</a></li><li><a href="#6">Add link and node capacity constrant coefficient.</a></li><li><a href="#7">boundary</a></li><li><a href="#8">Feasible test of start point</a></li><li><a href="#9">Additional Process</a></li><li><a href="#11">when compute node load, z_npf corresonding to h_np = 0 has been set as zero.</a></li><li><a href="#13">Additional Process</a></li><li><a href="#14">when compute node load, z_npf corresonding to h_np = 0 has been set as zero.</a></li></ul></div><h2 id="3">Coefficient for process-rate constriants</h2><h2 id="4">Coefficient</h2><p>If VNF f is not used by a path p (the corresponding flow), there is no constraints on <tt>f x p</tt>.</p><h2 id="6">Add link and node capacity constrant coefficient.</h2><h2 id="7">boundary</h2><h2 id="8">Feasible test of start point</h2><p><b>Start Point</b></p><h2 id="9">Additional Process</h2><div><ul><li>When compute node load, <tt>z_npf</tt> corresonding to <tt>h_np = 0</tt> has been set as zero. only path use a node and path use a function, the variable <tt>z_npf</tt> is nonzero.</li><li>too small components should be rounded.</li></ul></div><h2 id="11">when compute node load, z_npf corresonding to h_np = 0 has been set as zero.</h2><h2 id="13">Additional Process</h2><p>too small components should be rounded.-     x(x &lt; 1) = 0;</p><h2 id="14">when compute node load, z_npf corresonding to h_np = 0 has been set as zero.</h2><p class="footer"><br><a href="http://www.mathworks.com/products/matlab/">Published with MATLAB&reg; R2016b</a><br></p></div><!--
 ##### SOURCE BEGIN #####
-function x = optimalFlowRate(this, x0)
-if nargin == 2
-    this.x0 = x0;
-else%if isempty(this.x0)
-    this.x0 = zeros(this.num_vars,1);
-    this.x0(1:this.NumberPaths) = 1;
-    max_alpha_f = max(this.Parent.VNFTable.ProcessEfficiency(this.VNFList));
-    this.x0((this.NumberPaths+1):end) = 1*this.NumberPaths*max_alpha_f;
-end
-%% Linear constraint without consdiering the bound constraint.
-% |As| takes the following form
-%   
-% $$\left[ \begin{array}{ccccc}
-%   I_1     & H_s &      &          &       \\
-%   I_2     &     & H_s  &          &       \\
-%   \vdots  &     &      &  \ddots  &       \\
-%   I_F     &     &      &          & H_s  
-% \end{array} \right] 
-% \left[ \begin{array}{c}x\\z_1\\z_2\\z_i\\z_F\end{array}\right] $$
-%
-% where 
-%
-% $$I_f = \left[ \begin{array}{cccc}
-% \alpha_f &          &        &         \\
-%          & \alpha_f &        &         \\
-%          &          & \ddots &         \\
-%          &          &        & \alpha_f  
-% \end{array} \right],$$
-% $$H_s = \left[ \begin{array}{cccccccccc}
-% -h_{1,1} & \cdots & -h_{N,1} &          &        &          &        &         &        & \\
-%          &        &          & -h_{1,2} & \cdots & -h_{N,2} &        &         &        & \\
-%          &        &          &          &        &          & \ddots &         &        & \\
-%          &        &          &          &        &          &        &-h_{1,P} & \cdots & -h_{N,P}  
-% \end{array} \right],$$
-% $$ x = \left[\begin{array}{c}x_1\\x_2\\ \vdots\\x_P\end{array}\right]$$
-% $$ z_f = \left[\begin{array}{c}z_{1,1,1f}\\ \vdots\\ z_{N,1,f}\\z_{1,2,f}\\ 
-%   \vdots\\ z_{N,2,f}\\ \vdots\\z_{N,P,F}\end{array}\right]$$
-%
-% According to the martix formulation, the number of non-zero elements in |As| is equal to
-% |F*(P+nnz(Hs))|, where |nnz(Hs)| is equal to the number of nonzero elements in
-% |I_node_path|.
-nnz_As = this.NumberVNFs*(this.NumberPaths+nnz(this.I_node_path));
-As = spalloc(this.num_lcon, this.num_vars, nnz_As);
-row_index = 1:this.NumberPaths;
-col_index = this.NumberPaths+(1:this.NumberNodes);
-for f = 1:this.NumberVNFs
-    alpha_f = this.Parent.VNFTable.ProcessEfficiency(this.VNFList(f));
-    As(row_index,1:this.NumberPaths) = alpha_f * eyesparse(this.NumberPaths); %#ok<SPRIX>
-    for p = 1:this.NumberPaths
-        As(row_index(p), col_index) = -this.I_node_path(:,p); %#ok<SPRIX>
-        col_index = col_index + this.NumberNodes;
+function [ utility ] = optimalFlowRate( this, options )
+if nargin <= 1
+    options.Display = 'final';
+    options.Method = 'slice';
+else
+    if ~isfield(options, 'Display')
+        options.Display = 'final';
     end
-    row_index = row_index + this.NumberPaths;
+    if ~isfield(options, 'Method')
+        options.Method = 'slice';
+    end
 end
-bs = sparse(this.num_lcon,1);
+
+NL = this.NumberVirtualLinks;
+NN = this.NumberVirtualNodes;
+NV = this.NumberVNFs;
+NP = this.NumberPaths;
+
+%% Coefficient for process-rate constriants
+if strcmp(options.Method, 'normal')
+    %% Coefficient
+    % If VNF f is not used by a path p (the corresponding flow), there is no constraints
+    % on |f x p|.    
+    idx = 1:NP;
+    for v = 1:NV
+        vid = this.VNFList(v);
+        delete_items = this.I_path_function(:,vid)==0;
+        this.As_res(idx(delete_items),:) = [];
+        idx = idx + nnz(this.I_path_function(:,vid));
+    end
+end
+nnz_As = nnz(this.As_res) + NV*nnz(this.I_node_path) + nnz(this.I_edge_path);
+num_lcon = this.num_lcon_res + NN + NL;
+As = spalloc(num_lcon, this.num_vars, nnz_As);
+As(1:this.num_lcon_res,:) = this.As_res;
+
+%% Add link and node capacity constrant coefficient.
+col_index = NP+(1:NN:((NP-1)*NN+1))';
+col_index = repmat(col_index, 1, NV);
+for v = 2:NV
+    col_index(:,v) = col_index(:,v-1) + NN*NP;
+end
+col_index = col_index(:);
+row_index = this.num_lcon_res;
+for n = 1:NN
+    As(row_index+n, col_index) = repmat(this.I_node_path(n,:),1, NV);
+    col_index = col_index + 1;
+end
+row_index = (1:NL) + this.num_lcon_res + NN;
+As(row_index, 1:NP) = this.I_edge_path; 
+
+%% boundary
+bs = [sparse(this.num_lcon_res,1); 
+    this.VirtualNodes.Capacity;
+    this.VirtualLinks.Capacity];
 lbs = sparse(this.num_vars,1);
-%% Set the optimization options
-% * *Algorithm* : since the problem contains linear constriants and bound
-% constraints, then |trust-region-reflective| method is not applicable. Hence,
-% we choose the |inteirior point| method. As a result the Hessian matix should
-% be computed separately.
-% is directly returned from the objective function as the second derivatives.
-% * *HessianFcn* : we comupte Hession using the objective function.
-% Therefore, this option is set as |'objective'|.
-% * *SpecifyObjectiveGradient* : the gradient can be directly computed from
-% the objective function, so this option is set to |true|.
-% * *SpecifyConstraintGradient* : since this problem does not contain nonlinear
-% constraint, this option is set to |false|.
-% * *Display information* : use |'iter'| to display itration information for
-% debug.
+
+%% Feasible test of start point
+% *Start Point*
+x0 = zeros(this.num_vars,1);
+z_min = min(this.VirtualNodes.Capacity)/(NP*NV);
+x_min = min(this.VirtualLinks.Capacity)/NP;
+if strcmp(options.Method, 'single-function')
+    max_alpha_f = max(this.alpha_f);
+elseif strcmp(options.Method, 'normal')
+    max_alpha_f = max(this.Parent.VNFTable.ProcessEfficiency);
+else
+    max_alpha_f = max(this.Parent.VNFTable{this.VNFList, 'ProcessEfficiency'});
+end
+if z_min >= max_alpha_f*x_min  % [x,z] is feasible
+    x0(1:NP) = x_min;
+    x0((NP+1):end) = z_min;
+else
+    x0(1:NP) = z_min/max_alpha_f;
+    x0((NP+1):end) = z_min;    
+end
+% x0(1:NP) = 1;
+% max_alpha_f = max(this.Parent.VNFTable.ProcessEfficiency(this.VNFList));
+% x0((NP+1):end) = max_alpha_f;
+if ~this.checkFeasible(x0)
+    error('error: infeasible start point.');
+end
+
 fmincon_opt = optimoptions(@fmincon);
 fmincon_opt.Algorithm = 'interior-point';
 fmincon_opt.HessianFcn = @(x,lambda)Slice.fcnHessian(x,lambda,this);
 fmincon_opt.SpecifyObjectiveGradient = true;
 fmincon_opt.SpecifyConstraintGradient = false;
-fmincon_opt.Display = 'iter';
-[x, fval, exitflag] = fmincon(@(x)Slice.fcnUtility(x,this), ...
-    this.x0, As, bs, [], [], lbs, [], [], fmincon_opt);
-fprintf('\tThe optimal net profit of the slice: %G.\n', fval);
-if exitflag == 1
-    %% Output solution
-    this.x0 = x;
-    index0 = (1:this.NumberNodes*this.NumberPaths);
-    index = this.NumberPaths+index0;
-    for f = 1:this.NumberVNFs
-        this.x0(index) = x(index)'.*this.I_node_path(index0);
-        index = index + this.NumberNodes*this.NumberPaths;
-    end
-    this.x0(this.x0 < 10^-5) = 0;
-    this.x_path = this.x0(1:this.NumberPaths);
-    this.z_node_path_vnf = reshape(this.x0((this.NumberPaths+1):end), ...
-        this.NumberNodes, this.NumberPaths, this.NumberVNFs);
-    this.VirtualLinkMap.Load = this.getEdgeLoad(this.x0(1:this.NumberPaths));
-    this.VirtualNodeMap.Load = this.getNodeLoad(this.x0((this.NumberPaths+1):end));
+if nargin >= 2 && isfield(options, 'Display')
+    fmincon_opt.Display = options.Display;
 else
-    warning('abnormal exit with flag %d.',exitflag);
+    fmincon_opt.Display = 'notify-detailed';  %'iter';
 end
+[x, fval, exitflag] = fmincon(@(x)Slice.fcnNetWelfare(x,this), ...
+    x0, As, bs, [], [], lbs, [], [], fmincon_opt);
+if exitflag < 1
+    error('abnormal exit with flag %d.',exitflag);
 end
+if ~this.checkFeasible(x, options)
+    error('error: infeasible solution.');
+end
+
+%% Additional Process
+% * When compute node load, |z_npf| corresonding to |h_np = 0| has been set as zero.
+% only path use a node and path use a function, the variable |z_npf| is nonzero.
+% * too small components should be rounded.
+this.x_path = x(1:NP);
+if strcmp(options.Method, 'normal')
+    znpf = x(NP+1:end);
+    this.z_npf = zeros(NN*NP*this.Parent.NumberVNFs,1);
+    nz = this.NumberVirtualNodes*this.NumberPaths;
+    z_index = 1:nz;
+    new_z_index = z_index;
+    for v = 1:this.Parent.NumberVNFs
+%         if b_vnf(v)
+            mask_npf = ss.I_node_path.*this.I_path_function(:,v)';
+            ss.z_npf(new_z_index) = mask_npf(:).*znpf(z_index);
+            z_index = z_index + nz;
+%         end
+        new_z_index = new_z_index + nz;
+    end
+    ss.Variables.x = ss.x_path;
+    ss.Variables.z = ss.z_npf;
+elseif strcmp(options.Method, 'single-function')
+    slice_data.VNFList = 1:this.NumberVNFs;
+    ss = Slice(slice_data);
+    ss.x_path = x(1:NP);
+    ss.Variables.x = ss.x_path;
+    %% when compute node load, z_npf corresonding to h_np = 0 has been set as zero.
+    z_np = x(NP+1:end);
+    z_np = reshape(ss.I_node_path(:).*z_np, NN,NP);    
+    znpf = zeros(NN, NP, this.NumberVNFs);
+    for v = 1:this.NumberVNFs
+        af = this.VNFTable.ProcessEfficiency(v);
+        idx_path = I_path_function(:,v)==1;
+        p_slice = ss.path_owner(idx_path);
+        znpf(:, idx_path, v) = z_np(:, idx_path).*(af./slice_data.alpha_f(p_slice))';
+    end
+    ss.Variables.z = znpf(:);
+else
+    this.z_npf = x(NP+1:end);
+
+end
+
+%% Additional Process
+% too small components should be rounded.-
+%     x(x < 1) = 0;
+
+%% when compute node load, z_npf corresonding to h_np = 0 has been set as zero.
+nz = this.NumberVirtualNodes*this.NumberPaths;
+z_index = 1:nz;
+for v = 1:NV
+    this.z_npf(z_index) = this.I_node_path(:).*this.z_npf(z_index);
+    z_index = z_index + nz;
+end
+this.Variables.x = this.x_path;
+this.Variables.z = this.z_npf;
+this.Variables.z(this.Variables.z<10^-3) = 0;
+this.Variables.x(this.Variables.x<10^-3) = 0;
+if ~this.checkFeasible
+    warning('optimalFlowRate: the rounding of variables with small quantity will make the solution infeasible.');
+end
+this.setPathBandwidth;
+this.FlowTable.Rate = this.getFlowRate;
+this.VirtualLinks.Load = this.getLinkLoad;
+this.VirtualNodes.Load = this.getNodeLoad;
+utility = -fval;
+end
+
+
 ##### SOURCE END #####
 --></body></html>
