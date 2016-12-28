@@ -1,14 +1,13 @@
 %% Optimization in Single Slice 
-%singleSliceOptimization Optimize the resource allocation in a single slice.
+% Optimize the resource allocation in a single slice.
 %   All service flows are placed in one slice.
 %   The VNFs in a slice are treated as one function.
 %
-% NOTE: with the same optimal objective value, the two methods may result in different
+% * *NOTE*: with the same optimal objective value, the two methods may result in different
 % solutions.
-%
-% TODO: to remove the unused VNFs from the single slice, check if b_vnf functions right
-% with |I_path_function| and the output.
-% TODO: the solution of 'single-function' is infeasible.
+% * *TODO*: to remove the unused VNFs from the single slice, check if b_vnf functions
+% right with |I_path_function| and the output.
+% * *TODO*: the solution of 'single-function' is infeasible.
 % 
 %%
 function [output, ss] = singleSliceOptimization( this, options )
@@ -25,7 +24,7 @@ else
 end
 this.clearStates;
 
-%% Merge slices into one single big slice.
+%% Merge slices into one single big slice
 NL = this.NumberLinks;
 NN = this.NumberNodes;
 NS = this.NumberSlices;
@@ -90,6 +89,10 @@ ss.I_path_function = ss.I_flow_path'*I_flow_function;
 net_profit = ss.optimalFlowRate(options);
 
 %% Finalize substrate network
+% # Record the resource allocation variables, flow rate, virtual node/link load of each
+% slice.   
+% # Calculate and announce the resource prices to each slice.
+% # Record the substrate network's node/link load, price.
 link_uc = this.getLinkField('UnitCost');
 node_uc = this.getNodeField('UnitCost');
 epsilon = this.unitStaticNodeCost;
@@ -129,7 +132,15 @@ this.setNodeField('Load', ss.VirtualNodes.Load);
 this.setLinkField('Price', link_price);
 this.setNodeField('Price', node_price);
 
-%% calculate the output(net social welfare)
+%% Calculate the output
+% The output variables includes,
+%
+% # Price and Load of physical nodes and links;
+% # The approximation of net social welfare, and the accurate net social welfare;
+% # The net profit of each slice and the substrate network, including four results from
+% different methods, i.e. |ApproximatePercent|, |ApproximatePrice|, |AccuratePercent|,
+% |AccuratePrice|. 
+% # Flow rate of all flows in the network.
 output.link_load = ss.VirtualLinks.Load;
 output.node_load = ss.VirtualNodes.Load;
 output.link_price = link_price;

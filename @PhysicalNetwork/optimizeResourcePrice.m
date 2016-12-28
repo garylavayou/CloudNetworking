@@ -1,13 +1,14 @@
 %% Optimize resource price
-% first, the resource for each slice is the same.
-%% TODO Resource Cost Model
+% * *TODO* _refine the price adjustment algorithm._
+% * *TODO* Resource Cost Model: linear, convex (quatratic)
+%% 
 function [output] = optimizeResourcePrice(this, init_price, options)
 if nargin <= 2
    options.Display = 'final'; 
 end
 this.clearStates;
 
-%% network data
+% network data
 NN = this.NumberNodes;
 NS = this.NumberSlices;
 NL = this.NumberLinks;
@@ -19,7 +20,7 @@ epsilon = this.unitStaticNodeCost;
 phis_n = epsilon*this.delta*(NN-1)/this.totalNodeCapacity;
 phis_l = epsilon*(1-this.delta)*(NN-1)/this.totalLinkCapacity;
 
-%% Initial Price
+% Initial Price
 if nargin >=2 && ~isempty(init_price)
     link_price = init_price.link;
     node_price = init_price.node;
@@ -127,9 +128,6 @@ if strncmp(options.Display, 'notify', 6)
     fprintf('\tFirst stage objective value: %d.\n', new_net_welfare);
 end
 
-%% TODO
-% 1. check why the solution is optimaler than the global optimal solution
-% 2. refine the price adjusting procedure.
 l = 0;
 alpha = 1/2;
 h = 1;
@@ -166,21 +164,33 @@ while true
 end
 
 %% Finalize substrate network
+% # The resource allocation variables, virtual node/link load, and flow rate of each
+% slice. 
+% # After the optimization, each network slice has record the final prices.
+% # Record the substrate network's node/link load, price.
 for s = 1:NS
     sl = this.slices{s};    
     sl.Variables.x = sl.x_path;
     sl.Variables.z = sl.z_npf;
+    sl.setPathBandwidth;
     sl.VirtualNodes.Load = sl.getNodeLoad;
     sl.VirtualLinks.Load = sl.getLinkLoad;
     sl.FlowTable.Rate = sl.getFlowRate;
-    sl.setPathBandwidth;
 end
 this.setNodeField('Load', aggr_node_load);
 this.setLinkField('Load', aggr_link_load);
 this.setLinkField('Price', link_price);
 this.setNodeField('Price', node_price);
 
-%% output
+%% Calculate the output
+% The output variables includes,
+%
+% # Price and Load of physical nodes and links;
+% # The approximation of net social welfare, and the accurate net social welfare;
+% # The net profit of each slice and the substrate network, including four results from
+% different methods, i.e. |ApproximatePercent|, |ApproximatePrice|, |AccuratePercent|,
+% |AccuratePrice|. 
+% # Flow rate of all flows in the network.
 output.link_price = link_price;
 output.node_price = node_price;
 output.link_load = aggr_link_load;

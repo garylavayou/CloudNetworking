@@ -17,7 +17,7 @@
 % * *Identifier*: the identifer of this slice. This is different from the index of the
 % slice, and this field is not required to set.
 % * *DelayConstraint*:
-function AddSlice(this, slice_opt)
+function sl = AddSlice(this, slice_opt)
 % when arguments is not given, provide default value for slice data.
 if nargin < 2 || isempty(slice_opt)
     slice_opt.Weight = 1;
@@ -132,6 +132,7 @@ slice_opt.parent = this;
 this.NumberSlices = this.NumberSlices+1;
 start_slice_id = this.NumberSlices;
 this.slices{start_slice_id} = Slice(slice_opt);
+sl = this.slices{start_slice_id};
 this.AllocateFlowId(start_slice_id);
 this.AllocatePathId(start_slice_id);
 

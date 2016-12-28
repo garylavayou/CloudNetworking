@@ -20,7 +20,7 @@ VNF_opt.static_cost_range = [0.1 0.3];
 % VNF_opt.ProcessEfficiency is not set, using random value.
 VNF_opt.RandomSeed = [20161031 20161101];       % the first seed is for random static cost, 
                                                 % the second is for process efficiency
-number_slices = 5;              % 10
+number_slices = 3;              % 10
 rand_seed = 20161031;
 slice_opt = struct;
 weight = [10000, 20000, 30000, 20000, 40000, 10000, 20000, 30000, 10000, 20000]*10;
@@ -30,7 +30,7 @@ for i = 1:number_slices
     slice_opt(i).RandomSeed = rand_seed + i;
     slice_opt(i).Weight = weight(i);
     slice_opt(i).NumberPaths = 3;
-    slice_opt(i).NumberFlows = 10;  % 1 3 10
+    slice_opt(i).NumberFlows = 3;  % 1 3 10
 %     slice_opt(i).NumberVNFs = 3;
 %     slcie_opt.DelayConstraint = [];
 %     slice_opt.VNFList = [];

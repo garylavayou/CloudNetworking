@@ -20,9 +20,11 @@ if isempty(S.weight)        % for network as a single slice.
 else                        % for network as multiple slice.
     weight = S.weight*ones(S.NumberFlows, 1);
     if nargin>=3 && isfield(options, 'Model')
+        % get the slice cost according to the model(approximate or accurate).
         profit = -sum(weight.*log(S.getFlowRate(var_path))) + ...
             S.getSliceCost(node_load, link_load, options.Model);
     else
+        % get the approximate slice cost
         profit = -sum(weight.*log(S.getFlowRate(var_path))) + ...
             S.getSliceCost(node_load, link_load);
     end

@@ -3,7 +3,17 @@
 %%
 classdef PhysicalNetwork < handle
     
+    %% Properties
+
     properties (SetAccess = private)
+        %%%
+        % * *Topology*: including a NodeTable |Nodes| and an EdgeTable |Edges|.
+        %
+        % |Nodes|: the fields in node table include _Name_, _Location_, _Capacity_, _StaticCost_,
+        % _Load_, _Price_.
+        %
+        % |Edges|: the fields in the edge table include _EndNodes_, _Weight_, _Capacity_, _Index_,
+        % _Load_, _Price_.
         Topology;
         graph;
         slices;
@@ -13,6 +23,11 @@ classdef PhysicalNetwork < handle
         NumberNodes;         % Number of physical nodes
         NumberLinks;         % Number of physical links
         NumberSlices;        % Number of network slices
+        %%%
+        % * *VNFTable*: including following fields.
+        %
+        % _ProcessEfficiency_: The coefficient for converting service rate to processing resource
+        %  requirement, i.e. $ProcessLoad = ServiceRate \times ProcessEfficiency$;
         NumberVNFs;          % Number of VNF types
         NumberPaths;         % Number of candidate paths of all slices
         NumberFlows;         % Number of flows of all slices
@@ -25,28 +40,14 @@ classdef PhysicalNetwork < handle
         lambda;
     end
     methods
-        [output] = optimizeResourcePrice(this, init_price, options);
-        [output, single_slice] = singleSliceOptimization(this , options);
-        [output] = resourcePartitionOptimization(this, slice_weight, options);
-        [output] = optimizeNetSocialWelfare1( this, options );
-        output = StaticSlicing(this, slice, options);
-        welfare = optimizeNetSocialWelfare2( this, options );
-        welfare = optimizeNetSocialWelfare2a( this );
-        welfare = optimizeNetSocialWelfare3( this );
-        welfare = optimizeNetSocialWelfare4( this );
-        AddSlice(this, slice_opt);       
-        plot(this);
-    end
-    methods (Static)
-        graph_data = loadNetworkData(node_opt, link_opt);
-    end
-    methods 
+        %% Constructor
         function this = PhysicalNetwork(node_opt, link_opt, VNF_opt, options)
             % Store graph information
             %     PhysicalNetwork(node_opt, link_opt, VNF_opt, options)
             this.Topology = PhysicalNetwork.loadNetworkData(node_opt, link_opt);
             this.graph = DirectedGraph(this.Topology);
-            %% Edge Index Mapping
+            %%%
+            % *Edge Index Mapping*:
             % In the edge table, link is indexed by rows, which is different from the
             % default index scheme of matlab matrix. So we add a column-index to the Edge
             % Table.
@@ -94,17 +95,17 @@ classdef PhysicalNetwork < handle
             
             % Add slice data
             this.NumberSlices = 0;
-%             if nargin >=5
-%                 this.setLinkField('Beta', beta{1});
-%                 this.setNodeField('Beta', beta{2});
-%             else
-%                 this.setLinkField('Beta', 1*this.getLinkField('Capacity'));
-%                 this.setNodeField('Beta', 1*this.getNodeField('Capacity'));
-%             end
+            %             if nargin >=5
+            %                 this.setLinkField('Beta', beta{1});
+            %                 this.setNodeField('Beta', beta{2});
+            %             else
+            %                 this.setLinkField('Beta', 1*this.getLinkField('Capacity'));
+            %                 this.setNodeField('Beta', 1*this.getNodeField('Capacity'));
+            %             end
             if nargin<=4
                 options.delta = 0.5;
-%                 options.beta.node = 1;          % NOTE: this is not used temporarily
-%                 options.beta.link = 1; 
+                %                 options.beta.node = 1;          % NOTE: this is not used temporarily
+                %                 options.beta.link = 1;
             else
                 if ~isfield(options, 'delta') || isempty(options.delta)
                     options.delta = 0.5;
@@ -112,6 +113,37 @@ classdef PhysicalNetwork < handle
             end
             this.delta = options.delta;
         end
+    end
+
+%% Methods
+    methods (Static)
+        %%%
+        % * *loadNetworkData* |static| : generate graph data.
+        %
+        %       graph_data = LoadNetworkData(link_opt, node_opt)
+        %
+        graph_data = loadNetworkData(node_opt, link_opt);
+        %%%
+        % * *LinkDelay* |static| : convert bandwidth to link delay.
+        %
+        %       dt = PhysicalNetwork.LinkDelay(delay_opt, bandwidth)
+        %
+        % |delay_opt|: enumeration type of LinkDelayOption.
+        %
+        % |bandwidth|: bandwidth with unit of |Mbps|.
+        %
+        % |dt|: delay with unit of |ms|.
+        %
+        function dt = LinkDelay(delay_opt, bandwidth)
+            if delay_opt == LinkDelayOption.BandwidthPropotion
+                dt = 0.001*bandwidth;
+            elseif delay_opt == LinkDelayOption.BandwidthInverse
+                dt = 100./bandwidth;
+            else
+                error('the delay option (%s) cannot be handled.', delay_opt.char);
+            end
+        end
+        
     end
     
     % property access functions
@@ -142,8 +174,13 @@ classdef PhysicalNetwork < handle
         end
     end
     
-    methods 
+    methods
         
+        %%%
+        % * *AllocateFlowId* : Allocate flow identifier.
+        %
+        %      AllocateFlowId(phy_network, start_slice)
+        %
         % |start_slice|: the slice index or the handle of the slice.
         function AllocateFlowId(this, start_slice)
             % Allocate flow identifier
@@ -168,8 +205,11 @@ classdef PhysicalNetwork < handle
             end
         end
         
+        %%%
+        % * *AllocatePathId* : Allocate path identifier
+        %
+        %      AllocatePathId(phy_network)
         function AllocatePathId(this, start_slice)
-            % Allocate path identifier
             if nargin <= 1
                 slice_id = 1;
             else
@@ -194,8 +234,15 @@ classdef PhysicalNetwork < handle
                     end
                 end
             end
-        end
-        
+        end    
+        %%%
+        % * *LinkId*: link index of links in the edge table
+        %
+        %       idx = LinkId(this, s, t)
+        %
+        % |s|: source nodes of links;
+        %
+        % |t|: tail nodes of links;
         function idx = LinkId(this, s, t)
             % LinkId  get the index of links by the head and tail nodes' id.
             switch nargin
@@ -207,11 +254,17 @@ classdef PhysicalNetwork < handle
                     idx = this.graph.IndexEdge(s,t);
             end
         end
-    
+        %%%
+        % * *setLinkField*: set the value for a field in the Edge Table. Link price
+        % corresponds to column indexed links, so this method is used when a
+        % column-indexed data value is provided.
+        %
+        %      setLinkField(this, name, value)
+        %
+        % |name|: a character array represents the field name.
+        %
+        % |value|: a column vector stores values to be set for the target field.
         function setLinkField(this, name, value)
-            % setLinkField
-            %    the link index mapping between DirectedGraph and digraph is as
-            %    follows.
             if strcmp(name,'Index')
                 error('Index cannot be set from the outside.');
             end
@@ -221,13 +274,16 @@ classdef PhysicalNetwork < handle
                 this.Topology.Edges{:,{name}} = value(this.Topology.Edges.Index);
             end
         end
-        
+        %%%
+        % * *getLinkField*: get the value from a field in the Edge Table. See also setLinkField.
+        %
+        %      value = getLinkField(this, name, link_id)
+        %
+        %    link field corresponds to column indexed links.
+        % |link_id| can be integers or logical numbers.
         function value = getLinkField(this, name, link_id)
-            % getLinkField
-            %    link field corresponds to column indexed links.
-            % |link_id| can be integers or logical numbers.
             if nargin < 2 || isempty(name)
-                 error('input arguments are not enough (name, link_id).');
+                error('input arguments are not enough (name, link_id).');
             elseif nargin < 3
                 link_id = 1:this.NumberLinks;
             end
@@ -248,7 +304,7 @@ classdef PhysicalNetwork < handle
         
         function value = getNodeField(this, name, node_id)
             if nargin < 2 || isempty(name)
-                 error('input arguments are not enough (name, node_id).');
+                error('input arguments are not enough (name, node_id).');
             elseif nargin < 3
                 node_id = 1:this.NumberNodes;
             end
@@ -260,7 +316,7 @@ classdef PhysicalNetwork < handle
                     value = this.Topology.Nodes{node_id, {name}};
             end
         end
-          
+        
         function c = getLinkCost(this, link_load)
             % compute the total link cost.
             if nargin == 1
@@ -295,7 +351,8 @@ classdef PhysicalNetwork < handle
             c = epsilon*((this.NumberNodes-1)*theta+1);
         end
         
-        %% Network Operation Cost
+        %%% 
+        % *Network Operation Cost*: 
         % two methods to calculate network cost.
         % # Calculate with the approximate model, where the static node cost is computed
         % by the approximate formula.
@@ -339,7 +396,7 @@ classdef PhysicalNetwork < handle
             theta_l = sum(link_load)/this.totalLinkCapacity;
             theta = this.delta*theta_v + (1-this.delta)*theta_l;
         end
-         
+        
         % Remove the slice with identifier |id|.
         function sl = RemoveSlice(this, id)
             for s = 1:this.NumberSlices
@@ -354,7 +411,8 @@ classdef PhysicalNetwork < handle
             this.AllocatePathId(s);
         end
         
-        %% findSlice
+        %%%
+        % findSlice
         % Find the given slice's Index.
         % Find the index of slices with Type |key|, return a row vector of index.
         function sid = findSlice(this, key, ~)
@@ -375,10 +433,10 @@ classdef PhysicalNetwork < handle
                 end
                 sid = find(sid);
             end
-        end        
+        end
         
         % type_index is a scalar.
-        function [p,r] = statSlice(this, type_index, profit)  
+        function [p,r] = statSlice(this, type_index, profit)
             s_index = this.findSlice(type_index);
             if isempty(s_index)
                 p = {0, 0, 0};
@@ -403,6 +461,29 @@ classdef PhysicalNetwork < handle
                 end
             end
         end
+    end
+    methods
+        [output] = optimizeResourcePrice(this, init_price, options);
+        [output, single_slice] = singleSliceOptimization(this , options);
+        [output] = resourcePartitionOptimization(this, slice_weight, options);
+        [output] = optimizeNetSocialWelfare1( this, options );
+        output = StaticSlicing(this, slice, options);
+        welfare = optimizeNetSocialWelfare2( this, options );
+        welfare = optimizeNetSocialWelfare2a( this );
+        welfare = optimizeNetSocialWelfare3( this );
+        welfare = optimizeNetSocialWelfare4( this );
+        %%%
+        % * *AddSlice* : Add Slice to Substrate Network
+        %
+        %      AddSlice(phy_network, slice_opt)
+        %
+        % |slice_opt|:  option for the added slice;
+        AddSlice(this, slice_opt);
+        %%%
+        % * *plot* : Visualize Substrate Network and Network Slices
+        %
+        %      plot(phy_network)
+        plot(this);
     end
     methods(Access=private)
         function saveStates(this, lambda)
@@ -430,21 +511,6 @@ classdef PhysicalNetwork < handle
             end
         end
     end
-    methods (Static)        
-        function dt = LinkDelay(delay_opt, bandwidth)
-            % link bandwidth-delay convert function
-            %     dt = PhysicalNetwork.LinkDelay(delay_opt, bandwidth) convert bandwidth
-            %     to delay.
-            if delay_opt == LinkDelayOption.BandwidthPropotion
-                dt = 0.001*bandwidth;
-            elseif delay_opt == LinkDelayOption.BandwidthInverse
-                dt = 100./bandwidth;
-            else
-                error('the delay option (%s) cannot be handled.', delay_opt.char);
-            end
-        end
-        
-    end
     
     properties (Constant)
         EdgeColor = [ % Predefined set of color data, used to specify the edge color when visualize network.
@@ -469,78 +535,3 @@ classdef PhysicalNetwork < handle
     
 end
 
-%% Properties
-% * *Topology*: including a NodeTable |Nodes| and an EdgeTable |Edges|.
-%
-% |Nodes|: the fields in node table include _Name_, _Location_, _Capacity_, _StaticCost_,
-% _Load_, _Price_.
-%
-% |Edges|: the fields in the edge table include _EndNodes_, _Weight_, _Capacity_, _Index_,
-% _Load_, _Price_.  
-%
-% * *NumberNodes*
-% * *NumberLinks* |get|
-% * *NumberSlices*
-% * *VNFTable*: including following fields.
-%
-% _ProcessEfficiency_: The coefficient for converting service rate to processing resource
-%  requirement, i.e. $ProcessLoad = ServiceRate \times ProcessEfficiency$;
-
-%% Methods
-% * *loadNetworkData* |static| : generate graph data.
-% 
-%       graph_data = LoadNetworkData(link_opt, node_opt)
-%
-% * *LoadVNFData* |static| : Generate virtual network function data.
-% 
-%       VNF_data = LoadVNFData(this, number_VNF, VNF_model)
-%
-% * *LinkDelay* |static| : convert bandwidth to link delay.
-% 
-%       dt = LinkDelay(delay_opt, bandwidth)
-%
-% |delay_opt|: enumeration type of LinkDelayOption.
-%
-% |bandwidth|: bandwidth with unit of |Mbps|.
-%
-% |dt|: delay with unit of |ms|.
-%
-% * *LinkId*: link index of links in the edge table
-%
-%       idx = LinkId(this, s, t)
-%
-% |s|: source nodes of links;
-%
-% |t|: tail nodes of links;
-%
-% * *setLinkField*: set the value for a field in the Edge Table. Link price corresponds to
-% column indexed links, so this method is used when a column-indexed data value is
-% provided.
-%
-%      setLinkField(this, name, value)
-%
-% |name|: a character array represents the field name.
-%
-% |value|: a column vector stores values to be set for the target field.
-%
-% * *getLinkField*: get the value from a field in the Edge Table. See also setLinkField.
-%
-%      value = getLinkField(this, name)
-%
-% * *AddSlice* : Add Slice to Substrate Network
-%
-%      AddSlice(phy_network, slice_opt)
-% 
-% |slice_opt|:  option for the added slice;
-%
-% * *AllocateFlowId* : Allocate flow identifier.
-%
-%      AllocateFlowId(phy_network)
-%
-% * *AllocatePathId* : Allocate path identifier
-%
-%      AllocatePathId(phy_network)
-%
-% * *plot* : Visualize Substrate Network and Network Slices
-%
-%      plot(phy_network)

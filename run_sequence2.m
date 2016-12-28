@@ -55,9 +55,9 @@ clear e i event_set;
 options.Display = 'off';
 options.PricingFactor = 1;
 options.PercentFactor = 0.8;
-b_single_optimal = false;
+b_single_optimal = true;
 b_dual_decomp = false;
-b_price_adjust = false;
+b_price_adjust = true;
 b_resource_part = true;
 if b_single_optimal
     profit_approx.optimal = zeros(num_events,1); 
@@ -243,14 +243,14 @@ end
 display(RE.countArriveType);
 clear e i T r p j;
 %%
-x = 10:(num_events-10);
-if b_single_optimal
-    %     plot(x, profit_approx.optimal(x), x, profit_accurate.optimal(x));
-end
-if b_price_adjust
-%     plot(x, profit_approx.price(x), x, profit_accurate.price(x)); 
-end
+% if b_single_optimal
+%     %     plot(x, profit_approx.optimal(x), x, profit_accurate.optimal(x));
+% end
+% if b_price_adjust
+% %     plot(x, profit_approx.price(x), x, profit_accurate.price(x)); 
+% end
 %%
+x = 10:(num_events-10);
 subplot(2,3,1);
 plot(x, profit_accurate.optimal(x),'-r', ...
     x, profit_accurate.price(x), '-b', ...
@@ -263,6 +263,7 @@ h = subplot(2,3,2);
 devi1 = profit_accurate.optimal(x) - profit_accurate.price(x);
 devi2 = profit_accurate.optimal(x) - profit_accurate.part(x);
 plot(x, devi1,'-r', x, devi2, '-b'); 
+clear devi1 devi2;
 lim = h.YLim;
 lim(1) = 0;
 h.YLim = lim;
@@ -276,6 +277,7 @@ plot(x, utilization.optimal(x), '-r', x, utilization.price(x), '-b', ...
 lim = h.YLim;
 lim(2) = 1;
 h.YLim = lim;
+clear h lim;
 legend({'optimal', 'price', 'partition'},'Location', 'northeast')
 xlabel('Network Events (slice arrival/departure)');
 ylabel('Network Utilization');
@@ -293,10 +295,11 @@ xlabel('Network Events (slice arrival/departure)');
 ylabel('Number of Flows');
 title('Total number of flows in the network');
 subplot(2,3,6)
-plot(x, runtime.optimal(x,1), '-b', ...
-    x, runtime.price(x,1)./sum(stat.number_slices(x,:),2), '-r',...
-    x, runtime.part./sum(stat.number_slices(x,:),2), '-g');
+plot(x, runtime.optimal(x), '-b', ...
+    x, runtime.price(x)./sum(stat.number_slices(x,:),2), '-r',...
+    x, runtime.part(x)./sum(stat.number_slices(x,:),2), '-g');
 xlabel('Network Events (slice arrival/departure)');
 ylabel('Run Time (seconds)');
 title('Total number of flows in the network');
 legend({'optimal', 'price'}, 'Location', 'northwest');
+clear x;

@@ -204,17 +204,17 @@ classdef Slice < handle
             end
         end
         
-        %% Slice Cost
-        % When compute the static cost, the Capacity of all physical nodes and links is
-        % included.
+        function sc = getSliceCost(this, node_load, link_load, model)
+        %%%
+        % getSliceCost  When compute the static cost, the Capacity of all physical nodes
+        % and links is included.
         % |epsilon/pn.NumberSlices| is a constant. To keep consistence with other methods,
-        % this part should not be ignored. See also _getNetworkCost_ and _getStaticCost_.
+        % this part should not be ignored. See also getNetworkCost and getStaticCost.
         % The calculation is not absolutely precise, since it cannot be decide that the
         % static cost should be arributed to which slices.
         %
         % When calculate network cost as a single slice, |pn.NumberSlices| is not
         % applicable. So this method can not be used, use _getNetworkCost_ instead. 
-        function sc = getSliceCost(this, node_load, link_load, model)
             if nargin <= 1 || isempty(node_load)
                 node_load = this.VirtualNodes.Load;
             end
