@@ -1,7 +1,10 @@
 %% Static Network Slicing
+% In the static slicing method, once the resource is allocated to a slice, the allocation
+% scheme is not changed during its lifetime. 
 
 %%
-function output = StaticSlicing(this, slice, options)
+function output = staticSlicing(this, slice, options)
+
 if nargin <= 2
     options.Display = 'final';
     options.Method = 'slice';
@@ -22,7 +25,7 @@ if nargin>1 && ~isempty(slice)
         this.getNodeField('ResidualCapacity', ss.VirtualNodes.PhysicalNode);
     ss.VirtualLinks.Capacity = ...
         this.getLinkField('ResidualCapacity', ss.VirtualLinks.PhysicalLink);
-    net_profit = ss.optimalFlowRate(options);  
+    ss.optimalFlowRate(options);  
     slice.Variables = ss.Variables;
     slice.setPathBandwidth;
     slice.FlowTable.Rate = ss.FlowTable.Rate;
@@ -31,9 +34,10 @@ if nargin>1 && ~isempty(slice)
 end
 
 %% Finalize substrate network
-% # After the optimization, the flow rate, node/link load have been recorded.
-% # Announce the resource prices to the new slice.
-% # Record the substrate network's node and link load.
+% # After the optimization, the resource allocation variables, flow rate, virtual
+% node/link load of the last slice have been recorded. 
+% # Calculate and announce the resource prices to the new slice.
+% # Record the substrate network's node/link load, price.
 NS = this.NumberSlices;
 NN = this.NumberNodes;
 link_uc = this.getLinkField('UnitCost');
@@ -56,12 +60,13 @@ aggr_node_load = sum(node_load, 2);
 aggr_link_load = sum(link_load, 2);
 this.setNodeField('Load', aggr_node_load);
 this.setLinkField('Load', aggr_link_load);
+this.setLinkField('Price', link_price);
+this.setNodeField('Price', node_price);
 
 %% Calculate the output
 % The output variables includes,
 %
-% # Price of physical nodes and links;
-% # Load of physical nodes and links;
+% # Price and Load of physical nodes and links;
 % # The approximation of net social welfare, and the accurate net social welfare;
 % # The net profit of each slice and the substrate network, including four results from
 % different methods, i.e. |ApproximatePercent|, |ApproximatePrice|, |AccuratePercent|,
@@ -79,25 +84,80 @@ output.profit = table(t, t, t, t, 'VariableNames',...
 clear t;
 output.flow_rate = [];
 options.Model = 'Accurate';
+%% Calculate the net social welfare
+% The resource price is also keep fixed since it related to the linear resouce dynamic
+% cost, static cost and the prcing factor. Here, we use two model to assess the net
+% social welfare,
+%
+% * *Approximate Model*: the net social welfare is the sum of raw profit of all slices.
+% * *Accurate Model*: the net social welfare is the total utility less the total network
+% cost. 
 for s = 1:NS
     sl = this.slices{s};
     nid = sl.VirtualNodes.PhysicalNode;
     output.flow_rate = [output.flow_rate; sl.FlowTable.Rate];
 
     var_x = [sl.Variables.x; sl.Variables.z];
-    p = -Slice.fcnNetProfit(var_x, sl);
+    %% Calculate the profit
+    % * *Proportional Net profit with approximate cost*
+    %
+    % For slices,
+    %
+    %      net_profit = (utility - approximate_cost) * pf,
+    %
+    % where the approximate cost is computed by our approximation formula. The
+    % proportional net profit means only one part of the raw net profit is attributed to
+    % the slice, another part should be deliver to the substrate network. As a result,
+    % for substrate network,
+    %
+    %      net_profit = sum(slice_profit) * (1-pf).
+    %
+    % The net profit of substrate network is the sum of proportion profit from each slice
+    % computed by the _Approximate Model_. It is the same computing method, when using
+    % _Accurate Model_ with proportion profit.
+    % 
+    % *NOTE*: fcnNetProfit here evaluate the raw profit with resource cost.
+    p = -Slice.fcnNetProfit(var_x, sl); 
+    output.welfare_approx = output.welfare_approx + p;
+    output.welfare_accurate = output.welfare_accurate...
+        + sl.weight*sum(log(sl.FlowTable.Rate));
     output.profit.ApproximatePercent(s) = options.PercentFactor * p;
-    
+    %%%
+    % * *Proportional Net profit with accurate cost*
+    %
+    % For slices,
+    %
+    %      net_profit = (utility - accurate_cost) * pf.
+    %
+    % The accurate cost is based on the actual resource allocation after the optimization.
+    % Slices which share a physical resource will also proportionally share the static
+    % cost of the resource. 
     p = -Slice.fcnNetProfit(var_x, sl, options);
     idx = sl.VirtualNodes.Load>0;
     p = p - dot(sl.VirtualNodes.Load(idx)./this.getNodeField('Load',(nid(idx))),...
         this.getNodeField('StaticCost', nid(idx)));
     output.profit.AccuratePercent(s) = options.PercentFactor * p;
-    
+    %%%
+    % * *Net profit with offered price*
+    %
+    % For slices,
+    %
+    %      net_profit = utility - payment(price).
+    %
+    % The price is calculated accoding to resources cost and a pricing factor. The pricing
+    % factor is configured to ensure that the substrate network can make profit.
+    % 
+    % When the resource price is offered, the slice's profit is not related to how the
+    % cost is computed. Therefore, |output.profit.ApproximatePrice| and
+    % |output.profit.AccuratePercent| of slices is the same. The cost only affects the
+    % substrate network's profit. For substrate network with _Approximate Model_ and
+    % _Accurate Model_, the net profit is given by accordingly
+    %
+    %      net_profit = net_social_welfare - sum(slice_profit)
+    %                 = sum(slice_payment(price))) - cost(approximate/accurate)
+    %
+    % *NOTE*: fcnProfit evalute the profit using offered price.
     output.profit.ApproximatePrice(s) = -Slice.fcnProfit(var_x, sl);
-    
-    output.welfare_accurate = output.welfare_accurate...
-        + sl.weight*sum(log(sl.FlowTable.Rate));
 end
 f = (1-options.PercentFactor)/options.PercentFactor;
 output.profit.ApproximatePercent(end) = ...
@@ -107,10 +167,10 @@ output.profit.AccuratePercent(end) = ...
 output.profit.ApproximatePrice(end) = ...
     output.welfare_approx - sum(output.profit.ApproximatePrice(1:(end-1)));
 output.profit.AccuratePrice = output.profit.ApproximatePrice;
-output.profit.AccuratePrice(end) = ...
-    output.welfare_accurate - sum(output.profit.AccuratePrice(1:(end-1)));
 output.welfare_accurate = output.welfare_accurate - ...
     this.getNetworkCost([],[], options.Model);
+output.profit.AccuratePrice(end) = ...
+    output.welfare_accurate - sum(output.profit.AccuratePrice(1:(end-1)));
 
 end
 
