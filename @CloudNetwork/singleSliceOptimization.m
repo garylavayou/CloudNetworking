@@ -101,7 +101,7 @@ if nargout == 2
 end
 output.welfare_approx_optimal = net_profit;
 output.welfare_accurate_optimal = sum(ss.FlowTable.Weight.*fcnUtility(ss.FlowTable.Rate)) ...
-    - this.getNetworkCost(ss.VirtualDataCenters.Load, ss.VirtualLinks.Load, 'Accurate');
+    - this.getNetworkCost(ss.VirtualDataCenters.Load, ss.VirtualLinks.Load);
     %     + ss.constant_profit; => move toCLoudNetworkEx;
 % if ~isempty(this.eta)
 %     embed_profit_approx = this.eta * ...

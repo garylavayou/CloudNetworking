@@ -18,34 +18,40 @@
 %
 % |node_opt|: node options.
 %
-% * *capacity* |double|: how to specified the network nodes' capacity data. See also
-% NodeCapacityOption.
-% * *capacity_factor* |double|: this parameter is used to map the link capacity to node
+% * *CapacityOption* |NodeCapacityOption|: how to specify the network nodes' capacity
+% data. See also <NodeCapacityOption>.
+% * *CapacityFactor* |double|: this parameter is used to map the link capacity to node
 % capacity. Since we assume that the flow processing load is proportion to the flow rate,
 % the node capacity is proportion to the adjacent link capacity. A unit of flow pass
 % thorough a node will consume a unit of processing load, and two unit of link bandwidth
 % (on the flow-in and flowout link), which is taken into consideration when mapping the
 % node capacity.
-% * *alpha* |double|: the ratio of unit node cost to unit link cost.
+% * *CostOption* |NodeCostOption|: how to specify the network node's unit cost. See also
+% <NodeCostOption>.
+% * *alpha* |double|: this parameter is used to specified the ratio of unit node cost to
+% average unit link cost. With different |CostOption|, this parameter has different
+% effect. When |CostOption=CapacityInverse|, this parameter is approximately equal to the
+% ratio of average node unit cost to average link unit cost.
 % * *cost_weight* |double|: different cost mapping factor that refects how the node
 % resource is the scarce. 
 function graph_data = loadNetworkData(node_opt, link_opt)
-if nargin < 3 || isempty(link_opt) || ~isfield(link_opt, 'delay')
-    link_opt.delay = LinkDelayOption.BandwidthPropotion;
+if nargin < 2 || ~isfield(link_opt, 'delay')
+    warning('lacking link delay option, set to Random.'); 
+    link_opt.delay = LinkDelayOption.Random;
 end
-if nargin < 3 || isempty(link_opt) || ~isfield(link_opt, 'cost')
-    link_opt.cost = LinkCostOption.LengthDependent;
+if nargin < 2 || ~isfield(link_opt, 'cost')
+    error('error: lacking link cost option.'); % link_opt.cost = LinkCostOption.LengthDependent;
 end
-if nargin < 2 || isempty(node_opt) || ~isfield(node_opt, 'capacity')
-    node_opt.capacity = NodeCapacityOption.Default;
+if nargin < 1 || ~isfield(node_opt, 'capacity')
+    error('error: lacking node capacity option.'); % node_opt.capacity = NodeCapacityOption.Default;
 end
-if nargin < 2 || isempty(node_opt.cost) || ~isfield(node_opt, 'cost') 
-    node_opt.cost = NodeCostOption.Uniform;
+if nargin < 1 || ~isfield(node_opt, 'cost') 
+    error('error: lacking node cost option.'); % node_opt.cost = NodeCostOption.Uniform;
 end
 
 switch node_opt.model
     case NetworkModel.Sample1
-        capacity =  100*[      % Unit: Mbps
+        capacity =  [      % Unit: Mbps
             0  6  8  0  0 13;
             7  0  9 14  0  0;
             9 10  0 10  0  7;
@@ -59,7 +65,7 @@ switch node_opt.model
         % table, we find the edges row-by-row.
         [tail, head, link_capacity]=find(capacity');
     case NetworkModel.Sample2
-        capacity = 1000*[   % source: traffic engineering in software defined network
+        capacity = [   % source: traffic engineering in software defined network
             0 1 1 1 0 0 0 0 0 0 0 0 0 0 0;    %1
             1 0 1 0 1 0 0 0 0 0 1 0 0 0 0;    %2
             1 1 0 1 0 1 1 0 0 0 0 0 0 0 0;    %3
@@ -78,25 +84,40 @@ switch node_opt.model
         location = [96,-211; 221,-76; 173,-178; 138,-290; 327,-51; 278,-147; 234,-250;
             211,-341; 315,-327; 348,-256; 359,-119; 474,-84; 425,-184; 468,-259; 422,-327]; 
         [tail, head, link_capacity]=find(capacity');
+    case NetworkModel.SD_RAN
+        capacity = link_opt.Capacity;
+        [tail, head, link_capacity]=find(capacity');
+        location = node_opt.location;
     otherwise
         error('error: cannot process this network model.')
 end
 
-%% link delay
-if link_opt.delay==LinkDelayOption.BandwidthPropotion
-    link_delay = PhysicalNetwork.LinkDelay(link_opt.delay, link_capacity);
-    description = 'The link latency is proportial to the bandwidth, i.e. the longer path has larger bandiwdth';
-elseif link_opt.delay==LinkDelayOption.BandwidthInverse
-    link_delay = PhysicalNetwork.LinkDelay(link_opt.delay, link_capacity);
-    description = 'The link latency is inverse proportial to the bandwidth, i.e. the short path has larger bandiwdth';
-elseif link_opt.delay==LinkDelayOption.Constant
-    link_delay = 10*ones(size(link_capacity));
-    description = 'Each link has the same latency';
-elseif link_opt.delay==LinkDelayOption.Random
-    rng(link_opt.RandomSeed);
-    link_delay = 10*rand(size(link_capacity));
-    description = 'Each link''s latency is random within a range';
+if isfield(link_opt, 'CapacityFactor')
+    link_capacity = link_capacity * link_opt.CapacityFactor;
+    capacity = capacity * link_opt.CapacityFactor;
 end
+%% link delay
+switch link_opt.delay
+    case LinkDelayOption.BandwidthPropotion
+        link_delay = PhysicalNetwork.LinkDelay(link_opt.delay, link_capacity);
+        description = 'The link latency is proportion to the bandwidth, i.e. the longer path has larger bandiwdth';
+    case LinkDelayOption.BandwidthInverse
+        link_delay = PhysicalNetwork.LinkDelay(link_opt.delay, link_capacity);
+        description = 'The link latency is inverse proportion to the bandwidth, i.e. the short path has larger bandiwdth';
+    case LinkDelayOption.Constant
+        link_delay = 10*ones(size(link_capacity));
+        description = 'Each link has the same latency';
+    otherwise   % LinkDelayOption.Random
+        if isfield(link_opt, 'RandomSeed')
+            rng(link_opt.RandomSeed);
+        else
+            warning('random number seed is not specified (set as %d).', floor(now));
+            rng(floor(now));
+        end
+        link_delay = 10*rand(size(link_capacity));
+        description = 'Each link''s latency is random within a range';
+end
+
 if exist('node_name','var')
     graph_data = digraph(head, tail, link_delay, node_name);
 else
@@ -117,9 +138,15 @@ switch link_opt.cost
         if ~isfield(link_opt, 'link_cost') || isempty(link_opt.link_cost)
             error('Link cost information should be provided.');
         end
+    case LinkCostOption.CapacityInverse
+        link_opt.link_cost = 1./link_capacity;
     otherwise
         error('invalid link cost option (%d).', link_opt.cost);
 end
+if ~isfield(link_opt, 'CostUnit') || isempty(link_opt.CostUnit)
+    link_opt.CostUnit = 1;
+end
+link_opt.link_cost = link_opt.CostUnit * link_opt.link_cost;
 
 %% node capacity and cost
 switch node_opt.capacity
@@ -152,6 +179,8 @@ switch node_opt.cost
         % Here we use the average link cost to perform the cost mapping.
         node_opt.node_cost = node_opt.alpha*mean(link_opt.link_cost)...
             *(ones(graph_data.numnodes,1).*node_opt.cost_weight);
+    case NodeCostOption.CapacityInverse
+        node_opt.node_cost = 1 ./ node_capacity;
     case NodeCostOption.NetworkSpecified
         if ~isfield(node_opt, 'node_cost') || isempty(node_opt.node_cost)
             error('Node cost information should be provided.');
@@ -161,6 +190,10 @@ switch node_opt.cost
     otherwise
         error('error: Invalid node cost option (%d).', node_opt.cost);
 end
+if ~isfield(node_opt, 'CostUnit') || isempty(node_opt.CostUnit)
+    node_opt.CostUnit = 1;
+end
+node_opt.node_cost = node_opt.CostUnit * node_opt.node_cost;
 
 % Fields of Edge Table: EndNodes, Weight, Capacity, UnitCost
 graph_data.Edges.Capacity = link_capacity;

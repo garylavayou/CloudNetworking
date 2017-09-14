@@ -155,7 +155,17 @@ classdef CloudNetworkEx < CloudNetwork
                     % TODO
             end
         end
-                
+        
+        %%% compute link cost. Subclass may override this to provide cost.
+        function link_uc = getLinkCost(this)
+            link_uc = this.getLinkField('UnitCost') + this.phis_l;
+        end
+        
+        %%% compute node cost. Subclass may override this to provide cost.
+        function node_uc = getNodeCost(this)
+            node_uc = this.getDataCenterField('UnitCost') + this.phis_n;
+        end
+        
         function runtime = priceIteration(this, node_price, link_price, options)
             if nargout == 1
                 slice_runtime = 0;

@@ -20,8 +20,8 @@ aggr_link_load = zeros(NL,1);
 aggr_node_load = zeros(NS,1);
 node_capacity = this.getNodeField('Capacity');
 link_capacity = this.getLinkField('Capacity');
-link_uc = this.getLinkField('UnitCost') + this.phis_l;  % dynamic and static unit cost
-node_uc = this.getNodeField('UnitCost') + this.phis_n;
+link_uc = this.getLinkCost;  % dynamic and static unit cost
+node_uc = this.getNodeCost;
 %% Count the usage of links and nodes
 % Here, the simplest method is adopted. If a link/node might be used by a slice, then its
 % count is increased by the slice's weight.

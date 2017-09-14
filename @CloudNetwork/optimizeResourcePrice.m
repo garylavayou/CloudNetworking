@@ -28,8 +28,8 @@ NS = this.NumberSlices;
 NL = this.NumberLinks;
 node_capacity = this.getDataCenterField('Capacity');
 link_capacity = this.getLinkField('Capacity');
-link_uc = this.getLinkField('UnitCost') + this.phis_l;
-node_uc = this.getDataCenterField('UnitCost') + this.phis_n;
+link_uc = this.getLinkCost;
+node_uc = this.getNodeCost;
 
 %% Social-welfare aware price adjustment
 % Initial Price

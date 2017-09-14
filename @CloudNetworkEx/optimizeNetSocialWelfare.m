@@ -27,7 +27,7 @@ NL = this.NumberLinks;
 node_capacity = this.getNodeField('Capacity');
 link_capacity = this.getLinkField('Capacity');
 epsilon = this.unitStaticNodeCost;
-% node_unit_cost = this.getNodeField('UnitCost');
+% node_unit_cost = this.getNodeCost;
 % phis_n = this.staticNodeCost*this.delta*(NN-1)/this.totalNodeCapacity;
 % storage for subproblem results
 % the results are mapped from slices to substrate network

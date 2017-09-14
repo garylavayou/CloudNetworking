@@ -1,7 +1,7 @@
-%% Evalute the objective function and gradient
+%% Evaluate the objective function and gradient
 % only active independent variables are passed into the objective function.
-% Considering the constriant's coefficient matrix, if the corresponding column of the
-% coeffcient matrix for a variable is all zero, then this variable is inactive and can be
+% Considering the constraint's coefficient matrix, if the corresponding column of the
+% coefficient matrix for a variable is all zero, then this variable is inactive and can be
 % directly set as 0. So we can remove it from the optimization problem.
 %
 % NOTE: we can also remove the all-zero rows of the coefficient matrix, which do not
@@ -13,6 +13,6 @@ var_x(S.I_active_variable) = act_var_x;
 % we extend the active variables by adding zeros to the inactive ones.
 [profit, grad] = Slice.fcnProfit(var_x, S);
 
-% eleminate the inactive variable's derivatives.
+% eliminate the inactive variable's derivatives.
 grad = grad(S.I_active_variable);
 end

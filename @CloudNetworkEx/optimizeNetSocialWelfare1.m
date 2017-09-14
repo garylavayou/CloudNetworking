@@ -120,8 +120,8 @@ end
 % have been recorded (by the saveStates method). 
 % # Calculate and announce the resource prices to each slice.
 % # Record the substrate network's node/link load, price.
-link_price = this.getLinkField('UnitCost') + this.phis_l + this.lambda.e;
-node_price = this.getNodeField('UnitCost') + this.phis_n + this.lambda.n;
+link_price = this.getLinkCost + this.lambda.e;
+node_price = this.getNodeCost + this.lambda.n;
 for s = 1:NS
     sl = this.slices{s};    
     sl.VirtualLinks.Price = link_price(sl.VirtualLinks.PhysicalLink);

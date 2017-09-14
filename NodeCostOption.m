@@ -4,9 +4,10 @@ classdef NodeCostOption < uint32
     
     enumeration
         Uniform(1);            % All nodes have the same unit cost comparable to link cost.
-        NetworkSpecified(2);   % Network oprator specifies the node cost.
-        Weighted(3);           % The node cost is mapped from link cost, while the mapping weight is user specified.
-        Random(4);
+        Weighted(2);           % The node cost is mapped from link cost, while the mapping weight is user specified.
+        CapacityInverse(3);    % unit node cost inversely proportional to the capacity.
+        NetworkSpecified(4);   % Network oprator specifies the node cost.
+        Random(5);
     end
     
     methods

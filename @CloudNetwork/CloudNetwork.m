@@ -37,20 +37,20 @@ classdef CloudNetwork < PhysicalNetwork
         end
         
         %%% compute the total link cost.
-        function c = getLinkCost(this, link_load)
+        function c = getTotalLinkCost(this, link_load)
             if nargin == 1
-                c = dot(this.getLinkField('Load'), this.getLinkField('UnitCost'));
+                c = dot(this.getLinkField('Load'), this.getLinkCost);
             else
-                c = dot(link_load, this.getLinkField('UnitCost'));
+                c = dot(link_load, this.getLinkCost);
             end
         end
 
         		%%% compute the total node cost.
-        function c = getNodeCost(this, node_load)
+        function c = getTotalNodeCost(this, node_load)
             if nargin == 1
-                c = dot(this.DataCenters.Load, this.getDataCenterField('UnitCost'));
+                c = dot(this.DataCenters.Load, this.getNodeCost);
             else
-                c = dot(node_load, this.getDataCenterField('UnitCost'));
+                c = dot(node_load, this.getNodeCost);
             end
         end
         
@@ -65,30 +65,33 @@ classdef CloudNetwork < PhysicalNetwork
         %
         % When the network only include a single slice, this method equals to
         % _getSliceCost_ .
-        function c = getNetworkCost(this, node_load, link_load, model)
+%         function c = getNetworkCost(this, node_load, link_load, model)
+        function c = getNetworkCost(this, node_load, link_load)
             if nargin <=1 || isempty(node_load)
                 node_load = this.getDataCenterField('Load');
             end
             if nargin <= 2 || isempty(link_load)
                 link_load = this.getLinkField('Load');
             end
-            if nargin <= 3
-                warning('model is set as Approximate.');
-                model = 'Approximate';
-            end
+%             if nargin <= 3
+%                 warning('model is set as Approximate.');
+%                 model = 'Approximate';
+%             end
             
-            if strcmp(model, 'Approximate')
-                c = this.getNodeCost(node_load) + this.getLinkCost(link_load) +...
-                    this.getStaticCost(node_load, link_load);
-            elseif strcmp(model, 'Accurate')
-                c = this.getNodeCost(node_load) + this.getLinkCost(link_load);
+            c = this.getTotalNodeCost(node_load) + this.getTotalLinkCost(link_load);
+%             if strcmp(model, 'Approximate')
+%                 c = this.getTotalNodeCost(node_load) + ...
+%                     this.getTotalLinkCost(link_load) +...
+%                     this.getStaticCost(node_load, link_load);
+%             elseif strcmp(model, 'Accurate')
+%                 c = this.getNodeCost(node_load) + this.getLinkCost(link_load);
 %                 if this.static_factor ~= 0  => move to CloudNetworkEx
 %                     b_deployed = node_load > 0;
 %                     c = c + sum(this.getDataCenterField('StaticCost', b_deployed));
 %                 end
-            else
-                error('error: unknown model (%s).', model);
-            end
+%             else
+%                 error('error: unknown model (%s).', model);
+%             end
         end
         
         %% statistics of the output
@@ -121,6 +124,16 @@ classdef CloudNetwork < PhysicalNetwork
     end
     
     methods (Access=protected) 
+        %%% compute link cost. Subclass may override this to provide cost.
+        function link_uc = getLinkCost(this)
+            link_uc = this.getLinkField('UnitCost');
+        end
+
+        %%% compute node cost. Subclass may override this to provide cost.
+        function node_uc = getNodeCost(this)
+            node_uc = this.getDataCenterField('UnitCost');
+        end
+
         function graph = residualgraph(this, slice_opt)
             if isfield(slice_opt, 'method') && strcmp(slice_opt.method, 'static-slicing')
                 % If a link's residual capacity is zero, then this link should be removed from the
@@ -245,7 +258,8 @@ classdef CloudNetwork < PhysicalNetwork
             else
                 error('error: input parameters are not enough.');
             end
-            profit = revenue - this.getNetworkCost(node_load, link_load, 'Accurate');
+%             profit = revenue - this.getNetworkCost(node_load, link_load, 'Accurate');
+            profit = revenue - this.getNetworkCost(node_load, link_load);
         end
         
         %%%

@@ -22,8 +22,8 @@ node_load = zeros(NN, NS);
 link_load = zeros(NL, NS);
 node_capacity = this.getNodeField('Capacity');
 link_capacity = this.getLinkField('Capacity');
-link_uc = this.getLinkField('UnitCost') + this.phis_l;
-node_uc = this.getNodeField('UnitCost') + this.phis_n;
+link_uc = this.getLinkCost;
+node_uc = this.getNodeCost;
 
 %% Social-welfare aware price adjustment
 % Initial Price

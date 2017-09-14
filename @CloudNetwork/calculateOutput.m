@@ -166,7 +166,7 @@ end
 % argout.welfare_approx = argout.welfare_approx + embed_profit_approx;
 if cellstrfind(welfare_type, 'Accurate')
     argout.welfare_accurate = argout.welfare_accurate - ...
-        this.getNetworkCost([],[], 'Accurate');
+        this.getNetworkCost;
 end
 
 if cellstrfind(profit_type, 'Percent')

@@ -14,7 +14,8 @@ classdef NetworkModel < uint32
         Sample1(1),
         Sample2(2),
         Sample3(3),
-        Random(4)
+        Random(4),
+        SD_RAN(5)
     end
     
 end

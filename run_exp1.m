@@ -3,22 +3,18 @@
 % static slicing method.
 
 %% Specification of Substrate Network
-% Use |CostUnit| to set the basic cost parameters, the ratio between the node cost and
-% link cost can be adjusted through |CostUnit|.
-% Then we adjust the |Weight| of slices to let the resource utilization of the network be
-% in a reasonable value. 
-% Adjust the |capacity_factor|, so that the resource utilization of node and link is
-% close.
+% The parameters are determined in <run_test1.m>.
 link_opt.delay = LinkDelayOption.Random;
 link_opt.cost = LinkCostOption.CapacityInverse;
-link_opt.CostUnit = 100;
+link_opt.CostUnit = 150;
+link_opt.CapacityFactor = 30;
 net_opt.delta = 0.7;
 
 node_opt.model = NetworkModel.Sample1;
 node_opt.capacity = NodeCapacityOption.BandwidthProportion;
-node_opt.capacity_factor = 1.5;     % [0.3; 0.5; 0.8; 1]
 node_opt.cost = NodeCostOption.CapacityInverse;
 node_opt.CostUnit = 500;
+node_opt.capacity_factor = 1.5;     % [0.3; 0.5; 0.8; 1]
 
 %% Specification of VNFs and Network Slices
 % |StaticCostOption| is not set, the default value is |None|;
@@ -26,16 +22,19 @@ node_opt.CostUnit = 500;
 % efficiency.
 VNF_opt.Number = 4;            % number of VNF type
 VNF_opt.Model = VNFIntegrateModel.AllInOne;
-VNF_opt.RandomSeed = [20161031 20161101];       
+VNF_opt.RandomSeed = [20161101 0];       
 
 %% Arrival sequence confiuration
+% Assume that the arrival interval is fixed, *only adjust the service lifetime and the
+% arrival probability* of each type of slices to control the number of slices in the
+% network. See also <RequestEvent>.
 type.Index = [1; 2; 3];
 type.Fixed = 1;
 type.FixedCount = 3;      % Number of persistent slices: {1|2|3...}
 % type.PartitionWeight = [1 2 4];
-seed = 20161231;
+seed = 20161231;        % -> seed_dynamic
 arrival.Number = 100;
-arrival.Interval = 0.7;     % Average of arrival interval.
+arrival.Interval = 0.25;     % Average of arrival interval.
 
 %% Algorithm options
 options.PricingFactor = 1;
@@ -53,9 +52,16 @@ b_resource_part = false;
 b_part_price = false;
 
 %%
-run_sequence_1;     % to be renamed.
-
+load('output_seq11.mat')
+run_sequence;
+%%
+x_tick = 1:160;
+% fig2_limits = [1, stat.times(x_tick(end)), 600, 3000];
+xlimits = [stat.times(1), stat.times(x_tick(end))];
+fig3_ylimits = [200, 700;
+    0, 1000;
+    500, 2500];
 data_plot;
-
-% save('output_seq23.mat', 'profit_accurate', 'profit_approx', ...
-% 'profit_stat', 'rate_stat', 'runtime', 'stat', 'utilization');
+%%
+save('output_seq11.mat', 'profit_accurate', 'profit_approx', ...
+'profit_stat', 'rate_stat', 'runtime', 'stat', 'utilization', 'type');

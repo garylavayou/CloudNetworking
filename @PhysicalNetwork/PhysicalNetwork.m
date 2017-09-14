@@ -1,28 +1,14 @@
 %% Physical Network
-
-%%
-classdef PhysicalNetwork < handle
+% network resource abstraction and allocation description; No resource allocation method
+% defined, which can be realized by subclasses, see also <CloudNetwork>. 
+classdef PhysicalNetwork < matlab.mixin.Copyable 
     
     %% Properties
-
-    properties (SetAccess = private)
-        %%%
-        % * *Topology*: including a NodeTable |Nodes| and an EdgeTable |Edges|.
-        %
-        % |Nodes|: the fields in node table include _Name_, _Location_, _Capacity_, _StaticCost_,
-        % _Load_, _Price_.
-        %
-        % |Edges|: the fields in the edge table include _EndNodes_, _Weight_, _Capacity_, _Index_,
-        % _Load_, _Price_.
-        Topology;
-        graph;
-        slices;
-        VNFTable;            % Meta data of virtual network function
-        
-        LinkOption;          % Options for link properties
+    properties (Dependent)
         NumberNodes;         % Number of physical nodes
         NumberLinks;         % Number of physical links
         NumberSlices;        % Number of network slices
+        NumberDataCenters;   % Number of data centers
         %%%
         % * *VNFTable*: including following fields.
         %
@@ -31,20 +17,82 @@ classdef PhysicalNetwork < handle
         NumberVNFs;          % Number of VNF types
         NumberPaths;         % Number of candidate paths of all slices
         NumberFlows;         % Number of flows of all slices
+
+        LinkOptions;         % Options for link properties
+        NodeOptions;         % Options for node properties
     end
+    properties (GetAccess = public)
+        %%%
+        % * *Topology*: including a NodeTable |Nodes| and an EdgeTable |Edges|.
+        %
+        % |Nodes|: the fields in node table include _Name_, _Location_, _Capacity_,
+        % _StaticCost_, _Load_, _Price_.
+        %
+        % |Edges|: the fields in the edge table include _EndNodes_, _Weight_, _Capacity_,
+        % _Index_, _Load_, _Price_. 
+        Topology;            % Class digraph object
+        graph;               % Class DierectedGraph object
+        DataCenters;         % the forwarding node mapping of data center.
+                             % data_center(dc_id) returns the physical node id;
+        VNFTable = table;    % Meta data of virtual network function
+        slices;              % a list of Slice objects        
+    end
+    
     properties
-        delta;          % the proportion of link when computing the network ultilization.
         slice_template;
     end
-    properties (Access = private)
-        lambda;
+    
+    properties (SetAccess = private, GetAccess = {?Slice})
+        link_usage;
+        node_usage;
     end
+    properties (Access = protected)
+        path_identifier_generator = SerialNumber(1, [], true);
+        flow_identifier_generator = SerialNumber(1, [], true);
+    end
+    properties (Access = {?PhysicalNetwork, ?Slice})
+        options;
+    end
+    properties (Access = protected)
+        bypass = cell(0);    
+        % prevent the method of subclass with multiple superclass call a common method for
+        % multiple times.
+    end
+    
     methods
         %% Constructor
-        function this = PhysicalNetwork(node_opt, link_opt, VNF_opt, options)
+        %   PhysicalNetwork(node_opt, link_opt, VNF_opt, options)
+        function this = PhysicalNetwork(varargin)
+            if isempty(varargin)
+                return;
+            elseif isa(varargin{1}, 'PhysicalNetwork')
+                this = varargin{1}.copy;
+                return;
+            elseif length(varargin)<3
+                return;
+            end
+            node_opt = varargin{1};
+            link_opt = varargin{2};
+            VNF_opt = varargin{3};
             % Store graph information
-            %     PhysicalNetwork(node_opt, link_opt, VNF_opt, options)
             this.Topology = PhysicalNetwork.loadNetworkData(node_opt, link_opt);
+            dc_node_index = find(this.Topology.Nodes.Capacity>0);
+            this.DataCenters = table(dc_node_index, 'VariableName', {'NodeIndex'});
+            c = 1;
+            while c<=width(this.Topology.Nodes)
+                name = this.Topology.Nodes.Properties.VariableNames{c};
+                switch name
+                    case {'Name', 'Location'}
+                        c = c + 1;
+                    otherwise
+                        this.DataCenters{:,{name}} = ...
+                            this.Topology.Nodes{dc_node_index, {name}};
+                        this.Topology.Nodes(:,{name}) = [];
+                end
+            end
+            this.Topology.Nodes.DataCenter = zeros(this.NumberNodes,1);
+            this.Topology.Nodes{this.DataCenters.NodeIndex, 'DataCenter'} = ...
+                (1:height(this.DataCenters))';            
             this.graph = DirectedGraph(this.Topology);
             %%%
             % *Edge Index Mapping*:
@@ -55,73 +103,73 @@ classdef PhysicalNetwork < handle
             idx = this.graph.IndexEdge(s,t);
             this.Topology.Edges.Index = idx;
             this.Topology.Edges.Properties.VariableDescriptions{4} = ...
-                'Index the edges by column.';
+                'Index the edges by column in the adjacent matrix.';
             this.setLinkField('Load', 0);
-            this.setNodeField('Load', 0);
+            this.setDataCenterField('Load', 0);
             
             % Initialize VNF Specification
-            switch VNF_opt.Model
-                case VNFIntegrateModel.AllInOne
-                    if VNF_opt.StaticCostOption == NodeStaticCostOption.Random
-                        if ~isfield(VNF_opt, 'static_cost_range') ||...
-                                isempty(VNF_opt.static_cost_range)
-                            scr = [0.1 0.3];
-                        else
-                            scr = VNF_opt.static_cost_range;
-                        end
-                        rng(VNF_opt.RandomSeed(1));
-                        node_capacity = this.Topology.Nodes.Capacity;
-                        node_uc = this.Topology.Nodes.UnitCost;
-                        avg_static_cost = mean(node_capacity.*node_uc)...
-                            .*(rand([this.NumberNodes, 1])*(scr(2)-scr(1))+scr(1));
-                        this.Topology.Nodes.StaticCost = ...
-                            round(avg_static_cost, -2);
-                    elseif VNF_opt.StaticCostOption == NodeStaticCostOption.NetworkSpecified
-                        % TODO
-                    end
-                case VNFIntegrateModel.SameTypeInOne
-                    % TODO
-                case VNFIntegrateModel.Separated
-                    % TODO
+            this.initializeVNF(VNF_opt);      
+            
+            if length(varargin) >= 4
+                this.options = structmerge(this.options, ...
+                    getstructfields(varargin{4}, {'Display'}));
             end
             
-            this.VNFTable = table;
+        end
+    end
+    
+    methods (Access = protected)
+        % Child classes can overload these functions, which can be called from the
+        % superclass, without consideration the specific class of the object. 
+        %% Deep Copy
+        function this = copyElement(pn)
+            % Make a shallow copy of all properties
+            this = copyElement@matlab.mixin.Copyable(pn);
+            % Make a deep copy of the DeepCp object
+            this.graph = pn.graph.copy;
+            for i = 1:pn.NumberSlices
+                this.slices{i} = pn.slices{i}.copy;
+            end
+        end        
+    end
+    
+    %% Methods
+    %%%
+    % Subclass can override these functions
+    methods (Abstract, Access = protected)
+        %%%
+        % Called by <AddSlice>.
+        sl = createslice(this, slice_opt);
+    end
+    methods (Access = protected)
+        %%%
+        % Called by _Constructor_;
+        function initializeVNF(this, VNF_opt)
             if isfield(VNF_opt, 'ProcessEfficiency')
                 this.VNFTable.ProcessEfficiency = VNF_opt.ProcessEfficiency;
             else
-                rng(VNF_opt.RandomSeed(2));
+                rng(VNF_opt.RandomSeed(1));
                 this.VNFTable.ProcessEfficiency = 0.5 + rand([VNF_opt.Number, 1]);
             end
-            
-            % Add slice data
-            this.NumberSlices = 0;
-            %             if nargin >=5
-            %                 this.setLinkField('Beta', beta{1});
-            %                 this.setNodeField('Beta', beta{2});
-            %             else
-            %                 this.setLinkField('Beta', 1*this.getLinkField('Capacity'));
-            %                 this.setNodeField('Beta', 1*this.getNodeField('Capacity'));
-            %             end
-            if nargin<=4
-                options.delta = 0.5;
-                %                 options.beta.node = 1;          % NOTE: this is not used temporarily
-                %                 options.beta.link = 1;
-            else
-                if ~isfield(options, 'delta') || isempty(options.delta)
-                    options.delta = 0.5;
-                end
-            end
-            this.delta = options.delta;
         end
+        %%%
+        % Called by access AddSlice
+        [flow_table, phy_adjacent, flag] = generateFlowTable( this, graph, slice_opt );      
+        %%%
+        % Called by _AddSlice_, return value is used by _generateFlowTable_;
+        function graph = residualgraph(this)
+            graph = this.graph;
+        end
+        
     end
-
-%% Methods
+    
     methods (Static)
         %%%
         % * *loadNetworkData* |static| : generate graph data.
         %
         %       graph_data = LoadNetworkData(link_opt, node_opt)
         %
+        %% TODO: override it for subclass.
         graph_data = loadNetworkData(node_opt, link_opt);
         %%%
         % * *LinkDelay* |static| : convert bandwidth to link delay.
@@ -143,115 +191,112 @@ classdef PhysicalNetwork < handle
                 error('the delay option (%s) cannot be handled.', delay_opt.char);
             end
         end
-        
+                
     end
-    
+    methods (Static, Access=protected)
+        function flag = assert_path_list(~, path_list)
+            if isempty(path_list)
+                flag = -1;
+            else
+                flag = 0;
+            end
+        end
+    end
     % property access functions
     methods
-        function opt = get.LinkOption(this)
+        function opt = get.LinkOptions(this)
             opt = this.Topology.Edges.Properties.UserData{1};
         end
+        
+        function opt = get.NodeOptions(this)
+            opt = this.Topology.Nodes.Properties.UserData{1};
+        end
+        
         function n = get.NumberNodes(this)
             n = this.Topology.numnodes;
         end
+        
+        function n = get.NumberSlices(this)
+            n = length(this.slices);
+        end
+        
+        function n = get.NumberDataCenters(this)
+            n = height(this.DataCenters);
+        end
+        
         function m = get.NumberLinks(this)
             m = this.Topology.numedges;
         end
+        
         function n = get.NumberVNFs(this)
             n = height(this.VNFTable);
         end
+        
         function n = get.NumberPaths(this)
             n = 0;
             for i = 1:this.NumberSlices
                 n = n + this.slices{i}.NumberPaths;
             end
         end
+        
         function n = get.NumberFlows(this)
             n = 0;
             for i = 1:this.NumberSlices
                 n = n + this.slices{i}.NumberFlows;
             end
         end
+        
     end
-    
-    methods
-        
+
+    methods    
         %%%
-        % * *AllocateFlowId* : Allocate flow identifier.
-        %
-        %      AllocateFlowId(phy_network, start_slice)
-        %
-        % |start_slice|: the slice index or the handle of the slice.
-        function AllocateFlowId(this, start_slice)
-            % Allocate flow identifier
-            if nargin <= 1
-                slice_id = 1;
-            else
-                if isa(start_slice, 'Slice')
-                    slice_id = this.findSlice(start_slice);
-                else
-                    slice_id = start_slice;
+        % statistics of slices.
+        function count = CountSlices(this)
+            if this.NumberSlices == 0
+                count = 0;
+                return;
+            end
+            b_unknown_type = false;
+            max_type = 0;
+            for i = 1:this.NumberSlices
+                if isempty(this.slices{i}.Type)
+                    b_unknown_type = true;
+                elseif max_type < this.slices{i}.Type
+                    max_type = this.slices{i}.Type;
                 end
             end
-            if isempty(slice_id) || slice_id == 1
-                flow_id = 0;
-            else
-                flow_id = this.slices{slice_id-1}.FlowTable.Identifier(end);
+            max_type = max_type + b_unknown_type;
+            count = zeros(max_type,1);
+            for i = 1:this.NumberSlices
+                if isempty(this.slices{i}.Type)
+                    count(end) = count(end)+1;
+                else
+                    count(this.slices{i}.Type) = count(this.slices{i}.Type)+1;
+                end
             end
-            for s = slice_id:this.NumberSlices
-                slice = this.slices{s};
-                slice.FlowTable.Identifier = flow_id + (1:height(slice.FlowTable))';
-                flow_id = flow_id + height(slice.FlowTable);
-            end
+            count = count(find(count~=0,1):end);
         end
-        
-        %%%
-        % * *AllocatePathId* : Allocate path identifier
-        %
-        %      AllocatePathId(phy_network)
-        function AllocatePathId(this, start_slice)
-            if nargin <= 1
-                slice_id = 1;
-            else
-                if isa(start_slice, 'Slice')
-                    slice_id = this.findSlice(start_slice);
-                else
-                    slice_id = start_slice;
-                end
-            end
-            if isempty(slice_id) || slice_id == 1
-                path_id = 0;
-            else
-                path_list = this.slices{slice_id-1}.FlowTable.Paths(end);
-                path_id = path_list.paths{end}.id;
-            end
-            for s = slice_id:this.NumberSlices
-                for j = 1:height(this.slices{s}.FlowTable)
-                    path_list = this.slices{s}.FlowTable.Paths(j).paths;
-                    for k = 1:length(path_list)
-                        path_id = path_id + 1;
-                        path_list{k}.id = path_id;
-                    end
-                end
-            end
-        end    
         %%%
         % * *LinkId*: link index of links in the edge table
         %
-        %       idx = LinkId(this, s, t)
+        %      [head, tail] = LinkId(this, idx); 
+        %      idx = LinkId(this, s, t)
         %
         % |s|: source nodes of links;
         %
         % |t|: tail nodes of links;
-        function idx = LinkId(this, s, t)
-            % LinkId  get the index of links by the head and tail nodes' id.
+        %
+        % |idx|: the numeric index of links.
+        %
+        % See Also _DirectedGraph.IndexEdge_.
+        function [argout_1, argout_2] = LinkId(this, argin_1, argin_2)
             switch nargin
                 case 1
-                    idx = this.graph.IndexEdge;
+                    [argout_1, argout_2] = this.graph.IndexEdge;
                 case 2
-                    idx = this.graph.IndexEdge(s);
+                    [argout_1, argout_2] = this.graph.IndexEdge(argin_1);
                 otherwise
-                    idx = this.graph.IndexEdge(s,t);
+                    argout_1 = this.graph.IndexEdge(argin_1,argin_2);
             end
         end
         %%%
@@ -298,124 +343,165 @@ classdef PhysicalNetwork < handle
             value = value(link_id);
         end
         
-        function setNodeField(this, name, value)
-            this.Topology.Nodes{:,{name}} = value;
+        function setNodeField(this, name, value, node_index)
+            if nargin < 3 || isempty(name) || isempty(value)
+                error('input arguments are not enough (name, value).');
+            end
+            if nargin == 3
+                node_index = 1:this.NumberNodes;
+            end
+            this.Topology.Nodes{node_index,{name}} = value;
+            
+        end
+        
+        function setDataCenterField(this, name, value, dc_index)
+            if nargin < 3 || isempty(name) || isempty(value)
+                error('input arguments are not enough (name, value).');
+            end
+            if nargin == 3
+                dc_index = 1:this.NumberDataCenters;
+            end
+            if strcmp(name, 'ResidualCapacity')
+                error('error: ResidualCapacity cannot be set.');
+            else
+                this.DataCenters{dc_index,{name}} = value;
+            end            
         end
         
         function value = getNodeField(this, name, node_id)
             if nargin < 2 || isempty(name)
                 error('input arguments are not enough (name, node_id).');
-            elseif nargin < 3
+            end
+            if nargin < 3
                 node_id = 1:this.NumberNodes;
             end
             switch name
-                case 'ResidualCapacity'
-                    value = this.Topology.Nodes{node_id,{'Capacity'}} - ...
-                        this.Topology.Nodes{node_id,{'Load'}};
-                otherwise
+                case {'Name', 'Location', 'DataCenter'}
                     value = this.Topology.Nodes{node_id, {name}};
+                otherwise
+                    value = zeros(this.NumberNodes, 1);
+                    value(this.DataCenters.NodeIndex) = this.getDataCenterField(name);
+                    value = value(node_id);
             end
         end
         
-        function c = getLinkCost(this, link_load)
-            % compute the total link cost.
-            if nargin == 1
-                c = dot(this.getLinkField('Load'), this.getLinkField('UnitCost'));
+        function value = getDataCenterField(this, name, dc_id)
+            if nargin < 2 || isempty(name)
+                error('input arguments are not enough (name, node_id).');
+            end
+            if nargin < 3
+                dc_id = 1:this.NumberDataCenters;
+            end
+            if strcmp('ResidualCapacity', name)
+                value = this.DataCenters{dc_id,{'Capacity'}} - ...
+                    this.DataCenters{dc_id,{'Load'}};
             else
-                c = dot(link_load, this.getLinkField('UnitCost'));
-            end
-        end
-        
-        function c = getNodeCost(this, node_load)
-            % compute the total node cost.
-            if nargin == 1
-                c = dot(this.Topology.Nodes.Load, this.getNodeField('UnitCost'));
-            else
-                c = dot(node_load, this.getNodeField('UnitCost'));
-            end
-        end
-        
-        function c = unitStaticNodeCost(this)
-            c = mean(this.getNodeField('StaticCost'));
-        end
-        
-        function c = getStaticCost(this, node_load, link_load)
-            if nargin <= 2
-                link_load = this.getLinkField('Load');
-            end
-            if nargin <=1
-                node_load = this.getNodeField('Load');
-            end
-            epsilon = this.unitStaticNodeCost;
-            theta = this.utilizationRatio(node_load, link_load);
-            c = epsilon*((this.NumberNodes-1)*theta+1);
-        end
-        
-        %%% 
-        % *Network Operation Cost*: 
-        % two methods to calculate network cost.
-        % # Calculate with the approximate model, where the static node cost is computed
-        % by the approximate formula.
-        % # Calculate with the accurate model, where the static node cost is computed by
-        % the solution of VNF deployment.
-        function c = getNetworkCost(this, node_load, link_load, model)
-            if nargin <=1 || isempty(node_load)
-                node_load = this.getNodeField('Load');
-            end
-            if nargin <= 2 || isempty(link_load)
-                link_load = this.getLinkField('Load');
-            end
-            if nargin <= 3
-                model = 'Approximate';
-            end
-            
-            if strcmp(model, 'Approximate')
-                c = this.getNodeCost(node_load) + this.getLinkCost(link_load) +...
-                    this.getStaticCost(node_load, link_load);
-            elseif strcmp(model, 'Accurate')
-                c = this.getNodeCost(node_load) + this.getLinkCost(link_load);
-                b_deployed = node_load > 0;
-                c = c + sum(this.getNodeField('StaticCost', b_deployed));
+                value = this.DataCenters{dc_id, {name}};
             end
         end
         
         function V = totalNodeCapacity(this)
-            V = sum(this.getNodeField('Capacity'));
+            V = sum(this.getDataCenterField('Capacity'));
         end
         
         function C = totalLinkCapacity(this)
             C = sum(this.getLinkField('Capacity'));
         end
-        
-        function theta = utilizationRatio(this, node_load, link_load)
-            if nargin == 1
-                node_load = this.getNodeField('Load');
-                link_load = this.getLinkField('Load');
+                
+		function [r_mean, r_max, r_min, r_std] = nodeUtilization(this)
+			node_load = this.getDataCenterField('Load');
+			node_capacity = this.getDataCenterField('Capacity');
+            % 			node_index = node_load > 1;
+            %%%
+            % Another method: ratio = sum(node_load)/sum(node_capacity);
+			ratio = node_load ./ node_capacity;
+			r_mean = mean(ratio);
+            %%%
+            % The range of node utilization may large, since the load of nodes depends on
+            % the flow's location, the node's cost, and our objective is not to balancing
+            % the node load. 
+            if nargout >= 2
+                r_max = max(ratio);
             end
-            theta_v = sum(node_load)/this.totalNodeCapacity;
-            theta_l = sum(link_load)/this.totalLinkCapacity;
-            theta = this.delta*theta_v + (1-this.delta)*theta_l;
+            if nargout >= 3
+                r_min = min(ratio);
+            end
+            if nargout >= 4
+                r_std = std(ratio);
+            end
+		end
+		
+        function [r_mean, r_max, r_min, r_std] = linkUtilization(this)
+            link_load = this.getLinkField('Load');
+            link_capacity = this.getLinkField('Capacity');
+            % link_index = link_load > 1;
+            ratio = link_load ./ link_capacity;
+            r_mean = mean(ratio);
+            if nargout >= 2
+                r_max = max(ratio);
+            end
+            if nargout >= 3
+                r_min = min(ratio);
+            end
+            if nargout >= 4
+                r_std = std(ratio);
+            end
         end
-        
+
+        %%% 
+        % * *RemoveSlice*:
         % Remove the slice with identifier |id|.
-        function sl = RemoveSlice(this, id)
-            for s = 1:this.NumberSlices
-                if this.slices{s}.Identifier == id
-                    sl = this.slices{s};
-                    break;
-                end
+        % if no slice with identifier |id|, this method do not perform any operation.
+        % |b_update| should be 1, if using static slicing method.
+        function sl = RemoveSlice(this, arg1)
+            if isinteger(arg1)
+                id = arg1;
+                sid = this.findSlice(id, 'Identifier');
+            elseif isa(arg1, 'Slice')
+                sl = arg1;
+                sid = this.findSlice(sl);
             end
-            this.NumberSlices = this.NumberSlices - 1;
-            this.slices(s) = [];
-            this.AllocateFlowId(s);
-            this.AllocatePathId(s);
+%             if nargin <= 2
+%                 b_update = false;
+%             end
+            if ~isempty(sid)
+                sl = this.slices{sid};
+                %%% 
+                % remove the slice's link and node statistics.
+                slice_index = this.findSlice(sl);
+                this.link_usage(:,slice_index) = [];
+                this.node_usage(:,slice_index) = [];
+%                 if b_update
+%                     %%%
+%                     % Update the load of the substrate network.
+%                     % for calculate the residual capacity.
+%                     node_load = zeros(this.NumberNodes, 1);
+%                     node_load(sl.VirtualNodes.PhysicalNode) = sl.VirtualNodes.Load;
+%                     this.setDataCenterField('Load', node_load - node_load);
+%                     link_load = zeros(this.NumberLinks, 1);
+%                     link_load(sl.VirtualLinks.PhysicalLink) = sl.VirtualLinks.Load;
+%                     this.setLinkField('Load', link_load - link_load);
+%                 end
+                this.slices(sid) = [];
+                %
+                % Since the flow/path id might be used by other associate entities, the
+                % cost to reallocate flow id is large. And reallocation is not necessary,
+                % since the space of identifier is large enough.
+                %    this.AllocateFlowId(sid);
+                %    this.AllocatePathId(sid);
+            else
+                sl = [];
+            end
         end
         
         %%%
-        % findSlice
-        % Find the given slice's Index.
-        % Find the index of slices with Type |key|, return a row vector of index.
-        function sid = findSlice(this, key, ~)
+        % * *findSlice*: 
+        %   sid = findSlice(this, slice)
+        %   sid = findSlice(this, key, field)
+        % (1) Find the given slice's Index.
+        % (2) Find the index of slices with Type |key|, return a row vector of index.
+        function sid = findSlice(this, key, field)
+            sid = [];
             if isa(key, 'Slice')
                 for s = 1:this.NumberSlices
                     if key == this.slices{s}
@@ -423,93 +509,78 @@ classdef PhysicalNetwork < handle
                         return;
                     end
                 end
-                sid = [];
             else
-                sid = false(1,this.NumberSlices);
-                for s = 1:this.NumberSlices
-                    if key == this.slices{s}.Type
-                        sid(s) = true;
-                    end
+                if nargin <= 2
+                    field = 'Type';
                 end
-                sid = find(sid);
+                switch field
+                    case 'Type'
+                        sid = false(1,this.NumberSlices);
+                        for s = 1:this.NumberSlices
+                            if key == this.slices{s}.Type
+                                sid(s) = true;
+                            end
+                        end
+                        sid = find(sid);
+                    case 'Identifier'
+                        for s = 1:this.NumberSlices
+                            if key == this.slices{s}.Identifier
+                                sid = s;
+                                break;
+                            end
+                        end
+                    otherwise
+                        warning('undefined key type [%s].', key);
+                end
             end
         end
         
-        % type_index is a scalar.
-        function [p,r] = statSlice(this, type_index, profit)
-            s_index = this.findSlice(type_index);
-            if isempty(s_index)
-                p = {0, 0, 0};
-                if nargout >= 2
-                    r = {0, 0, 0};
-                end
-            else
-                p = {mean(profit(s_index)), max(profit(s_index)), min(profit(s_index))};
-                if nargout >= 2
-                    sum_rate = 0;
-                    num_flow = 0;
-                    max_rate = 0;
-                    min_rate = inf;
-                    for s = s_index     % s_index is a row vector
-                        sum_rate = sum(this.slices{s}.FlowTable.Rate) + sum_rate;
-                        num_flow = this.slices{s}.NumberFlows + num_flow;
-                        max_rate = max(max_rate, max(this.slices{s}.FlowTable.Rate));
-                        min_rate = min(min_rate, min(this.slices{s}.FlowTable.Rate));
-                    end
-                    avg_rate = sum_rate/num_flow;
-                    r = {avg_rate, max_rate, min_rate};
-                end
-            end
-        end
     end
     methods
-        [output] = optimizeResourcePrice(this, init_price, options);
-        [output, single_slice] = singleSliceOptimization(this , options);
-        [output] = resourcePartitionOptimization(this, slice_weight, options);
-        [output] = optimizeNetSocialWelfare1( this, options );
-        output = StaticSlicing(this, slice, options);
-        welfare = optimizeNetSocialWelfare2( this, options );
-        welfare = optimizeNetSocialWelfare2a( this );
-        welfare = optimizeNetSocialWelfare3( this );
-        welfare = optimizeNetSocialWelfare4( this );
         %%%
         % * *AddSlice* : Add Slice to Substrate Network
         %
         %      AddSlice(phy_network, slice_opt)
         %
         % |slice_opt|:  option for the added slice;
-        AddSlice(this, slice_opt);
+        sl = AddSlice(this, slice_opt, varargin);
         %%%
         % * *plot* : Visualize Substrate Network and Network Slices
         %
         %      plot(phy_network)
-        plot(this);
+        plot(this, b_undirect);
     end
-    methods(Access=private)
-        function saveStates(this, lambda)
-            for i = 1:this.NumberSlices
-                sl = this.slices{i};
-                sl.Variables.x = sl.x_path;
-                sl.Variables.z = sl.z_npf;
-                sl.VirtualNodes.Load = sl.getNodeLoad;
-                sl.VirtualLinks.Load = sl.getLinkLoad;
-                sl.FlowTable.Rate = sl.getFlowRate;
-                sl.setPathBandwidth;
-                this.lambda = lambda;
+    methods(Access=protected)
+        function allocatepathid(this, slice)
+            for j = 1:height(slice.FlowTable)
+                path_list = slice.FlowTable.Paths(j).paths;
+                for k = 1:length(path_list)
+                    path_list{k}.id = this.path_identifier_generator.next;
+                end
             end
         end
-        function clearStates(this)
+                
+        % use the temporary variables |x_path| and |z_npf| to calculate load.
+        % if providing 2 arguments , copy load from each slice.
+        function [node_load, link_load] = getNetworkLoad(this, ~)
+            node_load = zeros(this.NumberDataCenters,this.NumberSlices);
+            link_load = zeros(this.NumberLinks,this.NumberSlices);
             for i = 1:this.NumberSlices
                 sl = this.slices{i};
-                sl.VirtualNodes.Load = zeros(sl.NumberVirtualNodes,1);
-                sl.VirtualLinks.Load = zeros(sl.NumberVirtualLinks,1);
-                sl.FlowTable.Rate = zeros(sl.NumberFlows,1);
-                sl.setPathBandwidth(zeros(sl.NumberPaths,1));
-                sl.Variables.x = [];
-                sl.Variables.z = [];
-                this.lambda = [];
+                link_id = sl.VirtualLinks.PhysicalLink;
+                dc_id = sl.getDCPI;
+                if nargin == 1
+                    node_load(dc_id,i) = sl.getNodeLoad(sl.z_npf);
+                    link_load(link_id,i) = sl.getLinkLoad(sl.x_path);
+                else
+                    node_load(dc_id,i) = sl.VirtualDataCenters.Load;
+                    link_load(link_id,i) = sl.VirtualLinks.Load;
+                end
             end
+            node_load = sum(node_load, 2);
+            link_load = sum(link_load, 2);
         end
+                
     end
     
     properties (Constant)
@@ -533,5 +604,68 @@ classdef PhysicalNetwork < handle
             0.25  0.25  0.25];
     end
     
+    methods  % Deprecated
+        %%%
+        % * *AllocateFlowId* : Allocate flow identifier.
+        %
+        %      AllocateFlowId(phy_network, start_slice)
+        %
+        % |start_slice|: the slice index or the handle of the slice. If this argument is
+        % not provided, we allocate flow id from the first slice.
+        %         function id = AllocateFlowId(this, start_slice)
+        %             % Allocate flow identifier
+        %             if nargin <= 1
+        %                 slice_id = 1;
+        %             else
+        %                 if isa(start_slice, 'Slice')
+        %                     slice_id = this.findSlice(start_slice);
+        %                 else
+        %                     slice_id = start_slice;
+        %                 end
+        %             end
+        %             if isempty(slice_id) || slice_id == 1
+        %                 flow_id = uint64(0);
+        %             else
+        %                 flow_id = this.slices{slice_id-1}.FlowTable.Identifier(end);
+        %             end
+        %             for s = slice_id:this.NumberSlices
+        %                 slice = this.slices{s};
+        %                 % Since identifier space is large enough (64-bit), no need to worry that
+        %                 % the identifier will duplicate.
+        %                 slice.FlowTable.Identifier = flow_id + (1:height(slice.FlowTable))';
+        %                 flow_id = flow_id + height(slice.FlowTable);
+        %             end
+        %         end
+        
+        %%%
+        % * *AllocatePathId* : Allocate path identifier
+        %
+        %      AllocatePathId(phy_network)
+        %         function AllocatePathId(this, start_slice)
+        %             if nargin <= 1
+        %                 slice_id = 1;
+        %             else
+        %                 if isa(start_slice, 'Slice')
+        %                     slice_id = this.findSlice(start_slice);
+        %                 else
+        %                     slice_id = start_slice;
+        %                 end
+        %             end
+        %             if isempty(slice_id) || slice_id == 1
+        %                 path_id = uint64(0);
+        %             else
+        %                 path_list = this.slices{slice_id-1}.FlowTable.Paths(end);
+        %                 path_id = path_list.paths{end}.id;
+        %             end
+        %             for s = slice_id:this.NumberSlices
+        %                 for j = 1:height(this.slices{s}.FlowTable)
+        %                     path_list = this.slices{s}.FlowTable.Paths(j).paths;
+        %                     for k = 1:length(path_list)
+        %                         path_id = path_id + 1;
+        %                         path_list{k}.id = path_id;
+        %                     end
+        %                 end
+        %             end
+        %         end
+    end
 end
-

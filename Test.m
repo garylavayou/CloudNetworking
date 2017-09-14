@@ -1,6 +1,6 @@
 
-link_uc = ss.Parent.getLinkField('UnitCost');
-node_uc = ss.Parent.getNodeField('UnitCost');
+link_uc = ss.Parent.getLinkCost;
+node_uc = ss.Parent.getNodeCost;
 link_load = ss.VirtualLinks.Load;
 node_load = ss.VirtualNodes.Load;
 epsilon = ss.Parent.unitStaticNodeCost;
@@ -8,7 +8,7 @@ N = ss.Parent.NumberNodes;
 theta = ss.Parent.utilizationRatio(node_load, link_load);
 
 %% single optimization
-utility = sum(ss.FlowTable.Weight.*log(ss.FlowTable.Rate));
+utility = sum(ss.FlowTable.Weight.*fcnUtility(ss.FlowTable.Rate));
 link_cost = dot(link_uc, link_load);
 node_cost = dot(node_uc, node_load);
 static_cost = epsilon*((N-1)*theta+1);
@@ -22,14 +22,14 @@ disp(profit);
 link_load = PN.getLinkField('Load');
 node_load = PN.getNodeField('Load');
 link_cost = PN.getLinkCost;
-node_cost = PN.getNodeCost;
+node_cost = PN.getTotalNodeCost;
 theta = PN.utilizationRatio(node_load, link_load);
 static_cost = epsilon*((N-1)*theta+1);
 utility = 0;
 weight = [100000, 200000, 300000];
 for s = 1:PN.NumberSlices
     S = PN.slices{s};
-    utility = utility + weight(s)*sum(log(S.FlowTable.Rate));
+    utility = utility + weight(s)*sum(fcnUtility(S.FlowTable.Rate));
 end
 profit = utility - link_cost - node_cost - static_cost;
 disp(profit);

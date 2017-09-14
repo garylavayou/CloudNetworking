@@ -1,3 +1,29 @@
+%% Request Envent Generator
+%% Arrival rate
+% *Compund Poisson Process*:
+% We assume each kind of events follows a Poissson process (with arrival rate
+% $\lambda_s$), and they are independent. Therefore, arrival of requests can be seen as a
+% compound Poission process, with arrival rate $\lambda = \sum_s{\lambda_s}$. On the other
+% hand, if the event of a Poisson process (with arrival rate $\lambda$) can be classified
+% as sub-types with the probability $p_i, \sum_i{p_i}=1$ of each type of events, the
+% process can be decomposed as a group of Poisssion process with respect to each type of
+% events. In this way, the arrival rate of each type of events is given by $\lambda_i =
+% p_i \lambda$. 
+%
+% *Emulation of Poission Process*:In the simulation, we emulate the Poission process by
+% genereating the interval between two arrivals, which follows an exponential
+% distribution (with expectation of |T|, and thus the arrival rate is
+% $\lambda=\frac{1}{T}$). Therefore we use exponential random number generator to produce
+% the random interval. Once a event arrives, we determine its type according to the
+% probability $p_i$ by using a uniform random generator. Thus the arrival rate of type |i|
+% event is $\lambda_i = p_i \lambda = \frac{T}{p_i}$.    
+%
+%% Service interval 
+% The average interval influences the average number of customers in the system (_the
+% Little's Therom_). Given the average arrival rate $\lambda$ and average service interval
+% $\frac{1}{\mu}$, we have the average number of customers $L = \frac{\lambda}{\mu}$.
+% Specially, we set the service interval following exponential distribution, while any
+% distribution with average service interval $\frac{1}{\mu}$ is acceptable. 
 classdef RequestEvent < handle
     properties (SetAccess = private)
         rand_state;
@@ -25,10 +51,10 @@ classdef RequestEvent < handle
     
     methods
         %% Constructor
-        % * |arrive_args|: specifies the parameters of the arrival process, including
-        % _Interval_, _Number_;
         % * |event_set|: specifies the parameters of comming events, including
         % _Probability_, _ServiceInterval_;
+        % * |arrive_args|: specifies the parameters of the arrival process, including
+        % _Interval_(average arrival interval), _Number_(number of arrivals);
         % * |seed|:
         function this = RequestEvent(event_set, arrive_args, seed)
             this.event_set = struct2table(event_set);
@@ -51,8 +77,10 @@ classdef RequestEvent < handle
                 rng(seed);
                 this.seed = seed;
             else
+                warning('random number seed is not specified (set as shuffle).');
                 rng('shuffle');
-                this.seed = 1;
+                scurr = rng;
+                this.seed = scurr.Seed;
             end
             this.arrive_times(1) = exprnd(this.avg_arrive_interval);
             this.arrive_type(1) = this.nextType;
@@ -66,7 +94,12 @@ classdef RequestEvent < handle
             this.rand_state = rng;
             this.eid = 0;
         end
-        
+        %%%
+        % Public methods and constructor must be surrounded with \rng(this.rand_state)|
+        % and |this.rand_state = rng|, so that the random generator's state is continuous
+        % between two calls to the methods. On the other hand, the private methods do not
+        % need to keep the states, since they will only be called by the public methods
+        % and constructor.
         function e = nextEvent(this)
             if this.current_depart_pos > this.accumulate_arrival
                 error('No more event to be processed');
@@ -134,6 +167,7 @@ classdef RequestEvent < handle
         end
         
         function T = countArriveType(this)
+            % current_arrive_pos is the position for next arrival.
             arrive_pos = this.current_arrive_pos-1;
             tbl = tabulate(this.arrive_type(1:arrive_pos));
             if isempty(tbl)
@@ -144,9 +178,11 @@ classdef RequestEvent < handle
         end
         
         function T = countCurrentType(this)
-            arrive_pos = this.current_arrive_pos-1;
-            current_id = this.depart_id(this.current_depart_pos:arrive_pos);
-            tbl = tabulate(this.arrive_type(current_id));
+            arrive_ids = 1:(this.current_arrive_pos-1);
+            depart_ids = this.depart_id(1:this.current_depart_pos - 1);
+            % SETDIFF returns elements in |arrive_ids| but not in |depart_ids|.
+            current_ids = setdiff(arrive_ids, depart_ids);
+            tbl = tabulate(this.arrive_type(current_ids));
             if isempty(tbl)
                 T = table([],[],[], 'VariableNames', {'Value', 'Count', 'Percent'});
             else
@@ -156,17 +192,21 @@ classdef RequestEvent < handle
         
         function reset(this)
             rng(this.seed);
+            this.arrive_times = zeros(this.total_arrival,1);
             this.arrive_times(1) = exprnd(this.avg_arrive_interval);
+            this.arrive_type = zeros(this.total_arrival,1);
             this.arrive_type(1) = this.nextType;
+            this.depart_times = zeros(this.total_arrival,1);
             this.depart_times(1) = this.arrive_times(1) + ...
                 exprnd(this.event_set.ServiceInterval(this.arrive_type(1)));
+            this.depart_id = zeros(this.total_arrival,1);
             this.depart_id(1) = 1;
             this.current_arrive_pos = 1;
             this.current_depart_pos = 1;
             this.accumulate_arrival = 1;
             this.num_sojourns = 0;
-            this.rand_state = rng;
             this.eid = 0;
+            this.rand_state = rng;
         end
         
         function eid = get.EventId(this)

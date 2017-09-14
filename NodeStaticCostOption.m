@@ -5,6 +5,7 @@ classdef NodeStaticCostOption < uint32
     enumeration
         Random(1);
         NetworkSpecified(2);
+        None(3);
     end
     
     methods

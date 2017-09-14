@@ -11,10 +11,10 @@ classdef LinkDelayOption < uint32
     end
     
     enumeration
-        BandwidthPropotion(1),
-        BandwidthInverse(2),
-        Constant(3),
-        Random(4)
+        BandwidthPropotion(1),  % Static delay
+        BandwidthInverse(2),    % Dynamic delay
+        Constant(3),            % Static
+        Random(4)               % Static
     end
     
 end

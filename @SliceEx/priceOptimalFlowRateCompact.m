@@ -1,7 +1,7 @@
 %% Optimize flow rate in the slice
-% This optimizition procedure remove the unnecessary components from the independent
+% This optimization procedure remove the unnecessary components from the independent
 % variable x, so that the problem scale is cut down.
-% if h(n,p) = 0, then z(n,p,f) = 0 forall f. thus the correspongding column in the
+% if h(n,p) = 0, then z(n,p,f) = 0 for all f. thus the corresponding column in the
 % coefficient matrix and the variables can be removed.
 function x = priceOptimalFlowRateCompact(this, x0)
 if nargin == 2
@@ -13,7 +13,7 @@ else%if isempty(this.x0)
     max_alpha_f = max(this.Parent.VNFTable.ProcessEfficiency(this.VNFList));
     this.x0((this.NumberPaths+1):end) = 1*this.NumberPaths*max_alpha_f;
 end
-% the number of linear constraint without consdiering the bound constraints.
+% the number of linear constraint without considering the bound constraints.
 nnz_As = this.NumberVNFs*(this.NumberPaths+nnz(this.I_node_path));
 As = spalloc(this.num_lcon_res, this.num_vars, nnz_As);
 row_index = 1:this.NumberPaths;
@@ -35,18 +35,18 @@ num_act_vars = nnz(this.I_active_variable);
 lbs = sparse(num_act_vars,1);
 x0 = this.x0(this.I_active_variable);
 %% Set the optimization options
-% * *Algorithm* -- since the problem contains linear constriants and bound
+% * *Algorithm* -- since the problem contains linear constraints and bound
 % constraints, then |trust-region-reflective| method is not applicable. Hence,
-% we choose the |inteirior point| method. As a result the Hessian matix should
+% we choose the |interior point| method. As a result the Hessian matrix should
 % be computed separately.
 % is directly returned from the objective function as the second derivatives.
-% * *HessianFcn* -- we comupte Hession using the objective function.
+% * *HessianFcn* -- we compute Hessian using the objective function.
 % Therefore, this option is set as |'objective'|.
 % * *SpecifyObjectiveGradient* -- the gradient can be directly computed from
 % the objective function, so this option is set to |true|.
 % * *SpecifyConstraintGradient*: since this problem does not contain nonlinear
 % constraint, this option is set to |false|.
-% * *Display information*: use |'iter'| to display itration information for
+% * *Display information*: use |'iter'| to display iteration information for
 % debug.
 fmincon_opt = optimoptions(@fmincon);
 fmincon_opt.Algorithm = 'interior-point';

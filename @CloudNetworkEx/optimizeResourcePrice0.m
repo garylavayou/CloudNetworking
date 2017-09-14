@@ -33,9 +33,9 @@ if nargin >=2 && ~isempty(init_price)
     link_price = init_price.link;
     node_price = init_price.node;
 else
-    init_price.link = this.getLinkField('UnitCost') + this.phis_l;
+    init_price.link = this.getLinkCost;
     link_price = init_price.link;
-    init_price.node = this.getNodeField('UnitCost') + this.phis_n;
+    init_price.node = this.getNodeCost;
     node_price = init_price.node;
 end
 beta_link = link_price.*(1/3).*link_capacity;

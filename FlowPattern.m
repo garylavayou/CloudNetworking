@@ -11,6 +11,9 @@ classdef FlowPattern < uint32
         RandomMultiFlow(2);
         SingleSourceMultiFlow(3);
         MultiSourceMultiFlow(4);
+        RandomInterDataCenter(5);
+        RandomInterBaseStation(6);
+        RandomDataCenter2BaseStation(7);
     end
 end
 
