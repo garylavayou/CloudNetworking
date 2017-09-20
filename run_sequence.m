@@ -23,19 +23,11 @@ pause(0.01);
 % Initialize substrate network
 % if b_single_optimal || b_price_adjust1 || b_price_adjust2 || b_dual_decomp || ...
 %         b_resource_part || b_part_price
-if isfield(net_opt, 'NetworkClass') && strcmp(net_opt.NetworkClass, 'CloudNetwork')
-    PN = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
-else
-    PN = PhysicalNetwork(node_opt, link_opt, VNF_opt, net_opt);
-end
+PN = instantiateclass(net_opt.ClassName, node_opt, link_opt, VNF_opt, net_opt);
 PN.slice_template = Slice.loadSliceTemplate(type.Index);
 
 if b_static_slice
-    if isfield(net_opt, 'NetworkClass') && strcmp(net_opt.NetworkClass, 'CloudNetwork')
-        PN_static = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
-    else
-        PN_static = PhysicalNetwork(node_opt, link_opt, VNF_opt, net_opt);
-    end
+    PN_static = instantiateclass(net_opt.ClassName, node_opt, link_opt, VNF_opt, net_opt);
     PN_static.slice_template = Slice.loadSliceTemplate(type.Index);
     link_price = PN_static.getLinkCost * (1 + options.PricingFactor);
     node_price = PN_static.getNodeCost * (1 + options.PricingFactor);
@@ -79,34 +71,34 @@ clear s slice_opt;
 %% Statistics Initialization
 if b_single_optimal
     [stat_optimal, slice_stat_optimal] = ...
-        createStatTable(num_events, num_type, 'optimal-spp');
+        CloudNetwork.createStatTable(num_events, num_type, 'optimal-spp');
     if ~isfield(net_opt, 'AdmitPolicy')
         net_opt.AdmitPolicy = 'reject-flow';
     end
 end
 if b_dual_decomp
     [stat_dual, slice_stat_dual] = ...
-        createStatTable(num_events, num_type, 'dynamic-price');
+        CloudNetwork.createStatTable(num_events, num_type, 'dynamic-price');
 end
 if b_price_adjust1
     [stat_price1, slice_stat_price1] = ...
-        createStatTable(num_events, num_type, 'dynamic-price');
+        CloudNetwork.createStatTable(num_events, num_type, 'dynamic-price');
 end
 if b_price_adjust2
     [stat_price2, slice_stat_price2] = ...
-        createStatTable(num_events, num_type, 'dynamic-price');
+        CloudNetwork.createStatTable(num_events, num_type, 'dynamic-price');
 end
 if b_resource_part
     [stat_part, slice_stat_part] = ...
-        createStatTable(num_events, num_type, 'dynamic-price');
+        CloudNetwork.createStatTable(num_events, num_type, 'dynamic-price');
 end
 if b_part_price
     [stat_partprice, slice_stat_partprice] = ...
-        createStatTable(num_events, num_type, 'dynamic-price');
+        CloudNetwork.createStatTable(num_events, num_type, 'dynamic-price');
 end
 if b_static_slice
     [stat_static, slice_stat_static] = ...
-        createStatTable(num_events, num_type, 'static');
+        CloudNetwork.createStatTable(num_events, num_type, 'static');
     % TODO: the persistant slices can be optimized.
     for t = 1:num_fix_type
         for s = 1:type.FixedCount(t)
