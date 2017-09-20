@@ -7,6 +7,7 @@
 % * *single-function*:
 % * *slice*: solve each slice's problem independently;
 % * *slice-price*: solve each slice's problem independently, with resource price known.
+% * *fixcost*: 
 %% Model
 % * *Accurate*
 % * *Approximate*
@@ -131,17 +132,9 @@ if nargin >= 2 && isfield(options, 'Display')
 else
     fmincon_opt.Display = 'notify-detailed';  %'iter';
 end
-if strfind(options.Method, 'price')
-    % output
-    [x, fval, exitflag] = fmincon(@(x)Slice.fcnProfit(x,this), ...
-        x0, As, bs, [], [], lbs, ub, [], fmincon_opt);
-elseif strcmp(options.Model, 'FixedCost')
-    [x, fval, exitflag] = fmincon(@(x)Slice.fcnSocialWelfare(x,this, options.Model), ...
-        x0, As, bs, [], [], lbs, ub, [], fmincon_opt);
-else
-    [x, fval, exitflag] = fmincon(@(x)Slice.fcnSocialWelfare(x,this,'Approximate'), ...
-        x0, As, bs, [], [], lbs, ub, [], fmincon_opt);
-end
+[x, fval, exitflag] = ...
+                this.obj_fun(x0, As, bs, [], [], lbs, ub, [], fmincon_opt, ...
+                options.Method);
 % x is a local solution to the problem when exitflag is positive.
 if exitflag == 0
     warning('reaching maximum number of iterations.');
