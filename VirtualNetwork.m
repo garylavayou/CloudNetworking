@@ -16,12 +16,7 @@ classdef VirtualNetwork < matlab.mixin.Copyable
         
         I_edge_path;    % Edge-Path Incidence Matrix
         I_node_path;    % Node-Path Incidence Matrix
-        I_flow_path;    % Flow-Path Incidence Matrix
-        
-        
-        % I_path_function;        % used by <singleSliceOptimization>.
-        %         constant_profit = 0;	% consant profit added to avoid slices with negative profit.
-        % => move to SliceEx
+        I_flow_path;    % Flow-Path Incidence Matrix        
     end
     
     properties (GetAccess = {?PhysicalNetwork,?Slice})
@@ -109,13 +104,9 @@ classdef VirtualNetwork < matlab.mixin.Copyable
             if isfield(net_data,'Identifier')
                 this.Identifier = net_data.Identifier;
             end
-            
-%             if isfield(net_data, 'ConstantProfit')  => move to SliceEx
-%                 this.constant_profit = net_data.ConstantProfit;
-%             end
-            
-            if isfield(net_data, 'Pattern')
-                this.Options.FlowPattern = net_data.Pattern;
+                        
+            if isfield(net_data, 'FlowPattern')
+                this.Options.FlowPattern = net_data.FlowPattern;
             else
                 warning('FlowPattern option is not provided.');
             end
