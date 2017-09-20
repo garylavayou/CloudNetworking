@@ -4,7 +4,7 @@
 % TODO: by setting the capacity as |inf|, this method is equivalent to _optimalFlowRate_.
 %% Function Prototype
 %   [net_profit, node_load, link_load] = priceOptimalFlowRate(this, x0, options)
-% |options|: is price is not provied in |options|, then this method will use the price
+% |options|: if price is not provied in |options|, then this method will use the price
 % stored in the slice.
 function [net_profit, node_load, link_load] = priceOptimalFlowRate(this, x0, options)
 if nargin == 2 && ~isempty(x0)
