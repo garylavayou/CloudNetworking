@@ -8,6 +8,7 @@ DEBUG = true;
 
 %% Create Network
 if ~isfield(options, 'NetworkType')
+    warning('Network type is not provided, use the ''DynamicCloudAccessNetwork'' class.');
     options.NetworkType = 'DynamicCloudAccessNetwork';
 end
 PN = instantiateclass(options.NetworkType, node_opt, link_opt, VNF_opt, options);
