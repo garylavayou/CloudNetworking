@@ -20,8 +20,8 @@ else
     end
     if ~isfield(options, 'Method')
         options.Method = 'normal';
-    elseif ~strcmpi(options.Method, 'normal') && ~strcmpi(options.Method, 'single-function') 
-        error('error: invalid method (%s)', options.Method);
+%     elseif ~strcmpi(options.Method, 'normal') && ~strcmpi(options.Method, 'single-function') 
+%         error('error: invalid method (%s)', options.Method);
     end
 end
 % this.clearStates;
@@ -30,7 +30,6 @@ end
 NL = this.NumberLinks;
 NN = this.NumberNodes;
 NS = this.NumberSlices;
-NP = this.NumberPaths;
 slice_data.adjacent = this.graph.Adjacent;
 slice_data.link_map_S2P = (1:NL)';
 slice_data.link_map_P2S = (1:NL)';
@@ -44,10 +43,6 @@ NF = this.NumberFlows;
 flow_owner = zeros(NF, 1);
 nf = 0;
 % b_vnf = false(this.NumberVNFs, 1);
-if strcmp(options.Method, 'single-function')
-    slice_data.alpha_f = zeros(NS, 1);
-end
-slice_data.ConstantProfit = 0;
 for s = 1:NS
     sl = this.slices{s};
     new_table = sl.FlowTable;
@@ -67,22 +62,12 @@ for s = 1:NS
     slice_data.flow_table = [slice_data.flow_table; new_table];
     flow_owner(nf+(1:sl.NumberFlows)) = s;
     nf = nf + sl.NumberFlows;
-    if strcmp(options.Method, 'normal')
-%         b_vnf(this.slices{s}.VNFList) = true;
-    elseif strcmp(options.Method, 'single-function')
-        slice_data.alpha_f(s) = sum(this.VNFTable{sl.VNFList,{'ProcessEfficiency'}});
-    end
-    slice_data.ConstantProfit = slice_data.ConstantProfit; % + sl.constant_profit; 
 end
-if strcmp(options.Method, 'normal')
-    slice_data.VNFList = 1:this.NumberVNFs;
-%     slice_data.VNFList = find(b_vnf);
-else    % single-function
-    slice_data.VNFList = 1;
-end
+slice_data.FlowPattern = FlowPattern.Default;
+slice_data.DelayConstraint = inf;
+
+slice_data = this.updateSliceData(slice_data, options);      % override by subclasses
 slice_data.parent = this;
-% NV might not be the true number of VNFs when the method is 'single-function'
-NV = length(slice_data.VNFList);        
 % the flow id and path id has been allocated in each slice already, no need to reallocate.
 ss = Slice(slice_data);
 I_flow_function = zeros(NF, this.NumberVNFs);
@@ -94,39 +79,17 @@ ss.I_path_function = ss.I_flow_path'*I_flow_function;
 if nargout == 2
     tic;
 end
-net_profit = ss.optimalFlowRate(options);
+[~] = ss.optimalFlowRate(options);
 if nargout == 2
     runtime.Serial = toc;
     runtime.Parallel = runtime.Serial;
 end
-output.welfare_approx_optimal = net_profit;
-output.welfare_accurate_optimal = sum(ss.FlowTable.Weight.*fcnUtility(ss.FlowTable.Rate)) ...
-    - this.getNetworkCost(ss.VirtualDataCenters.Load, ss.VirtualLinks.Load);
-    %     + ss.constant_profit; => move toCLoudNetworkEx;
-% if ~isempty(this.eta)
-%     embed_profit_approx = this.eta * ...
-%         this.getNetworkCost(ss.VirtualNodes.Load, ss.VirtualLinks.Load, 'Approximiate');
-%     embed_profit_accurate = this.eta * ...
-%         this.getNetworkCost(ss.VirtualNodes.Load, ss.VirtualLinks.Load, 'Accurate');
-% else
-%     embed_profit_approx = 0;
-%     embed_profit_accurate = 0;   
-% end
-% output.welfare_approx_optimal = output.welfare_approx_optimal + embed_profit_approx;
-% output.welfare_accurate_optimal = output.welfare_accurate_optimal + embed_profit_accurate;
-if ~strcmp(options.Display, 'off') && ~strcmp(options.Display, 'none')
-    fprintf('\tThe optimal net social welfare of the network: %G.\n', ...
-        output.welfare_approx_optimal);
-end
+output = calculateOptimalOutput(this, ss, options, slice_data);
 
 %% Partition the network resources according to the global optimization
 pid_offset = 0;
-NC = this.NumberDataCenters;
-if strcmp(options.Method, 'single-function')    % TODO
-    z_npf = reshape(full(ss.Variables.z), NC, NP, this.NumberVNFs);
-elseif strcmp(options.Method, 'normal')
-    z_npf = reshape(full(ss.Variables.z), NC, NP, NV);
-end
+z_npf = output.z_npf;
+output = rmfield(output, 'z_npf');
 options.Tolerance = 10^-2;
 % node_load = zeros(this.NumberNodes, 1);
 % link_load = zeros(this.NumberLinks, 1);
@@ -165,10 +128,6 @@ end
 this.finalize(node_price, link_price);
 
 %% Calculate the output
-% the profit type with |Percent| has been deprecated.
-if cellstrfind(options.ProfitType, 'Percent')
-    warning('the profit type with Percent has been deprecated.');
-end
-output = this.calculateOutput(output, options);
 output.SingleSlice = ss;
+output = this.calculateOutput(output, options);
 end
