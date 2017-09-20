@@ -1,7 +1,7 @@
 function [flow_table, phy_adjacent, flag] = generateFlowTable( this, graph, slice_opt )
 %generateFlowTable Generate with specified flow pattern.
 %      Flow pattern are listed in <FlowPattern>.
-switch slice_opt.Pattern
+switch slice_opt.FlowPattern
     case {FlowPattern.RandomSingleFlow, FlowPattern.RandomMultiFlow}
         if nargout == 1
             flow_table = ...
@@ -58,13 +58,12 @@ if nargout >=2
     phy_adjacent = spalloc(this.NumberNodes, this.NumberNodes, this.NumberLinks);
 end
 k = 0;
-options = getstructfields(slice_opt, {'DelayConstraint', 'MiddleNodes'});
-options.delay_opt = this.LinkOptions.delay;
+options = this.updatePathConstraints(slice_opt);
 
 while k < number_flow
     %% TODO the source and targets can be the same node
     % In this case, the flow only consumes computing resources on data centers.
-    switch slice_opt.Pattern
+    switch slice_opt.FlowPattern
         case {FlowPattern.RandomInterDataCenter,FlowPattern.RandomInterBaseStation}
             id = unique_randi(numnodes, 2, 'stable');
             end_points = node_set(id);
