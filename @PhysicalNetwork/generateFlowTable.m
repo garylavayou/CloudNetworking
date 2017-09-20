@@ -4,19 +4,18 @@ flow_table = table;
 if nargout >= 2
     phy_adjacent = spalloc(this.NumberNodes, this.NumberNodes, this.NumberLinks);
 end
-switch slice_opt.Pattern
+switch slice_opt.FlowPattern
     case FlowPattern.RandomSingleFlow
         number_flow = 1;
     case FlowPattern.RandomMultiFlow
         number_flow = min(slice_opt.NumberFlows, this.NumberNodes*(this.NumberNodes-1));
     otherwise
         error('error: cannot handle the flow pattern <%s>.', ...
-                        slice_opt.Pattern.char);
+                        slice_opt.FlowPattern.char);
 end
 
 k = 0;
-options = getstructfields(slice_opt, {'DelayConstraint', 'MiddleNodes'});
-options.delay_opt = this.LinkOptions.delay;
+options = this.updatePathConstraints(slice_opt);
 if isfield(slice_opt, 'NodeSet')
     numnodes = length(slice_opt.NodeSet);
     nodeset = slice_opt.NodeSet;
@@ -34,7 +33,7 @@ while k < number_flow
         path_list = graph.CandidatePaths(slice_opt.NumberPaths, ...
             end_points(1), end_points(2), options);
         % assert path list
-        switch assert_path_list(end_points, path_list, slice_opt)
+        switch this.assert_path_list(end_points, path_list, slice_opt)
             case -1  % failed with error;
                 error('error: cannot find feasible path between %d and %d.',...
                     end_points(1), end_points(2));
