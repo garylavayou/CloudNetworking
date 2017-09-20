@@ -9,6 +9,7 @@ classdef Slice < VirtualNetwork
         z_npf;              % allocated resource on nodes
         alpha_f;
         weight;             % weight for the slice user's utility.
+        I_path_function;        % used by <singleSliceOptimization>.
     end
     
     properties (Access = protected)
@@ -170,56 +171,9 @@ classdef Slice < VirtualNetwork
             % the virtual data center nodes's unit cost
             c = this.Parent.getNodeField('UnitCost', this.getDCNI);   
         end
-        
-        %         function pc = getPathCost(this, lambda_e, lambda_n)
-        %             link_uc = this.Parent.getLinkField('UnitCost', this.VirtualLinks.PhysicalLink); % the virtual links's unit cost
-        %             node_uc = this.Parent.getNodeField('UnitCost', this.VirtualNodes.PhysicalNode); % the virtual nodes's unit cost
-        %             pc = cell(this.NumberFlows, 1);
-        %             p = 1;
-        %             for i = 1:this.NumberFlows
-        %                 num_paths = this.FlowTable{i,'Paths'}.Width;
-        %                 pc{i} = zeros(num_paths, 1);
-        %                 for j = 1:num_paths
-        %                     eid = this.I_edge_path(:,p)~=0;
-        %                     pc{i}(j) = pc{i}(j) + sum(link_uc(eid)+lambda_e(eid)) + this.Parent.phis_l*nnz(eid);
-        %                     nid = this.I_node_path(:,p)~=0;
-        %                     pc{i}(j) = pc{i}(j) + min(node_uc(nid)+lambda_n(nid)) + this.Parent.phis_n;
-        %                     p = p + 1;
-        %                 end
-        %             end
-        %         end
-        function pc = getPathCost(this, lambda_e, lambda_n) % to move to SliceEx
-            link_uc = this.link_unit_cost;
-            node_uc = this.node_unit_cost;
-            pc = cell(this.NumberFlows, 1);
-            p = 1;
-            for i = 1:this.NumberFlows
-                num_paths = this.FlowTable{i,'Paths'}.Width;
-                pc{i} = zeros(num_paths, 1);
-                for j = 1:num_paths
-                    eid = this.I_edge_path(:,p)~=0;
-                    pc{i}(j) = pc{i}(j) + sum(link_uc(eid)+lambda_e(eid)) + this.Parent.phis_l*nnz(eid);
-                    nid = this.I_node_path(:,p)~=0;
-                    pc{i}(j) = pc{i}(j) + min(node_uc(nid)+lambda_n(nid)) + this.Parent.phis_n;
-                    p = p + 1;
-                end
-            end
-        end
-        
+              
         function sc = getSliceCost(this, node_load, link_load, model)
             sc = this.getResourceCost(this, node_load, link_load, model);
-        end
-        
-        %         function [nc, nid] = getPathNodeCost(this, pid, lambda_n)
-        %            node_uc = this.Parent.getNodeField('UnitCost', this.VirtualNodes.PhysicalNode);
-        %            nid = find(this.I_node_path(:,pid)~=0);
-        %            nc = node_uc(nid) + lambda_n(nid) + this.Parent.phis_n;
-        %         end
-        %% Get the node cost on a path.
-        function [nc, nid] = getPathNodeCost(this, pid, lambda_n)
-            node_uc = this.node_unit_cost;
-            nid = find(this.I_node_path(:,pid)~=0);
-            nc = node_uc(nid) + lambda_n(nid) + this.Parent.phis_n;
         end
         
         function r = getRevenue(this)
@@ -228,7 +182,6 @@ classdef Slice < VirtualNetwork
             else
                 r = this.weight*sum(fcnUtility(this.flow_rate));
             end
-            %             r = r + this.constant_profit;   => move to SliceEx;
         end
         
         function b = checkFeasible(this, vars, options)
@@ -259,12 +212,7 @@ classdef Slice < VirtualNetwork
         profit = optimalFlowRate( this, options );
         [utility, node_load, link_load] = priceOptimalFlowRate(this, x0, options);
         [payment, grad, pseudo_hess] = fcnLinkPricing(this, link_price, link_load);
-        [payment, grad, pseudo_hess] = fcnNodePricing(this, node_price, node_load);
-        
-        %% To be moved to SliceEx
-        %         x = priceOptimalFlowRateCompact(this, x0);
-        %         [fval, node_load, link_load] = subproblemNetSocialWelfare( this, lambda );
-        %         [fval, node_load, link_load] = subproblemNetSocialWelfare2( this, lambda );
+        [payment, grad, pseudo_hess] = fcnNodePricing(this, node_price, node_load);        
     end
     
     methods (Static)
@@ -278,10 +226,6 @@ classdef Slice < VirtualNetwork
         % Hessian matrix
         hess = fcnHessian(var_x, ~, S, options);
 
-        %% To be moved to SliceEx
-        %         [profit, grad]= fcnProfitCompact(act_var_x, S);
-        %         [fval,  grad] = subproblemObjective(var_x, lambda, S);
-        %         hess = fcnHessianCompact(act_var_x, ~, S);
     end
     
     methods (Access = private)
@@ -322,49 +266,26 @@ classdef Slice < VirtualNetwork
         %
         % When calculate network cost as a single slice, this method equals to
         % _getNetworkCost_ .
-        function rc = getResourceCost(this, node_load, link_load, model)
-            if nargin <= 3
-                warning('model is set as Approximate.');
-                model = 'Approximate';
-            end
+        function rc = getResourceCost(this, node_load, link_load)
             if nargin <= 1 || isempty(node_load)
                 node_load = this.VirtualDataCenters.Load;
             end
             if nargin <= 2 || isempty(link_load)
                 link_load = this.VirtualLinks.Load;
             end
-            %             pn = this.Parent;
-            link_uc = this.link_unit_cost;
-            node_uc = this.node_unit_cost;
-            %             epsilon = pn.unitStaticNodeCost;  => move to SliceEx
-            switch model
-                case 'Approximate'
-                    %% A temporary slice should be assigned the parent network
-                    % so that |this.Parent| is valid.
-                    %
-                    % $$static\_cost =
-                    %   \frac{\epsilon\delta(N-1)\sum_{n\in\mathcal{N}^{(s)}}{v_n}}{\sum_{n\in\mathcal{N}}{V_n}}
-                    % + \frac{\epsilon(1-\delta)(N-1)\sum_{e\in\mathcal{L}^{(s)}}{y_e}}{\sum_{e\in\mathcal{L}}{C_e}}
-                    % + \frac{\epsilon}{|\mathcal{S}|}$$
-                    rc = dot(link_uc, link_load) + dot(node_uc, node_load);
-                    %    + pn.phis_n*sum(node_load)+pn.phis_l*sum(link_load); => move to
-                    %    SliceEx
-                    %     + pn.static_factor*epsilon/pn.NumberSlices;  => move to SliceEx
-                    %%%
-                    % equal to:
-                    %
-                    %   sc = dot(link_uc+pn_phis_l, link_load) + dot(node_uc+pn.phis_n,
-                    %   node_load) + ... 
-                    %       pn.static_factor*epsilon/pn.NumberSlices;  => move to SliceEx
-                case 'Accurate'
-                    %% Accurate Model
-                    % A slice cannot decide how to devide the static cost between slices.
-                    % one method is devision by usage, using the physic network's load data
-                    % of each slice. So this function only calculate the dynamic part of the
-                    % cost, and the slices should further calculate the static cost outside
-                    % this method.
-                    rc = dot(link_uc, link_load) + dot(node_uc, node_load);
-            end
+            
+            %% A temporary slice should be assigned the parent network
+            % so that |this.Parent| is valid.
+            pn = this.Parent;
+            link_uc = pn.getLinkCost(this.VirtualLinks.PhysicalLink);
+            node_uc = pn.getNodeCost(this.getDCPI);
+            %% Accurate Model
+            % A slice cannot decide how to devide the static cost between slices.
+            % one method is devision by usage, using the physic network's load data
+            % of each slice. So this function only calculate the dynamic part of the
+            % cost, and the slices should further calculate the static cost outside
+            % this method.
+            rc = dot(link_uc, link_load) + dot(node_uc, node_load);
         end
     end
     
@@ -435,9 +356,22 @@ classdef Slice < VirtualNetwork
 
     end
   
+    methods (Access = protected)
+        function [x, fval, exitflag] = ...
+                obj_fun(this, x0, As, bs, Aeq, beq, lbs, ub, lb, fmincon_opt, method)
+            if strfind(method, 'price') % 'price', 'slice-price'
+                [x, fval, exitflag] = fmincon(@(x)Slice.fcnProfit(x,this), ...
+                    x0, As, bs, Aeq, beq, lbs, ub, lb, fmincon_opt);
+            else  % 'normal', 'single-function', ...
+                [x, fval, exitflag] = ...
+                    fmincon(@(x)Slice.fcnSocialWelfare(x,this), ...
+                    x0, As, bs, Aeq, beq, lbs, ub, lb, fmincon_opt);
+            end
+        end
+    end
 end
 
-%% Methods
+%% Methods     
 % * *priceOptimalFlowRate* : find the optimal flow rate that maximizing the net profit of
 % the network slice.
 %
@@ -460,12 +394,6 @@ end
 % variable is nonzeros, so there is |P| components; whether the gradient on node variable
 % is zeros is decided by the node-path incidence matrix, i.e. |nnz(I_node_path)*F|.
 %
-% * *fcnProfitCompact* |static| : Evalute the objective function and gradient.
-%
-%      [profit, grad]= fcnProfitCompact(act_var_x, S)
-%
-% Only active independent variables are passed into the objective function.
-%
 % * *fcnHessian* |static| : Hessian matrix of the Largrangian.
 %
 %      hess = fcnHessian(var_x, ~, S)
@@ -475,7 +403,3 @@ end
 % Largrangian multipliers $\lambda$ takes no effect.
 % The Hessian matrix contains only $P^2$ nonzeros elements on the diagonal,
 % which is the second derviatives on path variables.
-%
-% * *fcnHessianCompact* |static| : Compact form of Hessian matrix of the Largrangian.
-%
-%      hess = fcnHessianCompact(act_var_x, ~, S)
