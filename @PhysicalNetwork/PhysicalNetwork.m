@@ -30,8 +30,8 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
         %
         % |Edges|: the fields in the edge table include _EndNodes_, _Weight_, _Capacity_,
         % _Index_, _Load_, _Price_. 
-        Topology;            % Class digraph object
-        graph;               % Class DierectedGraph object
+        Topology;            % Class <digraph> object
+        graph;               % Class <DirectedGraph> object
         DataCenters;         % the forwarding node mapping of data center.
                              % data_center(dc_id) returns the physical node id;
         VNFTable = table;    % Meta data of virtual network function
@@ -52,11 +52,6 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
     end
     properties (Access = {?PhysicalNetwork, ?Slice})
         options;
-    end
-    properties (Access = protected)
-        bypass = cell(0);    
-        % prevent the method of subclass with multiple superclass call a common method for
-        % multiple times.
     end
     
     methods
@@ -139,7 +134,10 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
     methods (Abstract, Access = protected)
         %%%
         % Called by <AddSlice>.
-        sl = createslice(this, slice_opt);
+        sl = createslice(this, slice_opt, varargin);
+        %%%
+        % Called by <AddSlice>.
+        slice_opt = preAddingSlice(this, slice_opt);
     end
     methods (Access = protected)
         %%%
@@ -151,6 +149,13 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
                 rng(VNF_opt.RandomSeed(1));
                 this.VNFTable.ProcessEfficiency = 0.5 + rand([VNF_opt.Number, 1]);
             end
+        end
+        %%%
+        %
+        function options = updatePathConstraints(this, slice_opt)
+            options = getstructfields(slice_opt, ...
+                {'DelayConstraint'}, 'ignore');
+            options.delay_opt = this.LinkOptions.delay;
         end
         %%%
         % Called by access AddSlice
@@ -320,7 +325,8 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
             end
         end
         %%%
-        % * *getLinkField*: get the value from a field in the Edge Table. See also setLinkField.
+        % * *getLinkField*: get the value from a field in the Edge Table. See also
+        % setLinkField. 
         %
         %      value = getLinkField(this, name, link_id)
         %
@@ -368,6 +374,7 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
             end            
         end
         
+        % * *node_id*: physical node index.
         function value = getNodeField(this, name, node_id)
             if nargin < 2 || isempty(name)
                 error('input arguments are not enough (name, node_id).');
@@ -385,6 +392,7 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
             end
         end
         
+        % * *dc_id*: data center index.
         function value = getDataCenterField(this, name, dc_id)
             if nargin < 2 || isempty(name)
                 error('input arguments are not enough (name, node_id).');
