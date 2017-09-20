@@ -46,7 +46,6 @@ switch pricing_policy
         profit = -S.weight*sum(fcnUtility(flow_rate)) ...
             + dot(link_price, link_load) + dot(node_price, node_load);
 end
-% profit = profit - S.constant_profit;   => move to SliceEx
 % If there is only one output argument, return the real profit (positive)
 if nargout <= 1
     profit = -profit;
@@ -80,10 +79,10 @@ else
         switch pricing_policy
             case 'quadratic-price'
                 grad(p) = -S.weight/(1+S.I_flow_path(i,:)*var_path) +  ...
-                    grad(p) + dot(link_price_grad,S.I_edge_path(:,p)); %#ok<SPRIX>
+                    dot(link_price_grad,S.I_edge_path(:,p)); %#ok<SPRIX>
             otherwise
                grad(p) = -S.weight/(1+S.I_flow_path(i,:)*var_path) +  ...
-                   grad(p) + dot(link_price,S.I_edge_path(:,p)); %#ok<SPRIX>
+                   dot(link_price,S.I_edge_path(:,p)); %#ok<SPRIX>
         end     
     end
     
