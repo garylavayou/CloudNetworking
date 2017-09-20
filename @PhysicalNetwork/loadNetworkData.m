@@ -91,11 +91,11 @@ switch node_opt.model
     otherwise
         error('error: cannot process this network model.')
 end
-
 if isfield(link_opt, 'CapacityFactor')
     link_capacity = link_capacity * link_opt.CapacityFactor;
     capacity = capacity * link_opt.CapacityFactor;
 end
+
 %% link delay
 switch link_opt.delay
     case LinkDelayOption.BandwidthPropotion
@@ -151,14 +151,14 @@ link_opt.link_cost = link_opt.CostUnit * link_opt.link_cost;
 %% node capacity and cost
 switch node_opt.capacity
     case NodeCapacityOption.NetworkSpecified
-        node_capacity = node_opt.node_capacity;
+        node_capacity = reshape(node_opt.node_capacity,length(node_opt.node_capacity),1);
     case NodeCapacityOption.BandwidthProportion
-        if ~isfield(node_opt, 'capacity_factor') || isempty(node_opt.capacity_factor)
-            node_opt.capacity_factor = 1;
-        end
-        node_capacity = node_opt.capacity_factor/2 * (sum(capacity,2)+sum(capacity,1)');
+        node_capacity = 1/2 * (sum(capacity,2)+sum(capacity,1)');
     otherwise
         error('error: Invalid option of NodeCapacityOption.');
+end
+if isfield(node_opt, 'CapacityFactor') && ~isempty(node_opt.CapacityFactor)
+    node_capacity = node_capacity * node_opt.CapacityFactor;
 end
 
 switch node_opt.cost
