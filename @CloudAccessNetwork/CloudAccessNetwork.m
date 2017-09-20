@@ -50,9 +50,9 @@ classdef CloudAccessNetwork < CloudNetwork
             node_opt.node_capacity = zeros(net.Size,1);
             node_opt.node_capacity(dc.core) = 5000;
             node_opt.node_capacity(dc.gateway) = 500;
-            if isfield(node_opt, 'capacity_factor')
+            if isfield(node_opt, 'CapacityFactor')
                 warning('CapacityFactor (%.2f) changes the node capacity configuration.',...
-                    node_opt.capacity_factor);
+                    node_opt.CapacityFactor);
             end
             node_opt.capacity = NodeCapacityOption.NetworkSpecified;
             node_opt.cost = NodeCostOption.NetworkSpecified;
