@@ -315,6 +315,7 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             this.Vnf = reshape(sum(znpf,2), this.NumberDataCenters, this.NumberVNFs);
         end
         
+        % * *model* 
         % Return: reconfiguration cost, number of reconfiguration, ration of
         % reconfigurations, and total number of variables.
         function [c,n,r,t] = get_reconfig_cost(this, model)
@@ -353,10 +354,11 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
                         this.NumberDataCenters, this.NumberPaths*this.NumberVNFs),2);
                     c = dot(diff_x, path_reconfig_cost)...
                         + dot(sum_tz, this.node_reconfig_cost);
-                case 'constant'
+                case 'const'
                     sum_tz = sum(reshape(norm_diff_z>tol_vec, ...
                         this.NumberDataCenters, this.NumberPaths*this.NumberVNFs),2);
-                    c = dot(norm_diff_x>tol_vec, path_reconfig_cost)...
+                    % logical array cannot be used as the first argument of dot.
+                    c = dot(path_reconfig_cost, norm_diff_x>tol_vec)...
                         + dot(sum_tz, this.node_reconfig_cost);
                 otherwise
                     error('error: invalid model.');
@@ -404,7 +406,7 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
         % than <initializeState>.
         function fidx = OnAddingFlow(this, flow)  
             % temporarily allocated flow id.
-            global DEBUG; %#ok<NUSED>
+            global DEBUG total_iter_num; %#ok<NUSED>
             num_exist_flows = height(this.FlowTable);
             num_new_flows = height(flow);
             num_exist_paths = this.NumberPaths;
@@ -463,28 +465,30 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
                     options.Method = 'fixcost';  
                     profit = this.optimalFlowRate(options);
                     g_results.profit(event_num,1) = ...
-                        profit - this.getSliceCost('quadratic-price');
+                        profit - this.getSliceCost('quadratic-price', 'const');
                     g_results.solution(event_num,1) = this.Variables;
                     [   g_results.cost(event_num,1), ...
                         g_results.num_reconfig(event_num,1),...
                         g_results.rat_reconfig(event_num,1),...
                         g_results.num_vars(event_num,1)] ...
-                        = this.get_reconfig_cost;
+                        = this.get_reconfig_cost('const');
                 case 'fastconfig'
                     profit = this.fastReconfigure('add');
-                    g_results.profit(event_num,1) = ...
-                        profit - this.getSliceCost('quadratic-price', 'none');
                     g_results.solution(event_num,1) = this.Variables;
                     [   g_results.cost(event_num,1),...
                         g_results.num_reconfig(event_num,1),...
                         g_results.rat_reconfig(event_num,1),...
                         g_results.num_vars(event_num,1)]...
-                        = this.get_reconfig_cost;
+                        = this.get_reconfig_cost('const');
+                    g_results.profit(event_num,1) = ...
+                        profit - g_results.cost(event_num,1) + ...
+                        this.get_reconfig_cost('linear') - ...
+                        this.getSliceCost('quadratic-price', 'none');
                 case 'fastconfig2'
                 otherwise
                     error('NetworkSlicing:UnsupportedMethod', ...
                         'error: unsupported method (%s) for network slicing.', ...
-                        options.Method) ;
+                        this.Parent.options.Method) ;
             end
             g_results.num_flows(event_num,1) = this.NumberFlows;
             % if failed
@@ -552,7 +556,7 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
                     % cost.
                     profit = this.optimalFlowRate(options);
                     g_results.profit(event_num,1) = ...
-                        profit - this.getSliceCost('quadratic-price');
+                        profit - this.getSliceCost('quadratic-price', 'const');
                     g_results.solution(event_num,1) = this.Variables;
                     [   g_results.cost(event_num,1),...
                         g_results.num_reconfig(event_num,1),...
@@ -564,14 +568,16 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
                     % Reconfiguration cost has been counted in |profit|, while resource
                     % cost is not. So we need to exlude only part of the resource cost
                     % from the profit.
-                    g_results.profit(event_num,1) = profit - ...
-                        this.getSliceCost('quadratic-price', 'none');
                     g_results.solution(event_num,1) = this.Variables;
                     [   g_results.cost(event_num,1),...
                         g_results.num_reconfig(event_num,1),...
                         g_results.rat_reconfig(event_num,1),...
                         g_results.num_vars(event_num,1)]...
-                        = this.get_reconfig_cost;
+                        = this.get_reconfig_cost('const');
+                    g_results.profit(event_num,1) = ...
+                        profit - g_results.cost(event_num,1) + ...
+                        this.get_reconfig_cost('linear') - ...
+                        this.getSliceCost('quadratic-price', 'none');
                 case 'fastconfig2'
                 otherwise
                    error('NetworkSlicing:UnsupportedMethod', ...
@@ -582,14 +588,12 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             %             flowtable = this.FlowTable(~rmidx,:);
             tf = true;
         end
-    end
-    methods (Static, Access = protected)
         function [x, fval, exitflag] = ...
-                obj_fun(x0, As, bs, Aeq, beq, lbs, ub, lb, fmincon_opt, method)
+                obj_fun(this, x0, As, bs, Aeq, beq, lbs, ub, lb, fmincon_opt, method)
             switch method
                 case 'fixcost'
                     [x, fval, exitflag] = ...
-                        fmincon(@(x)Slice.fcnSocialWelfare(x, this, method), ...
+                        fmincon(@(x)DynamicSlice.fcnSocialWelfare(x, this, method), ...
                         x0, As, bs, Aeq, beq, lbs, ub, lb, fmincon_opt);
                 otherwise
                     [x, fval, exitflag] = obj_fun@Slice(...
@@ -675,6 +679,7 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
                 grad((num_vars+1+NP):end) = repmat(S.node_reconfig_cost, NP*NV, 1);                
             end
         end
+        [profit, grad] = fcnSocialWelfare(x_vars, S, options);
     end
 end
 
