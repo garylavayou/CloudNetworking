@@ -7,6 +7,7 @@ classdef FlowPattern < uint32
     end
     
     enumeration
+        Default(0);
         RandomSingleFlow(1);
         RandomMultiFlow(2);
         SingleSourceMultiFlow(3);
