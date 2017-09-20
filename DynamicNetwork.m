@@ -15,9 +15,7 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
         % Since CloudNetwork and EventDrivenNetwork has different definition of AddSlice,
         % we need override the two superclass methods.
         function sl = AddSlice(this, slice_opt, varargin)
-            if ~cellstrfind(this.bypass, 'DynamicNetwork')
-                AddSlice@PhysicalNetwork(this, slice_opt, varargin{:});
-            end
+            AddSlice@PhysicalNetwork(this, slice_opt, varargin{:});
             %% Perform admiting control and resource allocation
             % Compute the resource allocation for the slice, and decide if this slice can
             % be admitted.
@@ -137,7 +135,6 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
         %             tf = true;
         %         end
         tf = onAddingSlice(this, sl);
-        tf = onRemovingSlice(this, sl);
     end
     methods (Access =protected)
         function sl = createslice(this, slice_opt)
@@ -175,9 +172,9 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                 C(ph, pt) = slice.Topology.Capacity(h,t); %#ok<SPRIX>
             end
             graph = DirectedGraph(A, C);
-            slice_opt.Pattern = slice.Options.FlowPattern;
+            slice_opt.FlowPattern = slice.Options.FlowPattern;
             slice_opt.DelayConstraint = slice.Options.DelayConstraint;
-            slice_opt = update_slice_option(slice, slice_opt);
+            slice_opt = this.updateDynamicSliceOptions(slice, slice_opt);
             if nargin <= 2
                 slice_opt.NumberFlows = 1;
             else
@@ -224,10 +221,10 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
         RemoveFlowFailed;          % NOT used.
     end
         
-    methods(Static)
+    methods(Static, Access = protected)
         %%%
-        % subclass can override this method.
-        function slice_opt = update_slice_option(slice, slice_opt)
+        % subclass can override this method, Called by _createflow_ method.
+        function slice_opt = updateDynamicSliceOptions(slice, slice_opt)
             switch slice.Options.FlowPattern
                 case {FlowPattern.RandomSingleFlow, FlowPattern.RandomMultiFlow}
                     slice_opt.NodeSet = slice.VirtualNodes.PhysicalNode;
