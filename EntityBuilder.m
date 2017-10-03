@@ -28,13 +28,12 @@ classdef EntityBuilder < matlab.mixin.Copyable & matlab.mixin.Heterogeneous
             persistent builder_id;       % global entity ID;
             if isempty(builder_id)
                 builder_id = int64(0);
-            else 
-                if builder_id == intmax('uint64')
-                    builder_id = int64(1);
-                    warning('reset id');
-                else
-                    builder_id = builder_id + 1;
-                end
+            end
+            if builder_id == intmax('uint64')
+                builder_id = int64(1);
+                warning('reset id');
+            else
+                builder_id = builder_id + 1;
             end
             this.Identifier = builder_id;
         end
