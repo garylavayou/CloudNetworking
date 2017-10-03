@@ -51,14 +51,13 @@ classdef SliceEntityBuilder < EntityBuilder
         function entity = buildentity(this, time_arrive, time_serve)
             persistent slice_id;    % Global slice ID;
             if isempty(slice_id)
+                slice_id = int64(0);
+            end
+            if slice_id == intmax('uint64')
                 slice_id = int64(1);
+                warning('reset slice id.');
             else
-                if slice_id == intmax('uint64')
-                    slice_id = int64(1);
-                    warning('reset slice id.');
-                else
-                    slice_id = slice_id + 1;
-                end
+                slice_id = slice_id + 1;
             end
 
             % build the entity
