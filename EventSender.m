@@ -2,7 +2,7 @@ classdef (Abstract) EventSender < handle
     % <EventSender> and <EventReceiver> are interfaces for inter-class communication.
     
     properties (Access = protected)
-        listeners;  % We need to remove some listeners, when the listeners have been destoryed.
+        listeners;  % We need to remove some listeners, when the listeners have been destoryed. [Deprecated].
         targets;
     end
         
@@ -36,13 +36,17 @@ classdef (Abstract) EventSender < handle
         function RemoveListener(this, target, event)
             idx = find(this.targets(:)==target);
             b_removed = false(length(this.listeners));
-            for i = idx
-                if strcmp(this.listeners(i).EventName,event)
-                    b_removed(i) = true;
+            if nargin >= 3
+                for i = idx
+                    if strcmp(this.listeners(i).EventName,event)
+                        b_removed(i) = true;
+                    end
                 end
+            else
+                b_removed(idx) = true;
             end
-            this.listeners.Remove(b_removed);
-            [~] = this.targets.Removed(b_removed);
+            this.listeners.Remove(b_removed);       % delete the listener objects;
+            [~] = this.targets.Removed(b_removed);  % remove but not delete the targets;
         end
         
         function t = findTargets(this, ev_name)
