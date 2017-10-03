@@ -2,17 +2,30 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
     %DynamicSlice Event-driven to dynamic configure slice.
     %   Detailed explanation goes here
 
+
     properties
         FlowArrivalRate;
         FlowServiceInterval;
+        interval_events = 20;
+        interval_time;
+        portion_adhoc_flows_threshold = 0.1;
+        b_adhoc_flows = fasle(1000,1);  % only record a window of flows.
+        num_total_arrive = 0;
     end
     properties(Access={?DynamicSlice,?DynamicNetwork})
         b_ondepart = false;
-        Vnf;            % Capaciy of VNF instances on each node, this is configured by inter-slicing
-        Hs;
+
+        VNFCapacity;            % Capaciy of VNF instances on each node, this is configured by inter-slicing
+        % Add to table VirtualLinks, this do not change between two dimensioning
+        % procedure. 
+        %         edge_reconfig_cost;     
+        % Add to table VirtualDataCenters, this do not change between two dimensioning
+        % procedure. 
+        %         node_reconfig_cost;     
+        vnf_reconfig_cost;
+        
+        Hdiag;
         % As_res;       % has been defined in <Slice>.
-        old_variables;  % last one configuration
-        changed_index;
         %%% define reconfiguraton cost for link and node variables.
         % **flow reassginement cost*, i.e., the flow-path reconfiguration cost, which is
         % denpendent on length of paths.
@@ -21,10 +34,17 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
         % If a resource price is p, we assume that the reconfigruation cost
         % coefficient of this resource is ¦Èp. If we adopt a varying pricing, like
         % p=av+b, then the coeffcient is ¦È(av+b).
-        edge_reconfig_cost;
-        node_reconfig_cost;
     end
-    
+    properties(Access=private)
+        z_reconfig_cost;    % for z_npf, used in optimization, the value updates during each fast reconfiguration
+        x_reconfig_cost;    % for x_p, used in optimization, the value updates during each fast reconfiguration
+        prev_vnf_capacity;  % last time's VNF instance capcity;
+        old_variables;      % last one configuration
+        changed_index;
+    end
+    properties(Dependent, Access=protected)
+        num_varv;
+    end
     events 
         AddFlowSucceed;
         AddFlowFailed;
@@ -40,6 +60,7 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             if sl ~= this  % filter message
                 return;
             end
+            this.num_received_events = this.num_received_events + 1;
             switch eventData.EventName
                 case 'FlowArrive'
                     fidx = this.OnAddingFlow(eventData.flow);
@@ -68,201 +89,6 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
         % <initializeState>. 
         %         function As = getAs_res(this)
         %         end
-        
-        function Hs = get.Hs(this)
-            % For the node capacity constraint for VNF |f|, the coeffiect matrix Hs is
-            % filled block-by-block. In the |k|th block (NC*NC), we put the |k|th column
-            % of H_np to the diagnal of the block. Then |H_np| is duplicated into a larger
-            % diagnal corresponding to all VNFs.
-            %
-            % The capacity of VNF instance Vnf, has been calculate after allocating
-            % resource to the slice. Some component of Vnf might be zero, since VNF f may
-            % not be located at node n.
-            global DEBUG; %#ok<NUSED>
-            NC = this.NumberDataCenters;
-            NP = this.NumberPaths;
-            Hs_np = spalloc(NC, NC*NP, nnz(this.I_node_path));
-            col_index = 1:NC;
-            for p = 1:NP
-                Hs_np(1:NC,col_index) = diag(this.I_node_path(:,p));
-                col_index = col_index + NC;
-            end
-            Hs = block_diag(Hs_np, this.NumberVNFs);
-        end
-                
-        %%%
-        % * *getSliceCost*
-        % Get the cost of creating a slice, overriding <Slice.getSliceCost>. The cost
-        % including resource consumption cost and reconfiguration cost.
-        %   cost = getSliceCost(this, pricing_policy, reconfig_cost_model)
-        % |reconfig_cost_model|: reconfigure cost model, including: |'constant'|,
-        % |'linear'|, and |'none'|. If |'none'| is adopted, then the reconfiguration cost
-        % is not counted.
-        function cost = getSliceCost(this, pricing_policy, reconfig_cost_model)
-            if nargin<=1 || isempty(pricing_policy)
-                pricing_policy = 'quadratic-price';
-            end
-            if nargin <= 2 || isempty(reconfig_cost_model)
-                reconfig_cost_model = 'linear';
-            end
-            
-            link_price = this.VirtualLinks.Price;
-            link_load = this.VirtualLinks.Capacity;
-            node_price = this.VirtualDataCenters.Price;
-            node_load = this.VirtualDataCenters.Capacity;
-            if strcmpi(pricing_policy, 'quadratic-price')
-                link_payment = this.fcnLinkPricing(link_price, link_load);
-                node_payment = this.fcnNodePricing(node_price, node_load);
-                cost = link_payment + node_payment;
-            else
-                cost = dot(link_price, link_load) + dot(node_price, node_load);
-            end
-            if ~strcmpi(reconfig_cost_model, 'none')
-                cost = cost + this.get_reconfig_cost(reconfig_cost_model);
-            end
-        end
-        
-        %% Find the index of variables for the newly added/removed flow
-        % assume the newly added/removed flow index is u, the the index of
-        % corrsponding flow and VNF allocation variables is
-        % [x_u, z_npf], for all p in p_u.
-        %
-        % NOTE: This function should be called after adding new flow, or before removing
-        % departing flow.
-        function identify_change(this, changed_path_index)  
-            global DEBUG; %#ok<NUSED>
-            base_z_index = false(this.NumberDataCenters, this.NumberPaths);
-            base_z_index(:,changed_path_index) = true;
-            base_zidx = find(base_z_index);
-            this.changed_index.z = spalloc(this.num_varz, 1, ...
-                nnz(base_z_index)*this.NumberVNFs);
-            id_offset = 0;
-            for f = 1:this.NumberVNFs
-                this.changed_index.z(id_offset+base_zidx) = true;
-                id_offset = id_offset + numel(base_z_index);
-            end
-        end
-        
-        %% TODO
-        % optimize only on the subgraph, which carries the flows that intersection with
-        % the arriving/departuring flow. this can significantly reduce the problem scale
-        % when there is lots of flow, and the numbe of hops of the flow is small.
-        %         function profit = fastReconfigureCompact(this, action)
-        %         end        
-        function profit = fastReconfigure(this, action)
-            NL = this.NumberVirtualLinks;
-            NN = this.NumberDataCenters;
-            NV = this.NumberVNFs;
-            NP = this.NumberPaths;
-
-            %%% Formulate input for convex optimization (fmincon).
-            % The problem has multiple inequalities, and the lowerbounds for variables.
-            global DEBUG; %#ok<NUSED>
-            H = this.Hs;
-            As_res = this.As_res;        % update As_res
-            nnz_As = nnz(As_res) + nnz(H) + nnz(this.I_edge_path) + ... 
-                 + 4*NP + 4*this.num_varz; % 2 I_x, 2 I_tx, 2 I_z, 2 I_tz
-            num_lcon = this.num_lcon_res + NN*NV + NL + 2*NP + 2*this.num_varz;
-            As = spalloc(num_lcon, 2*this.num_vars, nnz_As);
-            As(1:this.num_lcon_res,1:this.num_vars) = As_res;
-            row_offset = this.num_lcon_res;
-            As(row_offset+(1:NN*NV), (1:this.num_varz)+NP) = H;
-            row_offset = row_offset + NN*NV;
-            As(row_offset+(1:NL), 1:NP) = this.I_edge_path;
-            row_offset = row_offset + NL;
-            As(row_offset+(1:NP), 1:NP) = eye(NP);
-            As(row_offset+(1:NP), this.num_vars+(1:NP)) = -eye(NP);
-            row_offset = row_offset + NP;
-            As(row_offset+(1:NP), 1:NP) = -eye(NP);
-            As(row_offset+(1:NP), this.num_vars+(1:NP)) = -eye(NP);
-            row_offset = row_offset + NP;
-            As(row_offset+(1:this.num_varz), (NP+1):this.num_vars) = eye(this.num_varz);
-            As(row_offset+(1:this.num_varz), (this.num_vars+NP+1):end) = -eye(this.num_varz);
-            row_offset = row_offset + this.num_varz;
-            As(row_offset+(1:this.num_varz), (NP+1):this.num_vars) = -eye(this.num_varz);
-            As(row_offset+(1:this.num_varz), (this.num_vars+NP+1):end) = -eye(this.num_varz);
-
-            bs = [sparse(this.num_lcon_res,1);
-                this.Vnf(:);
-                this.VirtualLinks.Capacity;
-                this.old_variables.x;       % which have been pre-processed, so it can be
-                -this.old_variables.x;      % compared with the current states.
-                this.old_variables.z;
-                -this.old_variables.z];
-            lbs = sparse(2*this.num_vars,1);
-                
-            var0 = [this.old_variables.x;
-                this.old_variables.z;
-                this.old_variables.x;
-                this.old_variables.z];
-            %% Reconfiguration Cost in Problem Formulation
-            % comparing the old variables with new variables to decide the reconfiguration
-            % cost.
-            % Since the two vector has different number of elements, we should comparing
-            % it accordingly, and set aside the variables of new arriving/departing flow.
-            
-            %% Perform optimization
-            fmincon_opt = optimoptions(@fmincon);
-            fmincon_opt.Algorithm = 'interior-point';
-            fmincon_opt.HessianFcn = @(x,lambda)Slice.fcnHessian(x,lambda,this);
-            fmincon_opt.SpecifyObjectiveGradient = true;
-            [x, fval, exitflag] = fmincon(@(x)DynamicSlice.fcnFastConfigProfit(x,this), ...
-                var0, As, bs, [], [], lbs, [], [], fmincon_opt);
-            % x is a local solution to the problem when exitflag is positive.
-            if exitflag == 0
-                warning('reaching maximum number of iterations.');
-            elseif exitflag < 0
-                error('abnormal exit with flag %d.',exitflag);
-            elseif exitflag ~= 1
-                warning('(exitflag = %d) local optimal solution found.', exitflag);
-            end
-            options = this.Parent.options;
-            options.Action = action;
-            if ~this.checkFeasible(x, options)
-                error('error: infeasible solution.');
-            end
-            %%%
-            % The simplify process in <optimalFlowRate> is not needed, since the objective function will
-            % force those variables to be zero.
-            this.x_path = x(1:NP);
-            this.z_npf = x((this.NumberPaths+1):this.num_vars);
-            this.flow_rate = this.getFlowRate(this.x_path);
-            if nargout == 1    % final results
-                this.Variables.x = this.x_path;
-                this.Variables.z = this.z_npf;
-                %                 this.Variables.z(this.Variables.z<10^-3) = 0;
-                %                 this.Variables.x(this.Variables.x<10^-3) = 0;
-                tol_zero = 10^-4;
-                this.Variables.x(this.Variables.x<tol_zero*max(this.Variables.x)) = 0;
-                this.Variables.z(this.Variables.z<tol_zero*max(this.Variables.z)) = 0;
-                options.Display = 'final';
-                if ~this.checkFeasible([], options)
-                    warning('optimalFlowRate: the rounding of variables with small quantity will make the solution infeasible.');
-                end
-                this.setPathBandwidth;
-                this.FlowTable.Rate = this.getFlowRate;
-                this.VirtualLinks.Load = this.getLinkLoad;
-                this.VirtualDataCenters.Load = this.getNodeLoad;
-                profit = -fval;
-            end
-        end  
-        
-        function b = checkFeasible(this, vars, options)
-            if nargin <= 1
-                vars = [];
-            end
-            if nargin <= 2
-                options = [];
-            end
-            if isempty(vars)
-                b = checkFeasible@Slice(this, vars, options);
-            else
-                b = checkFeasible@Slice(this, vars(1:this.num_vars), options);
-            end
-            if b
-                % TODO add other check conditions.
-            end
-        end
     end
 
     methods
@@ -307,15 +133,115 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
 %         end
                 
     end
-    methods (Access = {?DynamicSlice, ?DynamicNetwork})
-        function setVnfCapacity(this)
-            znpf = reshape(this.Variables.z, this.NumberDataCenters, ...
-                this.NumberPaths, this.NumberVNFs);
-            znpf = znpf.* full(this.I_node_path);  % compatible arithmetic operation
-            this.Vnf = reshape(sum(znpf,2), this.NumberDataCenters, this.NumberVNFs);
+    
+    methods
+        function n = get.num_varv(this)
+            n = this.NumberDataCenters*this.NumberVNFs;
+        end
+        function Hs = get.Hdiag(this)
+            % For the node capacity constraint for VNF |f|, the coeffiect matrix Hs is
+            % filled block-by-block. In the |k|th block (NC*NC), we put the |k|th column
+            % of H_np to the diagnal of the block. Then |H_np| is duplicated into a larger
+            % diagonal corresponding to all VNFs.
+            %
+            % The capacity of VNF instance |VNFCapacity|, has been calculate after
+            % allocating resource to the slice. Some component of |VNFCapacity| might be
+            % zero, since VNF f may not be located at node n.
+            %
+            % See also <Slice.Hrep>.
+            global DEBUG; %#ok<NUSED>
+            NC = this.NumberDataCenters;
+            NP = this.NumberPaths;
+            Hs_np = spalloc(NC, NC*NP, nnz(this.I_node_path));
+            col_index = 1:NC;
+            for p = 1:NP
+                Hs_np(1:NC,col_index) = diag(this.I_node_path(:,p));
+                col_index = col_index + NC;
+            end
+            Hs = block_diag(Hs_np, this.NumberVNFs);
         end
         
-        % * *model* 
+        %%%
+        % * *getSliceCost*
+        % Get the cost of creating a slice, overriding <Slice.getSliceCost>. The cost
+        % including resource consumption cost and reconfiguration cost.
+        %   cost = getSliceCost(this, pricing_policy, reconfig_cost_model)
+        % |reconfig_cost_model|: reconfigure cost model, including: |'const'|,
+        % |'linear'|, and |'none'|. If |'none'| is adopted, then the reconfiguration cost
+        % is not counted.
+        function cost = getSliceCost(this, pricing_policy, reconfig_cost_model)
+            if nargin<=1 || isempty(pricing_policy)
+                pricing_policy = 'quadratic-price';
+            end
+            if nargin <= 2 || isempty(reconfig_cost_model)
+                reconfig_cost_model = 'linear';
+            end
+            
+            link_price = this.VirtualLinks.Price;
+            link_load = this.VirtualLinks.Capacity;
+            node_price = this.VirtualDataCenters.Price;
+            node_load = this.VirtualDataCenters.Capacity;
+            if strcmpi(pricing_policy, 'quadratic-price')
+                link_payment = this.fcnLinkPricing(link_price, link_load);
+                node_payment = this.fcnNodePricing(node_price, node_load);
+                cost = link_payment + node_payment;
+            else
+                cost = dot(link_price, link_load) + dot(node_price, node_load);
+            end
+            if ~strcmpi(reconfig_cost_model, 'none')
+                cost = cost + this.get_reconfig_cost(reconfig_cost_model);
+            end
+        end
+        
+        function b = checkFeasible(this, vars, options) %#ok<INUSD>
+            if nargin <= 1
+                vars = [];
+            end
+            if nargin <= 2
+                options = struct; %#ok<NASGU>
+            end
+            if isempty(vars)
+                b = checkFeasible@Slice(this, vars);
+            else
+                b = checkFeasible@Slice(this, vars(1:this.num_vars));
+            end
+            %             if b
+            %                 % TODO add other check conditions.
+            %                 switch options.Action
+            %                     case 'add'
+            %                     case 'remove'
+            %                 end
+            %             end
+        end
+    end
+
+    methods (Access = {?DynamicSlice, ?DynamicNetwork})
+        function setVnfCapacity(this)
+            znpf = reshape(full(this.Variables.z), this.NumberDataCenters, ...
+                this.NumberPaths, this.NumberVNFs);
+            znpf = znpf.* full(this.I_node_path);  % compatible arithmetic operation
+            this.VNFCapacity = reshape(sum(znpf,2), this.NumberDataCenters*this.NumberVNFs,1);
+            if ~strcmpi(this.Parent.options.Method, 'fastconfig')
+                this.prev_vnf_capacity = this.getVNFInstanceCapacity;
+                if ~isequal(this.VNFCapacity(:), this.prev_vnf_capacity)
+                    error('arithmetic error.')
+                end
+            end
+            %%%
+            % Equal to Hs * z_npf;
+            %   Hs = this.getHs;
+            %   this.VNFCapacity = Hs * this.Variables.z;
+        end
+        %%%
+        % 
+        function vc = getVNFInstanceCapacity(this, z)
+            if nargin <= 1
+                z = this.Variables.z;
+            end
+            vc = this.Hdiag * z;
+        end
+        
+        % model = {'linear'|'const'|'none'}
         % Return: reconfiguration cost, number of reconfiguration, ration of
         % reconfigurations, and total number of variables.
         function [c,n,r,t] = get_reconfig_cost(this, model)
@@ -332,11 +258,7 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
                 end
                 return;
             end
-            if nargin <= 1
-                model = 'linear'; % model = {linear|constant}
-            end 
             % old_variables is valid after adding/removing flows.
-            path_reconfig_cost = (this.I_edge_path)' * this.edge_reconfig_cost;
             diff_x = abs(this.Variables.x-this.old_variables.x);
             diff_z = abs(this.Variables.z-this.old_variables.z);
             mid_x = 1/2*(abs(this.Variables.x)+abs(this.old_variables.x));
@@ -347,19 +269,34 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             norm_diff_z(nz_index_z) = abs(diff_z(nz_index_z)./mid_z(nz_index_z));
             norm_diff_x = zeros(size(diff_x)); 
             norm_diff_x(nz_index_x) = abs(diff_x(nz_index_x)./mid_x(nz_index_x));  
-            tol_vec = 10^-4;
+            %%
+            % reconfiguration cost of VNF capacity
+            options = getstructfields(this.Parent.options, {'Method', 'DiffNonzeroTolerance'});            
+            if ~strcmpi(options.Method, 'fastconfig')
+                vnf_capacity = this.VNFCapacity(:);
+                diff_v = abs(vnf_capacity - this.prev_vnf_capacity);
+                mid_v = 1/2*(abs(vnf_capacity) + abs(this.prev_vnf_capacity));
+                nz_index_v = mid_v~=0;
+                norm_diff_v = zeros(size(diff_v));
+                norm_diff_v(nz_index_v) = abs(diff_v(nz_index_v)./mid_v(nz_index_v));
+            end
+            %%
+            % reconfigration cost of flow reassignment.
+            tol_vec = options.DiffNonzeroTolerance;
             switch model
-                case 'linear'
-                    sum_tz = sum(reshape(diff_z, ...
-                        this.NumberDataCenters, this.NumberPaths*this.NumberVNFs),2);
-                    c = dot(diff_x, path_reconfig_cost)...
-                        + dot(sum_tz, this.node_reconfig_cost);
+                case 'linear' 
+                    c = dot(diff_x, this.x_reconfig_cost) + ...
+                        dot(diff_z, this.z_reconfig_cost);
+                    if ~strcmpi(options.Method, 'fastconfig')
+                        c = c + dot(diff_v, this.vnf_reconfig_cost);
+                    end
                 case 'const'
-                    sum_tz = sum(reshape(norm_diff_z>tol_vec, ...
-                        this.NumberDataCenters, this.NumberPaths*this.NumberVNFs),2);
                     % logical array cannot be used as the first argument of dot.
-                    c = dot(path_reconfig_cost, norm_diff_x>tol_vec)...
-                        + dot(sum_tz, this.node_reconfig_cost);
+                    c = dot(this.x_reconfig_cost, norm_diff_x>tol_vec)...
+                        + dot(this.z_reconfig_cost, norm_diff_z>tol_vec);
+                    if ~strcmpi(options.Method, 'fastconfig')
+                        c = c + dot(this.vnf_reconfig_cost, norm_diff_v>tol_vec);
+                    end
                 otherwise
                     error('error: invalid model.');
             end
@@ -367,9 +304,15 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             if nargout >= 2
                 paths_length = sum(this.I_edge_path,1);
                 n = nnz(norm_diff_z>tol_vec) + dot(paths_length,norm_diff_x>tol_vec);
+                if ~strcmpi(options.Method, 'fastconfig')
+                    % include the reconfiguration of VNF instances.
+                    n = n + nnz(norm_diff_v>tol_vec);
+                end
             end
             if nargout >= 3
-                t = (nnz(this.I_edge_path)+this.num_varz);
+                %   Number of edge variables, VNF assignment variables
+                t = nnz(this.I_edge_path)+nnz(this.I_node_path)*this.NumberVNFs+...
+                    this.num_varv;
                 r = n/t;
             end
         end
@@ -382,8 +325,8 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             s.I_edge_path = this.I_edge_path;
             s.I_flow_path = this.I_flow_path;
             s.path_owner = this.path_owner;
-            s.As_res = this.As_res;
             s.variables = this.Variables;
+            s.VNFCapacity = this.VNFCapacity;
         end
         function set_state(this, s)
             this.FlowTable = s.flow_table;
@@ -391,12 +334,16 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             this.I_edge_path = s.I_edge_path;
             this.I_flow_path = s.I_flow_path;
             this.path_owner = s.path_owner;
-            this.As_res = s.As_res;
             this.variables = s.Variables;
+            this.VNFCapacity = s.VNFCapacity;
         end
     end
     
     methods (Access = protected)
+        profit = fastReconfigure2(this, action, options);
+        profit = fastReconfigure(this, action, options);
+        tf = executeMethod(this, action);
+        
         %% fast slice reconfiguration when flow arriving and depaturing
         % * *flow*: flow table entries.
         %
@@ -445,7 +392,6 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
                     end
                 end
             end
-            this.getAs_res;        % update As_res
 
             % used for all methods to calculate the reconfiguration cost. and used for
             % fast reconfiguration during optimization.
@@ -457,42 +403,11 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             this.old_variables.z(~this.changed_index.z) = old_state.variables.z;
 
             %% TODO, designed the output structure for multiple slices.
-            global g_results event_num;
-            switch this.Parent.options.Method
-                case 'reconfig'
-                    options = getstructfields(this.Parent.options, {'Display'});
-                    % provide 'method' and 'model' to customize the <optimalFlowRate>
-                    options.Method = 'fixcost';  
-                    profit = this.optimalFlowRate(options);
-                    g_results.profit(event_num,1) = ...
-                        profit - this.getSliceCost('quadratic-price', 'const');
-                    g_results.solution(event_num,1) = this.Variables;
-                    [   g_results.cost(event_num,1), ...
-                        g_results.num_reconfig(event_num,1),...
-                        g_results.rat_reconfig(event_num,1),...
-                        g_results.num_vars(event_num,1)] ...
-                        = this.get_reconfig_cost('const');
-                case 'fastconfig'
-                    profit = this.fastReconfigure('add');
-                    g_results.solution(event_num,1) = this.Variables;
-                    [   g_results.cost(event_num,1),...
-                        g_results.num_reconfig(event_num,1),...
-                        g_results.rat_reconfig(event_num,1),...
-                        g_results.num_vars(event_num,1)]...
-                        = this.get_reconfig_cost('const');
-                    g_results.profit(event_num,1) = ...
-                        profit - g_results.cost(event_num,1) + ...
-                        this.get_reconfig_cost('linear') - ...
-                        this.getSliceCost('quadratic-price', 'none');
-                case 'fastconfig2'
-                otherwise
-                    error('NetworkSlicing:UnsupportedMethod', ...
-                        'error: unsupported method (%s) for network slicing.', ...
-                        this.Parent.options.Method) ;
+            tf = this.executeMethod('add');
+            if tf == false
+                fidx = [];
+                this.set_state(old_state);
             end
-            g_results.num_flows(event_num,1) = this.NumberFlows;
-            % if failed
-            % fidx = [];
         end
         
         function tf = OnRemovingFlow(this, fid)
@@ -543,66 +458,74 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             this.I_node_path(:, changed_path_index) = [];
             this.I_flow_path(:, changed_path_index) = [];
             this.I_flow_path(fidx, :) = [];
-            this.getAs_res;         % TODO, incremental upate of As_res.
 
-            global g_results event_num;
-            switch this.Parent.options.Method
-                case 'reconfig'
-                    options = getstructfields(this.Parent.options, {'Display'});
-                    options.Method = 'fixcost';  
-                    % Since we adopt |FixedCost| model, the resource cost that is a
-                    % constant, is not include in the objective value |profit|. So, we
-                    % should exclude it from the |profit|, as well as the reconfiguration
-                    % cost.
-                    profit = this.optimalFlowRate(options);
-                    g_results.profit(event_num,1) = ...
-                        profit - this.getSliceCost('quadratic-price', 'const');
-                    g_results.solution(event_num,1) = this.Variables;
-                    [   g_results.cost(event_num,1),...
-                        g_results.num_reconfig(event_num,1),...
-                        g_results.rat_reconfig(event_num,1),...
-                        g_results.num_vars(event_num,1)]...
-                        = this.get_reconfig_cost;
-                case 'fastconfig'
-                    profit = this.fastReconfigure('remove');
-                    % Reconfiguration cost has been counted in |profit|, while resource
-                    % cost is not. So we need to exlude only part of the resource cost
-                    % from the profit.
-                    g_results.solution(event_num,1) = this.Variables;
-                    [   g_results.cost(event_num,1),...
-                        g_results.num_reconfig(event_num,1),...
-                        g_results.rat_reconfig(event_num,1),...
-                        g_results.num_vars(event_num,1)]...
-                        = this.get_reconfig_cost('const');
-                    g_results.profit(event_num,1) = ...
-                        profit - g_results.cost(event_num,1) + ...
-                        this.get_reconfig_cost('linear') - ...
-                        this.getSliceCost('quadratic-price', 'none');
-                case 'fastconfig2'
-                otherwise
-                   error('NetworkSlicing:UnsupportedMethod', ...
-                       'error: unsupported method (%s) for network slicing.', ...
-                       this.Parent.options.Method);
+            tf = this.executeMethod('remove');
+            if tf == false
+                this.set_state(old_state);
             end
-            g_results.num_flows(event_num,1) = this.NumberFlows;
-            %             flowtable = this.FlowTable(~rmidx,:);
-            tf = true;
         end
-        function [x, fval, exitflag] = ...
-                obj_fun(this, x0, As, bs, Aeq, beq, lbs, ub, lb, fmincon_opt, method)
-            switch method
+        
+           
+        % |parameters|: include fields x0, As, bs, Aeq, beq, lbs, ub, lb;
+        % |options|: include fields fmincon_opt, costmodel;
+        function [x, fval, exitflag] = optimize(this, params, options)
+            switch options.CostModel
                 case 'fixcost'
-                    [x, fval, exitflag] = ...
-                        fmincon(@(x)DynamicSlice.fcnSocialWelfare(x, this, method), ...
-                        x0, As, bs, Aeq, beq, lbs, ub, lb, fmincon_opt);
+                    if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
+                        [x_compact, fval, exitflag] = ...
+                            fmincon(@(x)DynamicSlice.fcnSocialWelfareCompact(x, this, ...
+                            getstructfields(options, 'CostModel')), ...
+                            params.x0, params.As, params.bs, params.Aeq, params.beq, ...
+                            params.lb, params.ub, [], options.fmincon_opt);
+                        x = zeros(this.num_vars, 1);
+                        x(this.I_active_variables) = x_compact;
+                    else
+                        [x, fval, exitflag] = ...
+                            fmincon(@(x)DynamicSlice.fcnSocialWelfare(x, this, ...
+                            getstructfields(options, 'CostModel')), ...
+                            params.x0, params.As, params.bs, params.Aeq, params.beq, ...
+                            params.lb, params.ub, [], options.fmincon_opt);
+                    end
                 otherwise
-                    [x, fval, exitflag] = obj_fun@Slice(...
-                        x0, As, bs, Aeq, beq, lbs, ub, lb, fmincon_opt, options);
+                    [x, fval, exitflag] = optimize@Slice(this, params, ...
+                        rmfield(options, 'CostModel'));
             end
         end
+        
+        %% Find the index of variables for the newly added/removed flow
+        % assume the newly added/removed flow index is u, the the index of
+        % corrsponding flow and VNF allocation variables is
+        % [x_u, z_npf], for all p in p_u.
+        %
+        % NOTE: This function should be called after adding new flow, or before removing
+        % departing flow.
+        function identify_change(this, changed_path_index)
+            global DEBUG; %#ok<NUSED>
+            base_z_index = false(this.NumberDataCenters, this.NumberPaths);
+            base_z_index(:,changed_path_index) = true;
+            base_zidx = find(base_z_index);
+            this.changed_index.z = spalloc(this.num_varz, 1, ...
+                nnz(base_z_index)*this.NumberVNFs);
+            id_offset = 0;
+            for f = 1:this.NumberVNFs
+                this.changed_index.z(id_offset+base_zidx) = true;
+                id_offset = id_offset + numel(base_z_index);
+            end
+        end
+        
+        %% TODO
+        % optimize only on the subgraph, which carries the flows that intersection with
+        % the arriving/departuring flow. this can significantly reduce the problem scale
+        % when there is lots of flow, and the numbe of hops of the flow is small.
+        %         function profit = fastReconfigureCompact(this, action)
+        %         end
+       
+ 
     end
     
     methods(Static)
+        %%%
+        % Emulation of a static property.
         function th = THETA(t)
             persistent var_theta;
             if nargin >= 1
@@ -610,7 +533,57 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             end
             th = var_theta;
         end
-        %% 
+        %%%
+        % Objective value and gradient of the objective function for fast reconfiguration.
+        % This is the compact form, which does not consider those in-active variables
+        % (corresponds to $h_np=0$). 
+        % See also <Slice.fcnHessian> and <SliceEx.fcnHessianCompact>.
+        function [profit, grad] = fcnFastConfigProfitCompact(vars, S, options)
+            var_x = vars(1:options.num_varx);
+            num_orig_vars = options.num_varx + options.num_varz; % |num_vars| counts for |x,z,[v]|
+            num_vars = length(vars);
+            if isfield(options, 'num_varv')
+                num_orig_vars = num_orig_vars + options.num_varv;
+                var_tv = vars((num_vars-options.num_varv+1):end);
+            end
+            var_tx = vars(num_orig_vars+(1:options.num_varx));
+            var_tz = vars(num_orig_vars+options.num_varx+(1:options.num_varz));
+            flow_rate = S.getFlowRate(var_x);
+            profit = -S.weight*sum(fcnUtility(flow_rate));
+            profit = profit + ...
+                dot(var_tx, S.x_reconfig_cost) + dot(var_tz, S.z_reconfig_cost);
+            if isfield(options, 'num_varv')
+                profit = profit + dot(var_tv, S.vnf_reconfig_cost);
+            end
+            grad = spalloc(length(vars), 1, options.num_varx+num_orig_vars);
+            for p = 1:options.num_varx
+                i = S.path_owner(p);
+                grad(p) = -S.weight/(1+S.I_flow_path(i,:)*var_x); %#ok<SPRIX>
+            end
+            %%%
+            % The partial derivatives of t_x is the vector |x_reconfig_cost|;
+            % The partial derivatives of t_z is duplicaton of |z_reconfig_cost|,
+            % since the node reconfiguration cost is only depend on node.
+            grad(num_orig_vars+(1:options.num_varx)) = S.x_reconfig_cost;
+            grad(num_orig_vars+options.num_varx+(1:options.num_varz)) = S.z_reconfig_cost;
+            if isfield(options, 'num_varv')
+                grad((num_vars-options.num_varv+1):end) = S.vnf_reconfig_cost;                
+            end
+        end
+        %%%
+        % Hessian matrix (compact form) of objective function. See also <Slice.fcnHessian>
+        % and <Slice.fcnHessianCompact>.
+        function hess = fcnHessianCompact(vars, ~, S, options)
+            var_x = vars(1:options.num_varx);
+            num_vars = length(vars);
+            hess = spalloc(num_vars, num_vars, options.num_varx^2);   % non-zero elements less than | options.num_varx^2|
+            for p = 1:options.num_varx
+                i = S.path_owner(p);
+                hess(p,1:options.num_varx) = S.weight *...
+                    S.I_flow_path(i,:)/(1+(S.I_flow_path(i,:)*var_x))^2; %#ok<SPRIX>
+            end
+        end
+        %%
         % The resource consumption cost is constant, since the slice will not
         % release/request resouce to/from the substrate network, and the resource prices
         % during the reconfiguration does not change. Therefore, the resource consumption
@@ -622,7 +595,6 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
         function [profit, grad] = fcnFastConfigProfit(vars, S, options)
             num_vars = S.num_vars;
             NP = S.NumberPaths;
-            NV = S.NumberVNFs;
             if isempty(vars)
                 var_path = S.Variables.x;
             else
@@ -636,10 +608,8 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             flow_rate = S.getFlowRate(var_path);
             
             %% objective value
-            % |edge_reconfig_cost| is a vector, and we know edge-path incident matrix, so
-            % we can calculate the |path_reconfig_cost|.
-            if nargin>=3 && isfield(options, 'objective') && ...
-                    strcmp(options.objective, 'ProfitWithReconfigurationCost')
+            if nargin>=3 && isfield(options, 'Objective') && ...
+                    strcmp(options.Objective, 'ProfitWithReconfigurationCost')
                 reconfig_cost = S.get_reconfig_cost;
                 profit = -S.weight*sum(fcnUtility(flow_rate)) + reconfig_cost;
                 warning('.......');
@@ -648,10 +618,8 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
                 %%%
                 % calculate reconfiguration cost by |tx| and |tz| (L1 approximation),
                 % which is similar to calculating by |x-x0| and |z-z0|.
-                path_reconfig_cost = (S.I_edge_path)' * S.edge_reconfig_cost;
-                sum_tz = sum(reshape(var_tz, S.NumberDataCenters, NP*NV),2);
                 profit = profit + ...
-                    dot(var_tx, path_reconfig_cost) + dot(sum_tz, S.node_reconfig_cost);
+                    dot(var_tx, S.x_reconfig_cost) + dot(var_tz, S.z_reconfig_cost);
             end
             %             profit = profit - S.constant_profit; => move to SliceEx
             
@@ -668,18 +636,31 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
                 grad = spalloc(length(vars), 1, NP+num_vars);
                 for p = 1:NP
                     i = S.path_owner(p);
-                    grad(p) = -S.weight/(1+S.I_flow_path(i,:)*var_path) + grad(p) ; %#ok<SPRIX>
+                    grad(p) = -S.weight/(1+S.I_flow_path(i,:)*var_path); %#ok<SPRIX>
                 end
                 %%%
-                % The partial derivatives of t_x is the vector |path_reconfig_cost|;
-                % The partial derivatives of t_z is duplicaton of |node_reconfig_cost|,
+                % The partial derivatives of t_x is the vector |x_reconfig_cost|;
+                % The partial derivatives of t_z is duplicaton of |z_reconfig_cost|,
                 % since the node reconfiguration cost is only depend on node.
                 t_index = num_vars+(1:NP);
-                grad(t_index) = path_reconfig_cost;
-                grad((num_vars+1+NP):end) = repmat(S.node_reconfig_cost, NP*NV, 1);                
+                grad(t_index) = S.x_reconfig_cost;
+                grad((num_vars+1+NP):end) = S.z_reconfig_cost;
             end
         end
         [profit, grad] = fcnSocialWelfare(x_vars, S, options);
+        %         function [profit, grad] = fcnSocialWelfareCompact(act_vars, S, options)
+        %             vars = zeros(S.num_vars,1);
+        %             vars(S.I_active_variables) = act_vars;
+        %
+        %             if nargin == 2
+        %                 options = struct;
+        %             end
+        %             if nargout <= 1
+        %                 profit = DynamicSlice.fcnSocialWelfare(vars,s,options);
+        %             else
+        %                 [profit, grad] = DynamicSlice.fcnSocialWelfare(vars,s,options);
+        %             end
+        %         end
     end
 end
 
