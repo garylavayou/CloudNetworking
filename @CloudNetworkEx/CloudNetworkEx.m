@@ -15,14 +15,24 @@ classdef CloudNetworkEx < CloudNetwork
     end
     
     methods 
-        %   FullCloudNetwork(node_opt, link_opt, VNF_opt, options)
+        %%
+        %   CloudNetworkEx(node_opt, link_opt, VNF_opt, options)
+        % * *options*: 
+        %       _ProfitType_ can be |AccuratePrice| or |ApproximatePrice|, used for
+        %       calculating profit of Slices and Network;  
+        %       _WelfareType_ can be |Accurate| or |Approximate|, used for calculating net
+        %       social welfare of Network. 
         function this = CloudNetworkEx(varargin)
             this@CloudNetwork(varargin{:});
+            if length(varargin)>=4
+                this.options = structmerge(this.options, ...
+                    getstructfields(varargin{4}, {'ProfitType', 'WelfareType'}));
+            end
             if length(varargin) >= 4
                 options = varargin{4};
-                if isfield(options, 'delta')
-                    this.delta = options.delta;
-                    options = rmfield(options, 'delta');
+                if isfield(options, 'Delta')
+                    this.delta = options.Delta;
+                    options = rmfield(options, 'Delta');
                 end
                 %%%
                 % *Embedded Profit in the Resource Cost*:
@@ -36,17 +46,17 @@ classdef CloudNetworkEx < CloudNetwork
                     this.enable_constant_profit = options.EnableConstantProfit;
                     options = rmfield(options, 'EnableConstantProfit');
                 end
-                if isfield(options, 'embed_profit')
-                    if ~isempty(options.embed_profit)
-                        this.eta = options.embed_profit;
+                if isfield(options, 'EmbedProfit')
+                    if ~isempty(options.EmbedProfit)
+                        this.eta = options.EmbedProfit;
                         link_uc = this.getLinkField('UnitCost');
                         this.setLinkField('UnitCost', link_uc/(1-this.eta));
                         node_uc = this.getDataCenterField('UnitCost');
                         this.setDataCenterField('UnitCost', node_uc/(1-this.eta));
                     end
-                    options = rmfield(options, 'embed_profit');
+                    options = rmfield(options, 'EmbedProfit');
                 end
-                this.options = options;
+                this.options = structmerge(this.options, options);
             end
             % Add slice data
             %             if nargin >=5
@@ -118,6 +128,53 @@ classdef CloudNetworkEx < CloudNetwork
             theta = this.utilizationRatio(node_load, link_load);
             c = epsilon*((this.NumberNodes-this.static_factor)*theta+this.static_factor);
         end
+
+        %%%
+        % * *Network Operation Cost*:
+        % There are two methods to calculate network cost,
+        %
+        % # Calculate with the approximate model, where the static node cost is computed
+        % by the approximate formula.
+        % # Calculate with the accurate model, where the static node cost is computed by
+        % the solution of VNF deployment.
+        %
+        % When the network only include a single slice, this method equals to
+        % _getSliceCost_ .
+        %         function c = getNetworkCost(this, node_load, link_load, model)
+        function c = getNetworkCost(this, node_load, link_load, model)
+            if nargin <=1 || isempty(node_load)
+                node_load = this.getDataCenterField('Load');
+            end
+            if nargin <= 2 || isempty(link_load)
+                link_load = this.getLinkField('Load');
+            end
+            if nargin <= 3
+                warning('model is set as Approximate.');
+                model = 'Approximate';
+            end
+            
+            c = getNetworkCost@CloudNetwork(this, node_load, link_load);
+            if strcmp(model, 'Approximate')
+                c = c + this.getStaticCost(node_load, link_load);
+            elseif strcmp(model, 'Accurate')
+                if this.static_factor ~= 0
+                    b_deployed = node_load > 0;
+                    c = c + sum(this.getDataCenterField('StaticCost', b_deployed));
+                end
+            else
+                error('error: unknown model (%s).', model);
+            end
+        end
+
+        %%% compute link cost. Subclass may override this to provide cost.
+        function link_uc = getLinkCost(this)
+            link_uc = this.getLinkField('UnitCost') + this.phis_l;
+        end
+        
+        %%% compute node cost. Subclass may override this to provide cost.
+        function node_uc = getNodeCost(this)
+            node_uc = this.getDataCenterField('UnitCost') + this.phis_n;
+        end
     end
 
     methods (Access = protected)
@@ -131,11 +188,11 @@ classdef CloudNetworkEx < CloudNetwork
                     if VNF_opt.StaticCostOption == NodeStaticCostOption.Random
                         % VNF_opt.static_cost_range = [0.1 0.3];
                         % VNF_opt.ProcessEfficiency is not set, using random value.
-                        if ~isfield(VNF_opt, 'static_cost_range') ||...
-                                isempty(VNF_opt.static_cost_range)
+                        if ~isfield(VNF_opt, 'StaticCostRange') ||...
+                                isempty(VNF_opt.StaticCostRange)
                             scr = [0.1 0.3];
                         else
-                            scr = VNF_opt.static_cost_range;
+                            scr = VNF_opt.StaticCostRange;
                         end
                         rng(VNF_opt.RandomSeed(2));
                         node_capacity = this.DataCenters.Capacity;
@@ -155,47 +212,7 @@ classdef CloudNetworkEx < CloudNetwork
                     % TODO
             end
         end
-        
-        %%% compute link cost. Subclass may override this to provide cost.
-        function link_uc = getLinkCost(this)
-            link_uc = this.getLinkField('UnitCost') + this.phis_l;
-        end
-        
-        %%% compute node cost. Subclass may override this to provide cost.
-        function node_uc = getNodeCost(this)
-            node_uc = this.getDataCenterField('UnitCost') + this.phis_n;
-        end
-        
-        function runtime = priceIteration(this, node_price, link_price, options)
-            if nargout == 1
-                slice_runtime = 0;
-                runtime.Serial = 0;
-            end
-            for s = 1:this.NumberSlices
-                sl = this.slices{s};
-                link_id = sl.VirtualLinks.PhysicalLink;
-                dc_id = sl.getDCPI;
-                sl.VirtualLinks.Price = link_price(link_id);
-                sl.VirtualDataCenters.Price = node_price(dc_id);
-                %%%
-                % optimize each slice with price and resource constraints.
-                if nargout == 1
-                    tic;
-                end
-                sl.optimalFlowRate(options);
-                if nargout == 1
-                    t = toc;
-                    slice_runtime = max(slice_runtime, t);
-                    runtime.Serial = runtime.Serial + t;
-                end
-            end
-            if nargout == 1
-                runtime.Parallel = slice_runtime;
-            end
-        end
-        
-        [node_price, link_price, runtime] = pricingFactorAdjustment(this, options);
-
+                
         % Save the computation results to individual slices and network.
         % TODO: rename as <save_results>.
         function saveStates(this, node_price, link_price, lambda)
@@ -233,18 +250,75 @@ classdef CloudNetworkEx < CloudNetwork
                 this.lambda = [];
             end
         end
+        %%%
+        % used for single slices.
+        function slice_data = updateSliceData(this, slice_data)
+            slice_data.ConstantProfit = 0;
+            if strcmp(this.options.Method, 'single-function')
+                slice_data.Alpha_f = zeros(NS, 1);
+            end
+            for s = 1:this.NumberSlices
+                sl = this.slices{s};
+                slice_data.ConstantProfit = slice_data.ConstantProfit + sl.constant_profit;
+                if strcmp(this.options.Method, 'single-function')
+                    slice_data.Alpha_f(s) = sum(this.VNFTable{sl.VNFList,{'ProcessEfficiency'}});
+                elseif strcmp(this.options.Method, 'normal')
+                    %         b_vnf(this.slices{s}.VNFList) = true;
+                end
+            end
+            if strcmp(this.options.Method, 'normal')
+                slice_data.VNFList = 1:this.NumberVNFs;
+                %     slice_data.VNFList = find(b_vnf);
+            else    % single-function
+                slice_data.VNFList = 1;
+            end
+        end
+        function argout = calculateOptimalOutput(this, ss, slice_data)
+            tempout = calculateOptimalOutput@CloudNetwork(this, ss);
+            if cellstrfind(welfare_type, 'Accurate')
+                argout.WelfareAccurateOptimal = tempout.WelfareOptimal...
+                    + ss.constant_profit;
+            end
+            if cellstrfind(welfare_type, 'Approximate')
+                argout.WelfareApproxOptimal = ss.fcnProfit([], ss);   % net profit
+            end
+            % if ~isempty(this.eta)
+            %     embed_profit_approx = this.eta * ...
+            %         this.getNetworkCost(ss.VirtualNodes.Load, ss.VirtualLinks.Load, 'Approximiate');
+            %     embed_profit_accurate = this.eta * ...
+            %         this.getNetworkCost(ss.VirtualNodes.Load, ss.VirtualLinks.Load, 'Accurate');
+            % else
+            %     embed_profit_approx = 0;
+            %     embed_profit_accurate = 0;
+            % end
+            % argout.welfare_approx_optimal = argin.welfare_approx_optimal + embed_profit_approx;
+            % argout.welfare_accurate_optimal = argin.welfare_accurate_optimal + embed_profit_accurate;
+            if strcmp(this.options.Method, 'single-function')    % TODO
+                % NV might not be the true number of VNFs when the method is 'single-function'
+                % NV = length(slice_data.VNFList);
+                argout.Znpf = reshape(full(ss.Variables.z), ...
+                    this.NumberDataCenters, this.NumberPaths, length(slice_data.VNFList));
+            elseif strcmp(this.options.Method, 'normal')
+                argout.Znpf = tempout.Znpf;
+            end
+        end
     end
     
     methods
-        [output, runtime] = partitionResourcePricing(this, init_price, options);
-        [output, runtime] = optimizeResourcePrice0(this, init_price, options);
-        [output, runtime] = optimizeResourcePrice2(this, init_price, options);
-        [output, runtime] = resourcePartitionOptimization(this, slice_weight, options);
-        [output] = optimizeNetSocialWelfare1( this, options );
-        welfare = optimizeNetSocialWelfare2( this, options );
+        [output, runtime] = partitionResourcePricing(this, init_price);
+        [output, runtime] = optimizeResourcePrice0(this, init_price);
+        [output, runtime] = optimizeResourcePrice2(this, init_price);
+        [output, runtime] = resourcePartitionOptimization(this, slice_weight);
+        [output] = optimizeNetSocialWelfare1( this );
+        welfare = optimizeNetSocialWelfare2( this );
         welfare = optimizeNetSocialWelfare2a( this );
         welfare = optimizeNetSocialWelfare3( this );
         welfare = optimizeNetSocialWelfare4( this );
+        % SingleSliceOptimization
+        % the profit type with |Percent| has been deprecated.
+        % if cellstrfind(options.ProfitType, 'Percent')
+        %     warning('the profit type with Percent has been deprecated.');
+        % end
     end
 end
 
