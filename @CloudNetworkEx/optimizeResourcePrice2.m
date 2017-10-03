@@ -1,12 +1,10 @@
 % Optimize resource price
 % * *TODO* _refine the price adjustment algorithm._
 % * *TODO* Resource Cost Model: linear, convex (quatratic)
-%% Display option
-% iter-final.
-function [output, runtime] = optimizeResourcePrice2(this, init_price, options)
-if nargin <= 2
-    options.Display = 'final';
-end
+function [output, runtime] = optimizeResourcePrice2(this, init_price)
+global InfoLevel;
+options = getstructfields(this.options, {'PricingFactor', 'PercentFactor'});
+
 this.clearStates;
 if nargout == 2
     slice_runtime = 0;
@@ -29,13 +27,13 @@ node_uc = this.getNodeCost;
 % Initial Price
 t1 = 0.8;           % {0.1|1}
 if nargin >=2 && ~isempty(init_price)
-    link_price = t1 * init_price.link;
-    node_price = t1 * init_price.node;
+    link_price = t1 * init_price.Link;
+    node_price = t1 * init_price.Node;
 else
-    init_price.link = t1* link_uc;
-    link_price = init_price.link;
-    init_price.node = t1* node_uc;
-    node_price = init_price.node;
+    init_price.Link = t1* link_uc;
+    link_price = init_price.Link;
+    init_price.Node = t1* node_uc;
+    node_price = init_price.Node;
 end
 t0 = 10^-1;     % {1|0.1|0.01}
 delta_link_price = t0 * link_uc;  % init_price.link
@@ -56,7 +54,7 @@ while true
             tic;
         end
         [slice_profit(s), node_load(:,s), link_load(:,s)] ...
-            = this.slices{s}.priceOptimalFlowRate([], options);
+            = this.slices{s}.priceOptimalFlowRate();
         if nargout == 2
             t = toc;
             slice_runtime = max(slice_runtime, t);
@@ -78,7 +76,7 @@ while true
     node_price(b_node_violate) = node_price(b_node_violate) + delta_node_price(b_node_violate);
     delta_node_price(b_node_violate) = delta_node_price(b_node_violate) * 2;
 end
-if strncmp(options.Display, 'notify', 6)
+if InfoLevel.UserModelDebug >= DisplayLevel.Notify
     fprintf('\tFirst stage objective value: %d.\n', new_net_welfare);
 end
 
@@ -90,20 +88,20 @@ d0 = 10^-1;
 d1 = 10^-0;
 stop_cond1 = ~isempty(find(delta_link_price > d0 * link_uc, 1));
 stop_cond2 = ~isempty(find(delta_node_price > d0 * node_uc, 1));
-stop_cond3 = this.checkProfitRatio(node_load, link_load, node_price, link_price);
+stop_cond3 = this.checkProfitRatio(node_load, link_load, node_price, link_price, options);
 slice_profit = zeros(NS,1);
 partial_link_violate = false(NL, 1);
 partial_node_violate = false(NN, 1);
 b_first = true;
 while stop_cond1 && stop_cond2 && stop_cond3
     number_iter = number_iter + 1;
-    if strncmp(options.Display, 'iter', 4)
+    if InfoLevel.UserModelDebug == DisplayLevel.Iteration
         disp('----link price    delta link price----')
         disp([link_price delta_link_price]);
     end
     b_link = link_price > delta_link_price;
     link_price(b_link) = link_price(b_link) - delta_link_price(b_link);
-    if strncmp(options.Display, 'iter', 4)
+    if InfoLevel.UserModelDebug == DisplayLevel.Iteration
         disp('----node price    delta node price----')
         disp([node_price delta_node_price]);
     end
@@ -117,7 +115,7 @@ while stop_cond1 && stop_cond2 && stop_cond3
         if nargout == 2
             tic;
         end
-        [slice_profit(s), ~, ~] = this.slices{s}.priceOptimalFlowRate([], options);
+        [slice_profit(s), ~, ~] = this.slices{s}.priceOptimalFlowRate();
         if nargout == 2
             t = toc;
             slice_runtime = max(slice_runtime, t);
@@ -142,7 +140,7 @@ while stop_cond1 && stop_cond2 && stop_cond3
         end
         partial_link_violate = false(NL, 1);
         partial_node_violate = false(NN, 1);
-        stop_cond3 = this.checkProfitRatio(node_load, link_load, node_price, link_price);
+        stop_cond3 = this.checkProfitRatio(node_load, link_load, node_price, link_price, options);
     else
         b_first = false;
         link_price(b_link) = link_price(b_link) + delta_link_price(b_link);
@@ -175,7 +173,7 @@ end
 %% Profit ratio aware price adjustment
 delta_link_price = t1 * link_price;
 delta_node_price = t1 * node_price;
-stop_cond3 = ~this.checkProfitRatio(node_load, link_load, node_price, link_price);
+stop_cond3 = ~this.checkProfitRatio(node_load, link_load, node_price, link_price, options);
 % only adjust price when the network's profit lower than the threshold.
 if stop_cond3
     while stop_cond3
@@ -190,7 +188,7 @@ if stop_cond3
             if nargout == 2
                 tic;
             end
-            this.slices{s}.priceOptimalFlowRate([], options);
+            this.slices{s}.priceOptimalFlowRate();
             if nargout == 2
                 t = toc;
                 slice_runtime = max(slice_runtime, t);
@@ -201,7 +199,7 @@ if stop_cond3
             runtime.Parallel = runtime.Parallel + slice_runtime;
         end
         [node_load, link_load] = this.getNetworkLoad(utility);
-        stop_cond3 = ~this.checkProfitRatio(node_load, link_load, node_price, link_price);
+        stop_cond3 = ~this.checkProfitRatio(node_load, link_load, node_price, link_price, options);
         if ~stop_cond3
             delta_link_price = delta_link_price * 2;
             delta_node_price = delta_node_price * 2;
@@ -210,8 +208,9 @@ if stop_cond3
     
     l = 0.5;
     h = 1;
-    options.epsilon = 10^-3;
-    while this.checkProfitRatio(node_load, link_load, node_price, link_price, options)
+    new_opts = options;
+    new_opts.Epsilon = 10^-3;
+    while this.checkProfitRatio(node_load, link_load, node_price, link_price, new_opts)
         number_iter = number_iter + 1;
         alpha = (l+h)/2;
         link_price = link_price + delta_link_price * alpha;
@@ -224,7 +223,7 @@ if stop_cond3
             if nargout == 2
                 tic;
             end
-            this.slices{s}.priceOptimalFlowRate([], options);
+            this.slices{s}.priceOptimalFlowRate();
             if nargout == 2
                 t = toc;
                 slice_runtime = max(slice_runtime, t);
@@ -235,7 +234,7 @@ if stop_cond3
             runtime.Parallel = runtime.Parallel + slice_runtime;
         end
         [node_load, link_load] = this.getNetworkLoad(utility);
-        if this.checkProfitRatio(node_load, link_load, node_price, link_price)
+        if this.checkProfitRatio(node_load, link_load, node_price, link_price, options)
             h = alpha;
         else
             l = alpha;
@@ -247,10 +246,10 @@ end
 this.finalize(node_price, link_price);
 
 % Calculate the output
-output = this.calculateOutput([], options);
+output = this.calculateOutput();
 
 % output the optimization results
-if strncmp(options.Display, 'notify', 6) || strncmp(options.Display, 'final', 5)
+if InfoLevel.UserModelDebug >= DisplayLevel.Final
     fprintf('Optimization results:\n');
     fprintf('\tThe optimization procedure contains %d iterations.\n', number_iter);
     fprintf('\tOptimal objective value: %d.\n', output_optimal.welfare_accurate);

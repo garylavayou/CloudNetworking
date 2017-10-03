@@ -3,10 +3,9 @@
 % * *NOTE*: when a point is not actually ascent, do not go backward, and continue searching from
 % current point.
 %%
-function [output] = optimizeNetSocialWelfare1( this, options )
-if nargin <= 1
-    options.Display = 'final';
-end
+function [output] = optimizeNetSocialWelfare1( this )
+global InfoLevel;
+options = getstructfields(this.options, {'PricingFactor', 'PercentFactor'});
 
 % network data
 NN = this.NumberNodes;
@@ -41,7 +40,7 @@ while true
     end
     dual_fval = dual_fval - dot(lambda.n, node_capacity) - ...
         dot(lambda.e, link_capacity);
-    if strncmp(options.Display,'iter', 4)
+    if InfoLevel.UserModelDebug == DisplayLevel.Iteration
         fprintf('\tDual problem: new value: %.3e, old value: %.3e, difference: %.3e.\n', ...
             dual_fval, prev_dual_fval, dual_fval-prev_dual_fval);
     end
@@ -96,7 +95,7 @@ while true
     end
     dual_fval = dual_fval - dot(lambda.n, node_capacity) - dot(lambda.e, link_capacity);
     [node_load, link_load] = this.getNetworkLoad;
-    if strncmp(options.Display,'iter', 4)
+    if InfoLevel.UserModelDebug == DisplayLevel.Iteration
         fprintf('\tDual problem: new value: %.3e, old value: %.3e, difference: %.3e.\n', ...
             dual_fval, prev_dual_fval, dual_fval-prev_dual_fval);
     end
@@ -151,6 +150,8 @@ end
 % different methods, i.e. |ApproximatePercent|, |ApproximatePrice|, |AccuratePercent|,
 % |AccuratePrice|. 
 % # Flow rate of all flows in the network.
+
+%% TODO: replace with calculateOutput
 output.node_price = node_price;
 output.link_price = link_price;
 output.node_load = node_load;
@@ -223,7 +224,7 @@ output.profit.ApproximatePrice(end) = output.welfare_approx - ...
     sum(output.profit.ApproximatePrice(1:(end-1))) + embed_profit_approx;
 output.profit.AccuratePrice(end) = output.welfare_accurate - ...
     sum(output.profit.AccuratePrice(1:(end-1))) + embed_profit_accurate;  
-if ~strcmp(options.Display,'off') && ~strcmp(options.Display,'none')
+if InfoLevel.UserModelDebug > DisplayLevel.Off
     fprintf('\tOptimal solution: fx = %G, g(¦Ë) = %G.\n', output.welfare_accurate, dual_fval);
     fprintf('\tIteration number: %d, Evaluation Number: %G.\n', iter_num, eval_num);
 end

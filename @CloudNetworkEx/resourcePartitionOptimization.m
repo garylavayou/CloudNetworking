@@ -5,11 +5,11 @@
 %
 % The process is different from VNE, which knows the explicit demand of network resources,
 % and try to find the embedding solution.
-function [ output, runtime ] = resourcePartitionOptimization( this, slice_weight, options )
-if nargin <= 2
-    options.Display = 'final';
-end
-options.Method = 'slice-price';
+function [ output, runtime ] = resourcePartitionOptimization( this, slice_weight )
+global InfoLevel;
+options = getstructfields(this.options, ...
+    {'Method', 'ProfitType', 'WelfareType', 'PercentFactor'});
+
 this.clearStates;
 
 NN = this.NumberNodes;
@@ -65,18 +65,17 @@ end
 
 %% Independently optimize each network slice
 if nargout == 2
-    [node_price, link_price, runtime] = pricingFactorAdjustment(this, options);
+    [node_price, link_price, runtime] = pricingFactorAdjustment(this);
 else
-    [node_price, link_price] = pricingFactorAdjustment(this, options);
+    [node_price, link_price] = pricingFactorAdjustment(this);
 end
 
 % Finalize substrate network
 this.finalize(node_price, link_price);
 
 %% calculate the output (net social welfare)
-output = this.calculateOutput([], options);
-if strncmp(options.Display,'iter', 4) || ...
-        strncmp(options.Display,'notify', 6) || strncmp(options.Display,'final', 5)
+output = this.calculateOutput();
+if InfoLevel.UserModelDebug >= DisplayLevel.Final
     fprintf('\tOptimal net social welfare: fx = %G.\n', output.welfare_approx);
 end
 end

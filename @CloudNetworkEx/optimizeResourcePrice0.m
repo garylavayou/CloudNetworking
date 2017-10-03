@@ -10,10 +10,10 @@
 % depart from the network.
 
 %%
-function [output, runtime] = optimizeResourcePrice0(this, init_price, options)
-if nargin <= 2
-    options.Display = 'final';
-end
+function [output, runtime] = optimizeResourcePrice0(this, init_price)
+global InfoLevel;
+options = getstructfields(this.options, {'PricingFactor', 'PercentFactor'});
+
 this.clearStates;
 if nargout == 2
     slice_runtime = 0;
@@ -30,13 +30,13 @@ link_capacity = this.getLinkField('Capacity');
 
 % Initial Price
 if nargin >=2 && ~isempty(init_price)
-    link_price = init_price.link;
-    node_price = init_price.node;
+    link_price = init_price.Link;
+    node_price = init_price.Node;
 else
-    init_price.link = this.getLinkCost;
-    link_price = init_price.link;
-    init_price.node = this.getNodeCost;
-    node_price = init_price.node;
+    init_price.Link = this.getLinkCost;
+    link_price = init_price.Link;
+    init_price.Node = this.getNodeCost;
+    node_price = init_price.Node;
 end
 beta_link = link_price.*(1/3).*link_capacity;
 delta_link_price = beta_link./link_capacity;
@@ -88,7 +88,7 @@ while true
     residual_link_capacity = link_capacity - link_load;
     b_violate = residual_link_capacity<=0;
     delta_link_price(b_violate) = delta_link_price(b_violate) * 2;
-    new_link_price = init_price.link;
+    new_link_price = init_price.Link;
     a_link_violate = a_link_violate | b_violate;
     new_link_price(a_link_violate) = ...
         new_link_price(a_link_violate) + delta_link_price(a_link_violate);
@@ -96,7 +96,7 @@ while true
     residual_node_capacity = node_capacity - node_load;
     b_violate = residual_node_capacity<=0;
     delta_node_price(b_violate) = delta_node_price(b_violate) * 2;
-    new_node_price = init_price.node;
+    new_node_price = init_price.Node;
     a_node_violate = a_node_violate | b_violate;
     new_node_price(a_node_violate) = ...
         new_node_price(a_node_violate) + delta_node_price(a_node_violate);
@@ -122,7 +122,7 @@ while true
     stop_cond2 = norm(new_profit-profit)/norm(profit);
     %     stop_cond3 = norm(new_net_welfare-net_welfare)/NS < 10^-3;
     stop_cond3 = norm(new_net_welfare-net_welfare)/norm(new_net_welfare);
-    if strncmp(options.Display, 'iter', 4)
+    if InfoLevel.UserModelDebug == DisplayLevel.Iteration
         fprintf('\tObjective value: %d.\n', new_net_welfare);
         fprintf('\t stop condition 1: (%G,%G).\n', stop_cond11,stop_cond12);
         fprintf('\t stop condition 2: %G.\n', stop_cond2);
@@ -139,7 +139,7 @@ while true
     end
     number_iter = number_iter + 1;
 end
-if strncmp(options.Display, 'notify', 6)
+if InfoLevel.UserModelDebug >= DisplayLevel.Notify
     fprintf('\tFirst stage objective value: %d.\n', new_net_welfare);
 end
 
@@ -147,10 +147,10 @@ l = 0;
 alpha = 1/2;
 h = 1;
 while true && ~(nnz(a_link_violate)==0 && nnz(a_node_violate)==0)
-    link_price = init_price.link;
+    link_price = init_price.Link;
     link_price(a_link_violate) = ...
         link_price(a_link_violate) + alpha*delta_link_price(a_link_violate);
-    node_price = init_price.node;
+    node_price = init_price.Node;
     node_price(a_node_violate) = ...
         node_price(a_node_violate) + alpha*delta_node_price(a_node_violate);
     for s = 1:NS
@@ -161,7 +161,7 @@ while true && ~(nnz(a_link_violate)==0 && nnz(a_node_violate)==0)
         if nargout == 2
             tic;
         end
-        [profit(s), ~, ~] = this.slices{s}.priceOptimalFlowRate([], options);
+        [profit(s), ~, ~] = this.slices{s}.priceOptimalFlowRate();
         if nargout == 2
             t = toc;
             slice_runtime = max(slice_runtime, t);
@@ -191,10 +191,10 @@ end
 this.finalize(node_price, link_price);
 
 % Calculate the output
-output = this.calculateOutput([], options);
+output = this.calculateOutput();
 
 % output the optimization results
-if strncmp(options.Display, 'notify', 6) || strncmp(options.Display, 'final', 5)
+if InfoLevel.UserModelDebug >= DisplayLevel.Final
     fprintf('Optimization results:\n');
     fprintf('\tThe optimization procedure contains %d iterations.\n', number_iter);
     fprintf('\tOptimal objective value: %d.\n', new_net_welfare);
