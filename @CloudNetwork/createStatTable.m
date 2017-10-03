@@ -6,13 +6,15 @@ zero_stat4 = zeros(num_point, 4);
 
 stat = table;
 if strcmpi(type, 'optimal-spp')
-    stat.AccurateWelfare = zero_stat2;
+    stat.Welfare = zero_stat2;
+%     stat.AccurateWelfare = zero_stat2;
     stat.Properties.VariableDescriptions{1} = 'Upperbound|ByPrice';
-    stat.ApproximateWelfare = zero_stat2;
-    stat.Properties.VariableDescriptions{2} = 'Upperbound|ByPrice';
+%     stat.ApproximateWelfare = zero_stat2;
+%     stat.Properties.VariableDescriptions{2} = 'Upperbound|ByPrice';
 else
-    stat.AccurateWelfare = zero_stat1;
-    stat.ApproximateWelfare = zero_stat1;
+    stat.Welfare = zero_stat1;
+    %     stat.AccurateWelfare = zero_stat1;
+    %     stat.ApproximateWelfare = zero_stat1;
 end
 stat.Profit = zero_stat1;
 stat.Cost = zero_stat1;
