@@ -58,6 +58,7 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
         %% Constructor
         %   PhysicalNetwork(node_opt, link_opt, VNF_opt, options)
         function this = PhysicalNetwork(varargin)
+            declare_info_level;
             if isempty(varargin)
                 return;
             elseif isa(varargin{1}, 'PhysicalNetwork')
@@ -86,7 +87,7 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
                 end
             end
             this.Topology.Nodes.DataCenter = zeros(this.NumberNodes,1);
-            this.Topology.Nodes{this.DataCenters.NodeIndex, 'DataCenter'} = ...
+            this.Topology.Nodes{dc_node_index, 'DataCenter'} = ...
                 (1:height(this.DataCenters))';            
             this.graph = DirectedGraph(this.Topology);
             %%%
@@ -104,12 +105,6 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
             
             % Initialize VNF Specification
             this.initializeVNF(VNF_opt);      
-            
-            if length(varargin) >= 4
-                this.options = structmerge(this.options, ...
-                    getstructfields(varargin{4}, {'Display'}));
-            end
-            
         end
     end
     
@@ -151,11 +146,34 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
             end
         end
         %%%
-        %
+        % called by generateFlowTable.
+        function info = updateDemandInfo(this, slice_opt)
+            switch slice_opt.FlowPattern
+                case FlowPattern.RandomSingleFlow
+                    info.NumberFlows = 1;
+                case FlowPattern.RandomMultiFlow
+                    info.NumberFlows = this.NumberNodes*(this.NumberNodes-1);
+                otherwise
+                    error('error: cannot handle the flow pattern <%s>.', ...
+                        slice_opt.FlowPattern.char);
+            end
+            if isfield(slice_opt, 'NodeSet')
+                info.NumberNodes = length(slice_opt.NodeSet);
+                info.NodeSet = slice_opt.NodeSet;
+            else
+                info.NumberNodes = this.Topology.numnodes;
+                info.NodeSet = 1:info.NumberNodes;
+            end
+        end
+        %%%
+        % called by generateFlowTable.
         function options = updatePathConstraints(this, slice_opt)
             options = getstructfields(slice_opt, ...
                 {'DelayConstraint'}, 'ignore');
-            options.delay_opt = this.LinkOptions.delay;
+            options.DelayModel = this.LinkOptions.DelayModel;
+        end
+        function end_points = generateEndPoints(this, info, slice_opt) %#ok<INUSL,INUSD>
+            end_points = info.NodeSet(unique_randi(info.NumberNodes, 2, 'stable'));
         end
         %%%
         % Called by access AddSlice
