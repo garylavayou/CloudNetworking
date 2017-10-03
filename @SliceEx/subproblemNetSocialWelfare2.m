@@ -8,6 +8,7 @@ function [fval, node_load, link_load] = subproblemNetSocialWelfare2( this, lambd
 %% Parameters
 % |lambda.pf| is a matrix and lambda.npf is a 3-D array.
 % |dg_pf|, |dg_p|, |dg_npf| is the inrement of gradient on lambda.
+global InfoLevel;
 %% Set the feasible start point
 x0 = zeros(this.num_vars,1);
 x0(1:this.NumberPaths) = 1;
@@ -27,7 +28,7 @@ fmincon_opt.Algorithm = 'interior-point';
 fmincon_opt.HessianFcn = @(x,la)Slice.fcnHessian(x,la,this);
 fmincon_opt.SpecifyObjectiveGradient = true;
 fmincon_opt.SpecifyConstraintGradient = false;
-fmincon_opt.Display = 'notify';
+fmincon_opt.Display = InfoLevel.InnerModelDebug.char;
 [x, fval, exitflag] = fmincon(@(x)Slice.subproblemObjective(x, lambda, this), ...
     x0, this.As_res, bs, [], [], lbs, [], [], fmincon_opt);
 % fprintf('\tThe optimal net profit of the slice: %G.\n', -fval);
@@ -51,7 +52,10 @@ if exitflag == 1 || exitflag == 2
     this.x_path(this.x_path<(10^-4)*max(this.x_path)) = 0;
     this.z_npf(this.z_npf<(10^-4)*max(this.z_npf)) = 0;
     if ~this.checkFeasible([this.x_path; this.z_npf])
-        warning('the rounding of variables with small quantity will make the solution infeasible.');
+        if InfoLevel.UserModelDebug >= DisplayLevel.Notify
+            warning('subproblemNetSocialWelfare: the rounding of variables %s', ...
+                'with small quantity will make the solution infeasible.');
+        end
     end
 
     % |x_path.*alpha_f'| is a compatible arithmetic operation.
@@ -115,7 +119,9 @@ if exitflag == 1 || exitflag == 2
 %         g_npf = -reshape(z_npf, this.NumberVirtualNodes, this.NumberPaths, this.NumberVNFs);
 %     end
 else
-    warning('abnormal exit with flag %d.',exitflag);
+    if InfoLevel.UserModelDebug >= DisplayLevel.Notify
+        warning('abnormal exit with flag %d.',exitflag);
+    end
 end
 end
 

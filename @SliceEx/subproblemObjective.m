@@ -10,7 +10,7 @@ node_load = S.getNodeLoad(var_node);    % the load of virtual nodes in the slice
 % The net profit of a slice (objective value) is equal to the utility less the slice cost
 % and the cost introduced by dual variables.
 %
-% *Note*: cannot use _PhysicalNetwork.getNetworkCost_ to calculate the slice cost.
+% *Note*: cannot use _CloudNetworkEx.getNetworkCost_ to calculate the slice cost.
 profit = S.weight*sum(fcnUtility(S.getFlowRate(var_path))) - ...
     S.getResourceCost(node_load, link_load);
 
