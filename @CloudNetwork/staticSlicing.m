@@ -6,22 +6,10 @@
 % rejected.
 %%
 % |options|: if _Method_ is 'slice', then we dimension the slice without pricing,
-% otherwise, the fixed pricing policy is adopted (slice-price). *TODO*: we can adjust the
-% unit price according to the residual capacity.
-function output = staticSlicing(this, slice, options)
-
-if nargin <= 2
-    options.Display = 'final';
-    options.Method = 'slice';
-else
-    if ~isfield(options, 'Display')
-        options.Display = 'final';
-    end
-    if ~isfield(options, 'Method')
-        warning('default method (slice with resource cost) is used.');
-        options.Method = 'slice';
-    end
-end
+% otherwise, the fixed pricing policy is adopted (slice-price). [Deprecated]
+%
+% *TODO*: we can adjust the unit price according to the residual capacity.
+function output = staticSlicing(this, slice)
 
 if nargin>=2 && ~isempty(slice)
     %% Allocate Resource to the new arrival slice
@@ -32,7 +20,8 @@ if nargin>=2 && ~isempty(slice)
     ss.VirtualDataCenters.Capacity = this.getDataCenterField('ResidualCapacity', ss.getDCPI);
     ss.VirtualLinks.Capacity = ...
         this.getLinkField('ResidualCapacity', ss.VirtualLinks.PhysicalLink);
-    [~] = ss.optimalFlowRate(options);
+    [~] = ss.optimalFlowRate(getstructfields(this.options, ...
+        {'Method', 'ConstraintTolerance'}));
     %% Finalize the new slice and the substrate network
     % # After the optimization, the resource allocation variables, flow rate, virtual
     % node/link load of the last slice have been recorded.
@@ -56,5 +45,5 @@ this.setDataCenterField('Load', node_load);
 this.setLinkField('Load', link_load);
 
 % Calculate the output
-output = this.calculateOutput([], options);
+output = this.calculateOutput([]);
 end
