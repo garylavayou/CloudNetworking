@@ -1,16 +1,10 @@
 % Optimize resource price
 % * *TODO* Resource Cost Model: linear, convex (quatratic)
 % DATE: 2017-04-23
-%% Display option
-% iter-final.
-function [output, runtime] = optimizeResourcePriceNew(this, init_price, options)
-if nargin <= 2
-    options.Display = 'final';
-end
+function [output, runtime] = optimizeResourcePriceNew(this, init_price)
+global InfoLevel;
+options = getstructfields(this.options, {'Threshold','Form'});
 options.PricingPolicy = 'quadratic-price';
-if ~isfield(options, 'Threshold') || isempty(options.Threshold)
-    options.Threshold = 'average';
-end
 % options.Threshold = '';
 switch options.Threshold
     case {'min', 'average', 'max'}
@@ -42,13 +36,13 @@ node_uc = this.getNodeCost;
 % Initial Price
 t1 = 1;           % {0.1|0.8|1}
 if nargin >=2 && ~isempty(init_price)
-    link_price = t1 * init_price.link;
-    node_price = t1 * init_price.node;
+    link_price = t1 * init_price.Link;
+    node_price = t1 * init_price.Node;
 else
-    init_price.link = t1* link_uc;
-    link_price = init_price.link;
-    init_price.node = t1* node_uc;
-    node_price = init_price.node;
+    init_price.Link = t1* link_uc;
+    link_price = init_price.Link;
+    init_price.Node = t1* node_uc;
+    node_price = init_price.Node;
 end
 t0 = 10^-1;     % {1|0.1|0.01}
 delta_link_price = t0 * link_uc;  % init_price.link
@@ -62,7 +56,7 @@ if b_profit_ratio
     b_forced_break = false;
 end
 while true
-    SolveSCP(node_price, link_price);
+    new_net_welfare = SolveSCP(node_price, link_price);
     sp_profit_new = this.getSliceProviderProfit(node_price, link_price, ...
         options.PricingPolicy);
     %% Stop condtion 
@@ -73,7 +67,8 @@ while true
     else
         sp_profit = sp_profit_new;
     end
-    if b_profit_ratio && this.checkProfitRatio(node_price, link_price, options)
+    if b_profit_ratio && this.checkProfitRatio(node_price, link_price, ...
+            getstructfields(options, 'PricingPolicy'))
         b_forced_break = true;
         break;
     end
@@ -118,7 +113,7 @@ if ~b_profit_ratio || ~b_forced_break
         link_price_middle = [(2/3)*link_price_prev(:,1)+(1/3)*link_price_prev(:,2), ...
             (1/3)*link_price_prev(:,1)+(2/3)*link_price_prev(:,2)];
         for i = 1:2
-            SolveSCP(node_price_middle(:,i), link_price_middle(:,i));
+            new_net_welfare = SolveSCP(node_price_middle(:,i), link_price_middle(:,i));
             sp_profit_new(i) = this.getSliceProviderProfit(node_price_middle(:,i), ...
                 link_price_middle(:,i), options.PricingPolicy);
         end
@@ -164,10 +159,10 @@ while true
     % Slices solve P1 with $¦Ñ_k$, return the node (link) load v(y);
     % announce the resource price and optimize each network slice
     number_iter = number_iter + 1;
-    SolveSCP(node_price, link_price);
+    new_net_welfare = SolveSCP(node_price, link_price);
     k = k+1;
 end
-if strncmp(options.Display, 'notify', 6)
+if InfoLevel.UserModelDebug >= DisplayLevel.Notify
     fprintf('\tFirst stage objective value: %d.\n', new_net_welfare);
 end
 
@@ -181,7 +176,8 @@ if k>1
     stop_cond1 = ~isempty(find(delta_link_price > d0 * link_uc, 1));
     stop_cond2 = ~isempty(find(delta_node_price > d0 * node_uc, 1));
     if b_profit_ratio
-        stop_cond3 = this.checkProfitRatio(node_price, link_price, options);
+        stop_cond3 = this.checkProfitRatio(node_price, link_price, ...
+        getstructfields(options, 'PricingPolicy'));
     else
         sp_profit = this.getSliceProviderProfit(node_price, link_price, options.PricingPolicy);
         stop_cond3 = true;
@@ -191,13 +187,13 @@ if k>1
     b_first = true;
     while stop_cond1 && stop_cond2 && stop_cond3
         number_iter = number_iter + 1;
-        if strncmp(options.Display, 'iter', 4)
+        if InfoLevel.UserModelDebug == DisplayLevel.Iteration
             disp('----link price    delta link price----')
             disp([link_price delta_link_price]);
         end
         b_link = link_price > delta_link_price;
         link_price(b_link) = link_price(b_link) - delta_link_price(b_link);
-        if strncmp(options.Display, 'iter', 4)
+        if InfoLevel.UserModelDebug == DisplayLevel.Iteration
             disp('----node price    delta node price----')
             disp([node_price delta_node_price]);
         end
@@ -208,7 +204,8 @@ if k>1
         
         if b_profit_ratio
             % the profit ratio of SP should not less than the predefined threshold.
-            stop_cond3 = this.checkProfitRatio(node_price, link_price, options);
+            stop_cond3 = this.checkProfitRatio(node_price, link_price, ...
+                getstructfields(options, 'PricingPolicy'));
         else
             % we decrease the price, the profit of SP should increase.
             sp_profit_new = this.getSliceProviderProfit(node_price, link_price, ...
@@ -276,18 +273,18 @@ end
 this.finalize(node_price, link_price);
 
 % Calculate the output
-output = this.calculateOutput([], options);
+output = this.calculateOutput([], getstructfields(options, 'PricingPolicy'));
 
 % output the optimization results
-if strncmp(options.Display, 'notify', 6) || strncmp(options.Display, 'final', 5)
+if InfoLevel.UserModel > DisplayLevel.Off
     fprintf('Optimization results:\n');
     fprintf('\tThe optimization procedure contains %d iterations.\n', number_iter);
-    fprintf('\tOptimal objective value: %d.\n', output_optimal.welfare_accurate);
+    fprintf('\tOptimal objective value: %d.\n', output.Welfare);
     fprintf('\tNormalized network utilization is %G.\n', this.utilizationRatio);
 end
 
 %%
-    function SolveSCP(node_price_t, link_price_t)
+    function netprofit = SolveSCP(node_price_t, link_price_t)
         for s = 1:NS
             sl = this.slices{s};
             options.LinkPrice = link_price_t(sl.VirtualLinks.PhysicalLink);
@@ -297,7 +294,9 @@ end
             if options.CountTime
                 tic;
             end
-            this.slices{s}.priceOptimalFlowRate([], options);
+            netprofit = this.slices{s}.priceOptimalFlowRate([], ...
+                getstructfields(options, ...
+                {'Form','PricingPolicy', 'LinkPrice', 'NodePrice'}, 'ignore'));
             if options.CountTime
                 t = toc;
                 slice_runtime = max(slice_runtime, t);
