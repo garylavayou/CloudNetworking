@@ -1,55 +1,40 @@
 classdef SliceEx < Slice
     properties
-        NumberDataCenters;
-        num_vars;
+        constant_profit = 0;	% consant profit added to avoid slices with negative profit.
     end
     
     methods
-        function n = get.NumberDataCenters(this)
-            n = nnz(this.VirtualDataCenters);
-        end
-        function n = get.num_vars(this)
-            n = (this.NumberVNFs*this.NumberDataCenters+1)*this.NumberPaths;
-        end
-        %%%
-        % retrive the node load of the slice, given the node variables. The node variables
-        % represent the resource allocation of data center nodes.
-        %
-        % |v_n|: data center's resource consumption.
-        function v_n = getNodeLoad(this, node_vars)
-            if nargin == 1
-                node_vars = this.Variables.z;
+        function this = SliceEx(slice_data)
+            if nargin == 0
+                slice_data = [];
             end
-            %%
-            % |node_vars| is index by |(node,path,function)|.
-            % node_load = sum(f, node_vars(:,:,f).*I_node_path).
-            NC = this.NumberDataCenters;
-            NP = this.NumberPaths;
-            v_n = zeros(NC,1);
-            np = NC * NP;
-            z_index = 1:np;
-            for i = 1:this.NumberVNFs
-                node_vars_fi = reshape(node_vars(z_index), NC, NP);
-                v_n = v_n + sum(this.I_node_path.*node_vars_fi,2);
-                z_index = z_index + np;
+            this@Slice(slice_data);
+            if nargin == 0
+                return;
             end
-            
-            %% Alternative way to compute the node load.
-            %             col_index = (1:NC:((NP-1)*NC+1))';
-            %             col_index = repmat(col_index, 1, NV);
-            %             for c = 2:NV
-            %                 col_index(:,c) = col_index(:,c-1) + NC*NP;
-            %             end
-            %             col_index = col_index(:);
-            %             As = zeros(NC, NP*NV);
-            %             for row_index = 1:NC
-            %                 As(row_index, col_index) = repmat(this.I_node_path(row_index,:),1, NV);
-            %                 col_index = col_index + 1;
-            %             end
-            %             vn = As*node_vars;
+            if isfield(slice_data, 'ConstantProfit')
+                this.constant_profit = slice_data.ConstantProfit;
+            end
         end
         
-        function pc = getPathCost(this, lambda_e, lambda_n)
+        %         function pc = getPathCost(this, lambda_e, lambda_n)
+        %             link_uc = this.Parent.getLinkField('UnitCost', this.VirtualLinks.PhysicalLink); % the virtual links's unit cost
+        %             node_uc = this.Parent.getNodeField('UnitCost', this.VirtualNodes.PhysicalNode); % the virtual nodes's unit cost
+        %             pc = cell(this.NumberFlows, 1);
+        %             p = 1;
+        %             for i = 1:this.NumberFlows
+        %                 num_paths = this.FlowTable{i,'Paths'}.Width;
+        %                 pc{i} = zeros(num_paths, 1);
+        %                 for j = 1:num_paths
+        %                     eid = this.I_edge_path(:,p)~=0;
+        %                     pc{i}(j) = pc{i}(j) + sum(link_uc(eid)+lambda_e(eid)) + this.Parent.phis_l*nnz(eid);
+        %                     nid = this.I_node_path(:,p)~=0;
+        %                     pc{i}(j) = pc{i}(j) + min(node_uc(nid)+lambda_n(nid)) + this.Parent.phis_n;
+        %                     p = p + 1;
+        %                 end
+        %             end
+        %         end
+        function pc = getPathCost(this, lambda_e, lambda_n) 
             link_uc = this.link_unit_cost;
             node_uc = this.node_unit_cost;
             pc = cell(this.NumberFlows, 1);
@@ -122,6 +107,12 @@ classdef SliceEx < Slice
                 error('error: invalid model %s', model);
             end
         end
+        
+        %         function [nc, nid] = getPathNodeCost(this, pid, lambda_n)
+        %            node_uc = this.Parent.getNodeField('UnitCost', this.VirtualNodes.PhysicalNode);
+        %            nid = find(this.I_node_path(:,pid)~=0);
+        %            nc = node_uc(nid) + lambda_n(nid) + this.Parent.phis_n;
+        %         end
         %% Get the node cost on a path.
         function [nc, nid] = getPathNodeCost(this, pid, lambda_n)
             node_uc = this.node_unit_cost;
@@ -129,6 +120,74 @@ classdef SliceEx < Slice
             nc = node_uc(nid) + lambda_n(nid) + this.Parent.phis_n;
         end
 
+        function r = getRevenue(this)
+            r = getRevenue@Slice(this) + this.constant_profit;
+        end
+        
+        [fval, node_load, link_load] = subproblemNetSocialWelfare( this, lambda );
+        [fval, node_load, link_load] = subproblemNetSocialWelfare2( this, lambda );
 
+    end
+    
+    methods(Static)
+        % * *fcnProfitCompact* |static| : Evalute the objective function and gradient.
+        %
+        %      [profit, grad]= fcnProfitCompact(act_var_x, S)
+        %
+        % Only active independent variables are passed into the objective function.
+        %
+        [profit, grad]= fcnProfitCompact(act_var_x, S);
+        [fval,  grad] = subproblemObjective(var_x, lambda, S);
+        %%%
+        % * *fcnHessianCompact* |static| : Compact form of Hessian matrix of the Largrangian.
+        %
+        %      hess = fcnHessianCompact(act_var_x, ~, S)
+        hess = fcnHessianCompact(act_var_x, ~, S);
+    end
+    
+    methods(Access=private)
+        function rc = getResourceCost(this, node_load, link_load, model)
+            if nargin <= 1 || isempty(node_load)
+                node_load = this.VirtualDataCenters.Load;
+            end
+            if nargin <= 2 || isempty(link_load)
+                link_load = this.VirtualLinks.Load;
+            end
+            if nargin <= 3
+                warning('model is set as Approximate.');
+                model = 'Approximate';
+            end
+            rc = getResourceCost@Slice(this, node_load, link_load, model);
+            epsilon = pn.unitStaticNodeCost;
+            switch model
+                case 'Approximate'
+                    %%
+                    % $$static\_cost =
+                    %   \frac{\epsilon\delta(N-1)\sum_{n\in\mathcal{N}^{(s)}}{v_n}}{\sum_{n\in\mathcal{N}}{V_n}}
+                    % + \frac{\epsilon(1-\delta)(N-1)\sum_{e\in\mathcal{L}^{(s)}}{y_e}}{\sum_{e\in\mathcal{L}}{C_e}}
+                    % + \frac{\epsilon}{|\mathcal{S}|}$$
+                    rc = rc + pn.static_factor*epsilon/pn.NumberSlices;
+                    %%%
+                    % equal to:
+                    %
+                    %   sc = dot(link_uc+pn_phis_l, link_load) + dot(node_uc+pn.phis_n,
+                    %   node_load) + ... 
+                    %       pn.static_factor*epsilon/pn.NumberSlices; 
+            end
+        end
+    end
+    
+    methods(Access=protected)
+        function [x, fval, exitflag] = optimize(this, params, options)
+            switch options.Method
+                case 'price'
+                    [x, fval, exitflag] = optimize@Slice(this, params, options);
+                otherwise
+                    [x, fval, exitflag] = ...
+                        fmincon(@(x)Slice.fcnSocialWelfare(x,this,'Approximate'), ...
+                        params.x0, params.As, params.bs, params.Aeq, params.beq, ...
+                        params.lb, params.ub, [], fmincon_opt);
+            end
+        end
     end
 end
