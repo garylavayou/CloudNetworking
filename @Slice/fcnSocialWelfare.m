@@ -40,8 +40,7 @@ else
     grad = spalloc(length(var_x),1, S.NumberPaths+nnz(S.I_node_path)*S.NumberVNFs);
     for p = 1:S.NumberPaths
         i = S.path_owner(p);
-        f = S.I_flow_path(:,p)~=0;  % find the weight of the flow on the path.
-        grad(p) = -weight(f)/(1+S.I_flow_path(i,:)*var_path) + ...
+        grad(p) = -weight(i)/(1+S.I_flow_path(i,:)*var_path) + ...
             dot(link_price, S.I_edge_path(:,p)); %#ok<SPRIX>
     end
     
