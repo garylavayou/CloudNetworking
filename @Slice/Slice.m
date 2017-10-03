@@ -14,12 +14,13 @@ classdef Slice < VirtualNetwork
     
     properties (Access = protected)
         As_res;             % coefficient matrix of the processing constraints
+        Hrep;               % coefficient used to compute node resource consumption.
         x0;                 % start point
         link_load;          % temporary results of link load.
         node_load;          % temporary results of node load.
         flow_rate;          % temporary results of flow rate.
-    end
-    
+        I_active_variables;  % indicator of active variables
+    end    
     properties(Dependent, SetAccess = protected, GetAccess={?Slice, ?CloudNetwork})
         num_vars;           % number of optimization variables in the problem
         num_varz;           % number of variables in vector z_npf
@@ -38,15 +39,15 @@ classdef Slice < VirtualNetwork
             end
             %%%
             % Link price
-            if isfield(slice_data, 'link_price')
-                this.VirtualLinks.Price = slice_data.link_price;
+            if isfield(slice_data, 'LinkPrice')
+                this.VirtualLinks.Price = slice_data.LinkPrice;
             else
                 this.VirtualLinks.Price  = zeros(this.NumberVirtualLinks,1);
             end
             %%%
             % Data center node price
-            if isfield(slice_data, 'node_price')
-                this.VirtualDataCenters.Price = slice_data.node_price;
+            if isfield(slice_data, 'NodePrice')
+                this.VirtualDataCenters.Price = slice_data.NodePrice;
             else
                 this.VirtualDataCenters.Price = zeros(this.NumberDataCenters,1);
             end
@@ -55,14 +56,36 @@ classdef Slice < VirtualNetwork
                 this.weight = slice_data.Weight;
             end
             
-            if isfield(slice_data, 'alpha_f')
-                this.alpha_f = slice_data.alpha_f;
+            if isfield(slice_data, 'Alpha_f')
+                this.alpha_f = slice_data.Alpha_f;
             end
             this.getAs_res;
         end
     end
     
     methods
+        % For the node capacity constraint, the coefficient matrix is filled row-by-row.
+        % On row i, the non-zero elements located at (i-1)+(1:NC:((NP-1)*NC+1)) for the
+        % first |NC*NP| columns, and then the first |NC*NP| columns are duplicated for
+        % |NV| times, resulting in |NC*NP*NV| columns.
+        function H = get.Hrep(this)
+            NP = this.NumberPaths;
+            NC = this.NumberDataCenters;
+            NV = this.NumberVNFs;
+            
+            H = spalloc(NC, this.num_varz, nnz(this.I_node_path)*NV);
+            col_index = (1:NC:((NP-1)*NC+1))';
+            col_index = repmat(col_index, 1, NV);
+            for v = 2:NV
+                col_index(:,v) = col_index(:,v-1) + NC*NP;
+            end
+            col_index = col_index(:);
+            for n = 1:NC
+                H(n, col_index) = repmat(this.I_node_path(n,:),1, NV);
+                col_index = col_index + 1;
+            end
+        end
+
         function n = get.num_vars(this)
             n = (this.NumberVNFs*this.NumberDataCenters+1)*this.NumberPaths;
         end
@@ -184,23 +207,29 @@ classdef Slice < VirtualNetwork
             end
         end
         
-        function b = checkFeasible(this, vars, options)
+        function b = checkFeasible(this, vars)
+            global InfoLevel;
             if nargin <= 1 || isempty(vars)
-                vars = [this.Variables.x; this.Variables.z];
-            end
-            if nargin <= 2 || ~isfield(options, 'Display')
-                options.Display = 'off';
-            end
-            if nargin <= 2 || ~isfield(options, 'Tolerance')
-                options.Tolerance = 10^-3;
-            end
-            
-            ub = this.As_res*vars;
-            if isempty(find(ub > options.Tolerance, 1))
+                var_x = this.Variables.x; 
+                var_z = this.Variables.z;
+            else
+                var_x = vars(1:this.NumberPaths);
+                var_z = vars((this.NumberPaths+1):end);
+            end            
+            options = getstructfields(this.Parent.options, 'ConstraintTolerance');
+            %             ub = this.As_res*vars;
+            A1 = this.As_res(:,1:this.NumberPaths);
+            A2 = this.As_res(:,(this.NumberPaths+1):end);
+            v1 = A1*var_x;
+            v2 = A2*var_z;
+            mid_v = (abs(v1)+abs(v2))/2;
+            nz_index = mid_v~=0;
+            ub = (v1(nz_index)+v2(nz_index))./mid_v(nz_index);
+            if isempty(find(ub(nz_index) > options.ConstraintTolerance, 1))
                 b = true;
             else
                 b = false;
-                if ~strcmp(options.Display, 'off')
+                if InfoLevel.UserModelDebug >= DisplayLevel.Notify
                     if issparse(ub)
                         cprintf('Comments', 'sparse vector\n');
                     end
@@ -209,8 +238,8 @@ classdef Slice < VirtualNetwork
             end
         end
         
-        profit = optimalFlowRate( this, options );
-        [utility, node_load, link_load] = priceOptimalFlowRate(this, x0, options);
+        profit = optimalFlowRate( this, new_opts );
+        [utility, node_load, link_load] = priceOptimalFlowRate(this, x0, new_opts);
         [payment, grad, pseudo_hess] = fcnLinkPricing(this, link_price, link_load);
         [payment, grad, pseudo_hess] = fcnNodePricing(this, node_price, node_load);        
     end
@@ -221,11 +250,60 @@ classdef Slice < VirtualNetwork
 
         % Objective function and gradient
         [profit, grad]= fcnProfit(var_x, S, options);
+        %% Evaluate the objective function and gradient
+        % only active independent variables are passed into the objective function.
+        % Considering the constraint's coefficient matrix, if the corresponding column of the
+        % coefficient matrix for a variable is all zero, then this variable is inactive and can be
+        % directly set as 0. So we can remove it from the optimization problem.
+        %
+        % NOTE: we can also remove the all-zero rows of the coefficient matrix, which do not
+        % influence the number of variables. See also <optimalFlowRate>.
+        function [profit, grad]= fcnProfitCompact(act_vars, S, options)
+            vars = zeros(S.num_vars,1);
+            vars(S.I_active_variables) = act_vars;
+            
+            if nargin == 2
+                options = struct;
+            end
+            % we extend the active variables by adding zeros to the inactive ones.
+            if nargout <= 1
+                profit = Slice.fcnProfit(vars, S, options);
+            else
+                [profit, grad] = Slice.fcnProfit(vars, S, options);
+                % eliminate the inactive variable's derivatives.
+                grad = grad(S.I_active_variables);
+            end
+        end
+        
         [profit, grad] = fcnSocialWelfare(x_vars, S, options);
+        function [profit, grad] = fcnSocialWelfareCompact(act_vars, S, options)
+            vars = zeros(S.num_vars,1);
+            vars(S.I_active_variables) = act_vars;
+            
+            if nargin == 2
+                options = struct;
+            end
+            if nargout <= 1
+                profit = S.fcnSocialWelfare(vars, S, options);
+            else
+                [profit, grad] = S.fcnSocialWelfare(vars, S, options);
+                grad = grad(S.I_active_variables);
+            end
+        end
 
         % Hessian matrix
         hess = fcnHessian(var_x, ~, S, options);
-
+        %% Compact form of Hessian matrix of the Lagrangian
+        function hess = fcnHessianCompact(act_vars, lambda, S, options) %#ok<INUSL>
+            vars = zeros(S.num_vars,1);
+            vars(S.I_active_variables) = act_vars;
+            if nargin == 3
+                options = struct;
+            end
+            hess = Slice.fcnHessian(vars, [], S, options);
+            hess = hess(S.I_active_variables, S.I_active_variables);
+        end
+        
     end
     
     methods (Access = private)
@@ -357,15 +435,34 @@ classdef Slice < VirtualNetwork
     end
   
     methods (Access = protected)
-        function [x, fval, exitflag] = ...
-                obj_fun(this, x0, As, bs, Aeq, beq, lbs, ub, lb, fmincon_opt, method)
-            if strfind(method, 'price') % 'price', 'slice-price'
-                [x, fval, exitflag] = fmincon(@(x)Slice.fcnProfit(x,this), ...
-                    x0, As, bs, Aeq, beq, lbs, ub, lb, fmincon_opt);
+        function [x, fval, exitflag] = optimize(this, params, options)
+            if strfind(options.Method, 'price') % 'price', 'slice-price'
+                if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
+                    [x, fval, exitflag] = fmincon(@(x)Slice.fcnProfitCompact(x,this), ...
+                        params.x0, params.As, params.bs, params.Aeq, params.beq, ...
+                        params.lb, params.ub, [], options.fmincon_opt);
+                else
+                    [x, fval, exitflag] = fmincon(@(x)Slice.fcnProfit(x,this), ...
+                        params.x0, params.As, params.bs, params.Aeq, params.beq, ...
+                        params.lb, params.ub, [], options.fmincon_opt);
+                end
             else  % 'normal', 'single-function', ...
-                [x, fval, exitflag] = ...
-                    fmincon(@(x)Slice.fcnSocialWelfare(x,this), ...
-                    x0, As, bs, Aeq, beq, lbs, ub, lb, fmincon_opt);
+                if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
+                    [x, fval, exitflag] = ...
+                        fmincon(@(x)Slice.fcnSocialWelfareCompact(x,this), ...
+                        params.x0, params.As, params.bs, params.Aeq, params.beq, params.lbs, ...
+                        params.lb, params.ub, [], options.fmincon_opt);
+                else
+                    [x, fval, exitflag] = ...
+                        fmincon(@(x)Slice.fcnSocialWelfare(x,this), ...
+                        params.x0, params.As, params.bs, params.Aeq, params.beq, params.lbs, ...
+                        params.lb, params.ub, [], options.fmincon_opt);
+                end
+            end
+            
+            if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
+                x = zeros(this.num_vars, 1);
+                x(this.I_active_variables) = x_compact;
             end
         end
     end
