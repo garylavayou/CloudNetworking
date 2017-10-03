@@ -2,16 +2,10 @@
 % * See also the <optimizeResourcePriceNew>, for more details in refining the price
 % adjustment algorithm.
 % * *TODO* Resource Cost Model: linear, convex (quatratic)
-%% Display option
-% iter-final.
-function [output, runtime] = optimizeResourcePrice(this, init_price, options)
-if nargin <= 2
-    options.Display = 'final';
-end
+function [output, runtime] = optimizeResourcePrice(this, init_price)
+global InfoLevel;
+options = getstructfields(this.options, {'Threshold'});
 options.PricingPolicy = 'quadratic-price';
-if ~isfield(options, 'Threshold') || isempty(options.Threshold)
-    options.Threshold = 'average';
-end
 % this.clearStates;
 if nargout == 2
     slice_runtime = 0;
@@ -35,13 +29,13 @@ node_uc = this.getNodeCost;
 % Initial Price
 t1 = 0.8;           % {0.1|1}
 if nargin >=2 && ~isempty(init_price)
-    link_price = t1 * init_price.link;
-    node_price = t1 * init_price.node;
+    link_price = t1 * init_price.Link;
+    node_price = t1 * init_price.Node;
 else
-    init_price.link = t1* link_uc;
-    link_price = init_price.link;
-    init_price.node = t1* node_uc;
-    node_price = init_price.node;
+    init_price.Link = t1* link_uc;
+    link_price = init_price.Link;
+    init_price.Node = t1* node_uc;
+    node_price = init_price.Node;
 end
 t0 = 10^-1;     % {1|0.1|0.01}
 delta_link_price = t0 * link_uc;  % init_price.link
@@ -66,7 +60,7 @@ while true
     node_price(b_node_violate) = node_price(b_node_violate) + delta_node_price(b_node_violate);
     delta_node_price(b_node_violate) = delta_node_price(b_node_violate) * 2;
 end
-if strncmp(options.Display, 'notify', 6)
+if InfoLevel.ClassDebug > DisplayLevel.Final
     fprintf('\tFirst stage objective value: %d.\n', new_net_welfare);
 end
 
@@ -85,13 +79,13 @@ partial_node_violate = false(NC, 1);
 b_first = true;
 while stop_cond1 && stop_cond2 && stop_cond3
     number_iter = number_iter + 1;
-    if strncmp(options.Display, 'iter', 4)
+    if InfoLevel.UserModelDebug == DisplayLevel.Iteration
         disp('----link price    delta link price----')
         disp([link_price delta_link_price]);
     end
     b_link = link_price > delta_link_price;
     link_price(b_link) = link_price(b_link) - delta_link_price(b_link);
-    if strncmp(options.Display, 'iter', 4)
+    if InfoLevel.UserModelDebug == DisplayLevel.Iteration
         disp('----node price    delta node price----')
         disp([node_price delta_node_price]);
     end
@@ -168,8 +162,8 @@ if ~stop_cond3
     
     l = -1;
     h = 0;
-    options2 = options;
-    options2.epsilon = 10^-3;
+    new_opt = options;
+    new_opt.Epsilon = 10^-3;
     while true
         number_iter = number_iter + 1;
         alpha = (l+h)/2;
@@ -177,14 +171,15 @@ if ~stop_cond3
         temp_node_price = node_price + delta_node_price * alpha;
         SolveSCP(temp_node_price, temp_link_price);
         [b_profit, profit_gap] = ...
-            this.checkProfitRatio(temp_node_price, temp_link_price, options2);
+            this.checkProfitRatio(temp_node_price, temp_link_price, new_opt);
         if b_profit || h-l<10^-4
             % due to precision error, the second condition is used to step out.
             link_price = temp_link_price;
             node_price = temp_node_price;
             if h-l < 10^-4
-                options2.Display = 'iter';
-                warning('precision error: %.4f', profit_gap);
+                if InfoLevel.UserModelDebug == DisplayLevel.Iteration
+                    warning('precision error: %.4f', profit_gap);
+                end
             end
             break;
         end
@@ -204,10 +199,10 @@ end
 this.finalize(node_price, link_price);
 
 % Calculate the output
-output = this.calculateOutput([], options);
+output = this.calculateOutput([]);
 
 % output the optimization results
-if strncmp(options.Display, 'notify', 6) || strncmp(options.Display, 'final', 5)
+if InfoLevel.UserModel > DisplayLevel.Off
     fprintf('Optimization results:\n');
     fprintf('\tThe optimization procedure contains %d iterations.\n', number_iter);
     fprintf('\tOptimal objective value: %d.\n', output_optimal.welfare_accurate);
@@ -224,7 +219,9 @@ end
             if options.CountTime
                 tic;
             end
-            this.slices{s}.priceOptimalFlowRate([], options);
+            this.slices{s}.priceOptimalFlowRate([], ...
+                getstructfields(options, ...
+                {'Form','PricingPolicy', 'LinkPrice', 'NodePrice'}, 'ignore'));
             if options.CountTime
                 t = toc;
                 slice_runtime = max(slice_runtime, t);
