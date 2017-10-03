@@ -46,8 +46,8 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
                     % and removed when it is dequeuing.
                     this.entities.Remove(eventData.entity);
                 case 'RemoveSliceSucceed'
-                    if isa(eventData.data, 'FlowEntity')
-                        this.entities.Remove(eventData.data);
+                    if isa(eventData.slice, 'Slice')
+                        this.RemoveListener(eventData.slice);
                     else
                         error('error: type error.');
                     end                    
@@ -73,13 +73,13 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
         end
         
         function sendoutevent(this, event)
+%             rng(this.rand_state);
+%             this.rand_state = rng;
             data = DispatchEventData;
             %             data.targets = this.findTargets(event.Name);
             % data.entity = entity;  % the event object stores the entity handle.
             data.event = event;
-            rng(this.rand_state);
             notify(this, event.Name, data);
-            this.rand_state = rng;
         end
     end
     
@@ -119,7 +119,7 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
         end
         
         function ev = nextEvent(this)
-            rng(this.rand_state);
+            %             rng(this.rand_state);
             while true
                 %%%
                 % #Option 1:
@@ -127,10 +127,12 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
                 % event that is no longer valid (has no valid entity/source associated.)
                 %this.rand_state = rng;
                 ev = nextEvent@RandomEventDispatcher(this);
+                assert(issorted(this.event_queue.Time), 'error: EventQueue.');
                 if isvalidEvent(this, ev)
                     break;
                 end
             end
+            %             this.rand_state = rng;
             et = ev.userdata;       % equals to ev.Entity
             if isempty(et)
                 % When |event=Depart|, the entity will be returned as userdata, if this is
@@ -167,7 +169,6 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
                 end
                 
             end
-            this.rand_state = rng;
         end
     end
     
