@@ -126,6 +126,12 @@ classdef RandomEventDispatcher < handle
             end
             
             if this.event_queue(1).Type == EventType.Depart
+                % We do not know if there is events before the depart event, since it
+                % might not have been generated. So we first generate a new entity, and
+                % see if the new event is befroe the depart event. 
+                %   (1) if true, then the new event will be first processed;
+                %   (2) otherwise, the depart event will be processed, since it is now
+                %       determined that no more event before it.
                 this.addnewentity;
             end
             ev = this.event_queue.PopFront;
