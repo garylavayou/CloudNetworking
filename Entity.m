@@ -18,14 +18,13 @@ classdef Entity < matlab.mixin.Copyable & matlab.mixin.Heterogeneous
         function this = Entity(time_arrive, time_serve, src, info)
             persistent entity_id;
             if isempty(entity_id)
+                entity_id = int64(0);
+            end
+            if entity_id == intmax('uint64')
                 entity_id = int64(1);
-            else 
-                if entity_id == intmax('uint64')
-                    entity_id = int64(1);
-                    warning('reset id');
-                else
-                    entity_id = entity_id + 1;
-                end
+                warning('reset id');
+            else
+                entity_id = entity_id + 1;
             end
             this.ArriveTime = time_arrive;
             this.ServiceTime = time_serve;
