@@ -1,16 +1,51 @@
 %% EventDrivenNetwork 
 % This class extend <PhysicalNetwork> to enable handling of network events.
 %
-% If we do not derive this class from <PhysicalNetwork>, then this class can also be
-% treated as an interface, if we used it with subclasses of <PhysicalNetwork>.
+% Subclass should impelement _onAddingSlice_ and _onRemovingSlice_ to handle the network
+% dynamics: deciding whether to admit a slice or not, and how to allocate/release
+% reosurces.
+%% TODO
+% (2) resource reallocation: when flows were uncovered by the serving slice (due to new
+%     origining or handover),  performing slice dimensioning considering reconfiguration
+%     cost.
+% (3) decide when to perform resource reallocation, if not unexpected flows or handovers. 
+%     Options including:
+%     (a) event-based: after every N events, performs a reconfiguration;
+%     (b) period-based: after every T time, performs a reconfiguration;
+%     (c) profit threshold based: after the profit of fast reconfiguration is lower than a
+%         threshold, performs a reconfiguration;
+%     (d) profit threshold based with prediction: additionaly predict the threshold*.
 classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
 
     methods
-        % EventDrivenNetwork(node_opt, link_opt, VNF_opt, net_opt)
         function this = DynamicNetwork(varargin)
-            this@PhysicalNetwork(varargin{:});
+            global InfoLevel;
+            % Only called by subclasses, other member must be initialized by subclasses.
+            %             this@PhysicalNetwork(varargin);
+            if length(varargin)>=4
+                this.options = structmerge(this.options, ...
+                    getstructfields(varargin{4}, ...
+                    {'VNFReconfigCoefficient', 'DiffNonzeroTolerance'}, 'ignore'));
+            end
+            if ~isfield(this.options, 'VNFReconfigCoefficient')
+                % |VNFReconfigCoefficient|'s default value is 3.
+                this.options.VNFReconfigCoefficient = 3;
+                if InfoLevel.Class >= DisplayLevel.Notify
+                    warning('''VNFReconfigCoefficient'' options is not specfied, set as %d.', ...
+                        this.options.VNFReconfigCoefficient);
+                end
+            end
+            if ~isfield(this.options, 'DiffNonzeroTolerance')
+                this.options.DiffNonzeroTolerance = 10^-3;
+                if InfoLevel.Class >= DisplayLevel.Notify
+                    warning('''DiffNonzeroTolerance'' options is not specfied, set as %E.', ...
+                        this.options.DiffNonzeroTolerance);
+                end
+            end
         end
-        
+    end
+    
+    methods        
         %%%
         % Since CloudNetwork and EventDrivenNetwork has different definition of AddSlice,
         % we need override the two superclass methods.
@@ -73,6 +108,8 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                         sl.b_ondepart = true;
                     else
                         this.RemoveSlice(sl);
+                        data = FlowEventData(ev, sl, []);
+                        notify(this, 'RemoveSliceSucceed', data);
                     end
                 case 'FlowArrive'
                     %%%
@@ -135,6 +172,7 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
         %             tf = true;
         %         end
         tf = onAddingSlice(this, sl);
+        tf = onRemovingSlice(this);
     end
     methods (Access =protected)
         function sl = createslice(this, slice_opt)
@@ -181,7 +219,7 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                 slice_opt.NumberFlows = numflow;
             end
             slice_opt.NumberPaths = slice.Options.NumberPaths;
-            slice_opt.method = 'dynamic-slicing';
+            slice_opt.Method = 'dynamic-slicing';
             b_vailid_flow = false;
             while ~b_vailid_flow
                 try
@@ -189,7 +227,11 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                     ft = this.generateFlowTable(graph, slice_opt);
                 catch ME
                     disp(ME)
-                    b_vailid_flow = false;
+                    if strcmp(ME.identifier, 'PhysicalNetwork:Disconnected')
+                        b_vailid_flow = false;
+                    else
+                        rethrow(ME);
+                    end
                 end
             end
             %%%
@@ -205,6 +247,33 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                     path.node_list = slice.PhyscialNodeMap{path.node_list,'VirtualNode'};
                     path.id = this.path_identifier_generator.next;
                 end
+            end
+        end
+        %%
+        % |finalize| should be called by subclass's _funalize_ method.
+        function finalize(this)
+            for i = 1:this.NumberSlices
+                sl = this.slices{i};
+                sl.setVnfCapacity;
+                %                 if strcmp(this.options.PricingPolicy, 'quadratic-price')
+                %% Reconfiguration Cost
+                % intra-slice reconfiguration: the flow reassignment cost and the VNF
+                % instance reconfiguration cost is denpendtent on the resource
+                % consummption in the slice; 
+                % inter-slice reoncfiguration: the VNF node resource allocation cost is
+                % dependent on the total load of the substrat network.
+                [~, edge_reconfig_cost ] = sl.fcnLinkPricing(...
+                    sl.VirtualLinks.Price, sl.VirtualLinks.Load);
+                sl.VirtualLinks.ReconfigCost = DynamicSlice.THETA*edge_reconfig_cost;
+                % here the |node_price| is the price of all data centers.
+                [~, node_reconfig_cost] = sl.fcnNodePricing(...
+                    sl.VirtualDataCenters.Price, sl.VirtualDataCenters.Load);
+                sl.VirtualDataCenters.ReconfigCost = ...
+                    DynamicSlice.THETA*node_reconfig_cost;
+                vrc = this.options.VNFReconfigCoefficient;
+                sl.vnf_reconfig_cost = vrc * repmat(node_reconfig_cost, sl.NumberVNFs, 1);
+                %                 else
+                %                 end
             end
         end
     end
