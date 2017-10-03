@@ -19,20 +19,19 @@ classdef Event < matlab.mixin.Copyable
     
     methods
         function this = Event(time, type, entity, desc)
-            persistent eid;
-            if isempty(eid)
-                eid = int64(1);
-            else 
-                if eid == intmax('uint64')
-                    eid = int64(1);
-                    warning('reset id');
-                else
-                    eid = eid + 1;
-                end
-            end
             if nargin == 0
                 return;
             end            
+            persistent eid;
+            if isempty(eid)
+                eid = int64(0);
+            end
+            if eid == intmax('uint64')
+                eid = int64(1);
+                warning('reset id');
+            else
+                eid = eid + 1;
+            end
             this.Time = time;
             this.Type = type;
             this.Entity = entity;
