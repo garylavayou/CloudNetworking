@@ -23,7 +23,6 @@ classdef VirtualNetwork < matlab.mixin.Copyable
         PhysicalLinkMap;
         PhyscialNodeMap;    %
         path_owner;         % the associated flow of path;
-        %         I_active_variable;  % indicator of active variables
     end
    
     properties (Dependent)
@@ -37,32 +36,33 @@ classdef VirtualNetwork < matlab.mixin.Copyable
         
     methods
         function this = VirtualNetwork(net_data)
+            declare_info_level;
             if nargin == 0
                 return;
             elseif isa(net_data, 'VirtualNetwork')
                 this = net_data.copy;
                 return;
             end
-            this.Parent = net_data.parent;
-            this.Topology = DirectedGraph(net_data.adjacent);
+            this.Parent = net_data.Parent;
+            this.Topology = DirectedGraph(net_data.Adjacent);
             if isfield(net_data, 'Type')
                 this.Type = net_data.Type;
             end
             %%%
             % Virtual Links
-            this.VirtualLinks = array2table(net_data.link_map_S2P, ...
+            this.VirtualLinks = array2table(net_data.LinkMapS2P, ...
                 'VariableNames', {'PhysicalLink'});
             % Link capacity
             if isfield(net_data, 'link_capacity')
-                this.VirtualLinks.Capacity = net_data.link_capacity;
+                this.VirtualLinks.Capacity = net_data.LinkCapacity;
             end
             % Link load
             this.VirtualLinks.Load = zeros(this.NumberVirtualLinks, 1);
-            this.PhysicalLinkMap = array2table(net_data.link_map_P2S,...
+            this.PhysicalLinkMap = array2table(net_data.LinkMapP2S,...
                 'VariableNames', {'VirtualLink'});
             %%%
             % Virtual Nodes
-            this.VirtualNodes = array2table(net_data.node_map_S2P,...
+            this.VirtualNodes = array2table(net_data.NodeMapS2P,...
                 'VariableNames', {'PhysicalNode'});
             %%%
             % Virtual Data Center Node
@@ -76,49 +76,46 @@ classdef VirtualNetwork < matlab.mixin.Copyable
                 (1:this.NumberDataCenters)';
             %%%
             % Data center node capacity
-            if isfield(net_data, 'node_capacity')
-                this.VirtualDataCenters.Capacity = net_data.node_capacity;
+            if isfield(net_data, 'Capacity')
+                this.VirtualDataCenters.Capacity = net_data.Capacity;
             else
                 this.VirtualDataCenters.Capacity = zeros(this.NumberDataCenters,1);
             end
             %%%
             % Data center node load
             this.VirtualDataCenters.Load = zeros(this.NumberDataCenters, 1);
-            this.PhyscialNodeMap = array2table(net_data.node_map_P2S,...
+            this.PhyscialNodeMap = array2table(net_data.NodeMapP2S,...
                 'VariableNames', {'VirtualNode'});
             %%%
             % Flow Table
             % convert node index to virtual node index
-            for k = 1:height(net_data.flow_table)
-                path_list = net_data.flow_table{k,{'Paths'}};
+            for k = 1:height(net_data.FlowTable)
+                path_list = net_data.FlowTable{k,{'Paths'}};
                 for p = 1:path_list.Width
                     path = path_list.paths{p};
                     path.node_list = this.PhyscialNodeMap{path.node_list, 'VirtualNode'};
                 end
             end
-            this.FlowTable = net_data.flow_table;
+            this.FlowTable = net_data.FlowTable;
             
             this.VNFList = net_data.VNFList;
             this.initializeState;
 
-            if isfield(net_data,'Identifier')
-                this.Identifier = net_data.Identifier;
-            end
-                        
-            if isfield(net_data, 'FlowPattern')
-                this.Options.FlowPattern = net_data.FlowPattern;
-            else
+            this.Options = getstructfields(net_data, {'Identifier', 'FlowPattern', ...
+                'DelayConstraint', 'NumberPaths', 'Method'}, 'ignore');                        
+            if ~isfield(net_data, 'FlowPattern')
                 warning('FlowPattern option is not provided.');
             end
-            if isfield(net_data, 'DelayConstraint')
-                this.Options.DelayConstraint = net_data.DelayConstraint;
-            else
+            if ~isfield(net_data, 'DelayConstraint')
                 warning('DelayConstraint option is not provided.');
             end
-            if isfield(net_data, 'NumberPaths')
-                this.Options.NumberPaths = net_data.NumberPaths;
-            else
+            if ~isfield(net_data, 'NumberPaths')
                 warning('NumberPaths option is not provided.');
+            end    
+            if ~isfield(net_data, 'Method')
+                this.Options.Method = 'dynamic-slicing';
+                warning('Method option is not provided, set as ''%s''.', ...
+                    this.Options.Method);
             end    
         end
         
