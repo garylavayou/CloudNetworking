@@ -2,8 +2,9 @@
 % This optimization procedure remove the unnecessary components from the independent
 % variable x, so that the problem scale is cut down.
 % if h(n,p) = 0, then z(n,p,f) = 0 for all f. thus the corresponding column in the
-% coefficient matrix and the variables can be removed.
+% coefficient matrix and the the corresponding rows of variables can be removed.
 function x = priceOptimalFlowRateCompact(this, x0)
+global InfoLevel;
 if nargin == 2
     this.x0 = x0;
 else%if isempty(this.x0)
@@ -28,12 +29,12 @@ for f = 1:this.NumberVNFs
     row_index = row_index + this.NumberPaths;
 end
 % remove the all-zero column from As
-this.I_active_variable = sum(As,1)~=0;
-As(:, ~this.I_active_variable) = [];
+this.I_active_variables = sum(As,1)~=0;
+As(:, ~this.I_active_variables) = [];
 bs = sparse(this.num_lcon_res,1);
-num_act_vars = nnz(this.I_active_variable);
+num_act_vars = nnz(this.I_active_variables);
 lbs = sparse(num_act_vars,1);
-x0 = this.x0(this.I_active_variable);
+x0 = this.x0(this.I_active_variables);
 %% Set the optimization options
 % * *Algorithm* -- since the problem contains linear constraints and bound
 % constraints, then |trust-region-reflective| method is not applicable. Hence,
@@ -53,8 +54,8 @@ fmincon_opt.Algorithm = 'interior-point';
 fmincon_opt.HessianFcn = @(x,lambda)Slice.hessianfcn(x,lambda,this);
 fmincon_opt.SpecifyObjectiveGradient = true;
 fmincon_opt.SpecifyConstraintGradient = false;
-fmincon_opt.Display = 'iter';
-[x, fval, exitflag] = fmincon(@(x)Slice.funUtilityCompact(x,this), ...
+fmincon_opt.Display = InfoLevel.InnerModelDebug.char;
+[x, fval, exitflag] = fmincon(@(x)Slice.fcnProfitCompact(x,this), ...
     x0, As, bs, [], [], lbs, [], [], fmincon_opt);
 disp(fval);
 disp(exitflag);
@@ -72,6 +73,8 @@ if exitflag == 1
     this.link_load = this.getLinkLoad(this.x0(1:this.NumberPaths));
     this.node_load = this.getNodeLoad(this.x0((this.NumberPaths+1):end));
 else
-    warning('%d',exitflag);
+    if InfoLevel.UserModelDebug >= DisplayLevel.Notify
+        warning('%d',exitflag);
+    end
 end
 end
