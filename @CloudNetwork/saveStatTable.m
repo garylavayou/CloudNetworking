@@ -5,7 +5,7 @@ switch method
     case 'static'
         tb{1, 'Runtime'} = max(rt(rt~=0));
         tb{1, 'NumberFlowsStatic'} = PN.NumberFlows;  
-        tb{1, 'NumberSlicesStatic'} = PN.CountSlices';
+        tb{1, 'NumberSlicesStatic'} = PN.CountSlices;
     case 'optimal-spp'      % Move to <CloudNetworkEx>
         tb{1, 'Welfare'} = [output.WelfareOptimal, output.Welfare];
         %         tb{1, 'ApproximateWelfare'} = ...
@@ -19,7 +19,7 @@ end
 if cellstrfind({'optimal-spp', 'dynamic-price'}, method)
     tb{1, 'Runtime'} = [rt.Parallel, rt.Serial];
     tb{1, 'NumberFlows'} = PN.NumberFlows;
-    tb{1, 'NumberSlices'} = PN.CountSlices';
+    tb{1, 'NumberSlices'} = PN.CountSlices;
 end
 if cellstrfind({'static', 'dynamic-price'}, method)
     tb{1, 'Welfare'} = output.Welfare;
@@ -32,12 +32,12 @@ tb{1, 'NodeUtilization'} = [r1, r2, r3, r4];
 [r1, r2, r3, r4] = PN.linkUtilization;
 tb{1, 'LinkUtilization'} = [r1, r2, r3, r4];
 tb{1, 'Cost'} = PN.getNetworkCost;
-tb{1, 'Profit'} = output.profit(end);
+tb{1, 'Profit'} = output.Profit(end);
 % tb{1, 'Profit'} = output.profit.ApproximatePrice(end);
 
 stbs = table;
 for j = 1:length(slice_types)
-    [p,r] = PN.statSlice(slice_types(j), output.profit);
+    [p,r] = PN.statSlice(slice_types(j), output.Profit);
     %     [p,r] = PN.statSlice(slice_types(j), output.profit.ApproximatePrice);
     stbs(j, {'Profit','Rate'}) = {p,r};
 end
