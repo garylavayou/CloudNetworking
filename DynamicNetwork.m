@@ -36,7 +36,7 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                 end
             end
             if ~isfield(this.options, 'DiffNonzeroTolerance')
-                this.options.DiffNonzeroTolerance = 10^-3;
+                this.options.DiffNonzeroTolerance = 10^-4;
                 if InfoLevel.Class >= DisplayLevel.Notify
                     warning('''DiffNonzeroTolerance'' options is not specfied, set as %E.', ...
                         this.options.DiffNonzeroTolerance);
@@ -68,12 +68,25 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                 
     end
     
+    events
+        FlowArrive; 
+        FlowDepart;
+        AddSliceSucceed;
+        AddSliceFailed;
+        RemoveSliceSucceed;
+        RemoveSliceFailed;          % NOT used.
+        AddFlowSucceed;
+        AddFlowFailed;
+        RemoveFlowSucceed;
+        RemoveFlowFailed;          % NOT used.
+    end
     methods
-        function eventhandler(this, source, eventData)
+        function h = eventhandler(this, source, eventData)
             global DEBUG; %#ok<NUSED>
             % target = eventData.targets;
             % where target should be the <DynamicNetwork> object.
             %% TODO: adding dynamic slice dimensioning for flow arrival/departure scale.
+            h = [];         % creatempty('Slice');
             ev = eventData.event;
             switch eventData.EventName
                 case 'SliceArrive'
@@ -97,8 +110,9 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                         % entitities.
                         notify(this, 'AddSliceSucceed', data);
                     end
-                    % Who should listen to slice and who should slice send events to?
-                    % sl.AddListeners()
+                    if nargout >= 1
+                        h = sl;
+                    end
                 case 'SliceDepart'
                     % Remove the slice if 'mandatorydepart' is enable; otherwise, if
                     % 'naturaldepart' is enabled, we set a flag. and until the last one
@@ -111,6 +125,9 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                         data = FlowEventData(ev, sl, []);
                         notify(this, 'RemoveSliceSucceed', data);
                     end
+                    if nargout >= 1
+                        h = sl;
+                    end
                 case 'FlowArrive'
                     %%%
                     % Notify slice that a flow arrives.
@@ -120,8 +137,8 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                     % TODO: pass the slice identifier directly through event data.
                     slice_id = ev.Entity.Parent.SliceIdentifier;
                     sl = this.slices{this.findSlice(slice_id, 'Identifier')};
-                    ft = this.createflow(sl);
-                    data = FlowEventData(ev, sl, ft);
+                    [ft, phy_adj] = this.createflow(sl);
+                    data = FlowEventData(ev, sl, ft, phy_adj);
                     %                     data.targets = this.FindSlice(et.Parent.SliceIdentifier);
                     notify(this, 'FlowArrive', data);
                 case 'FlowDepart'
@@ -199,6 +216,7 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
         % |ft|: return flow table entries.
         function ft = createflow(this, slice, numflow)
             % map virtual network to physical network
+            global DEBUG;    %#ok<NUSED>
             A = spalloc(this.NumberNodes, this.NumberNodes, this.NumberLinks);
             C = spalloc(this.NumberNodes, this.NumberNodes, this.NumberLinks);
             for i = 1:slice.NumberVirtualLinks
@@ -207,18 +225,24 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                 ph = slice.VirtualNodes{h, 'PhysicalNode'};
                 pt = slice.VirtualNodes{t, 'PhysicalNode'};
                 A(ph, pt) = slice.Topology.Adjacent(h,t); %#ok<SPRIX>
-                C(ph, pt) = slice.Topology.Capacity(h,t); %#ok<SPRIX>
+                % slice.Topology.Capacity is not available.
+                % Some links may have no capacity available, while the descripter is
+                % reserved. We assign a minimum value to these zero-capacity links. 
+                % These links may be allocated real resources if in later stage, we
+                % perform dimensioning.
+                C(ph, pt) = ...
+                    max(slice.VirtualLinks{slice.Topology.IndexEdge(h,t),'Capacity'},1); %#ok<SPRIX>
             end
             graph = DirectedGraph(A, C);
-            slice_opt.FlowPattern = slice.Options.FlowPattern;
-            slice_opt.DelayConstraint = slice.Options.DelayConstraint;
+            slice_opt.FlowPattern = slice.options.FlowPattern;
+            slice_opt.DelayConstraint = slice.options.DelayConstraint;
             slice_opt = this.updateDynamicSliceOptions(slice, slice_opt);
             if nargin <= 2
                 slice_opt.NumberFlows = 1;
             else
                 slice_opt.NumberFlows = numflow;
             end
-            slice_opt.NumberPaths = slice.Options.NumberPaths;
+            slice_opt.NumberPaths = slice.options.NumberPaths;
             slice_opt.Method = 'dynamic-slicing';
             b_vailid_flow = false;
             while ~b_vailid_flow
@@ -236,70 +260,41 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
             end
             %%%
             % Update slice information as creating slice.
-            %% TODO
-            % When new nodes/edges should be added.
             ft.Properties.VariableNames = ...
                 {'Source', 'Target', 'Rate', 'Delay', 'Paths'};
+            %% [TODO]: MOVE to <DynamicSlice>: flowtable + phy_adjacent.
             for k = 1:height(ft)
                 path_list = ft{k,{'Paths'}};
                 for p = 1:path_list.Width
                     path = path_list.paths{p};
-                    path.node_list = slice.PhyscialNodeMap{path.node_list,'VirtualNode'};
+                    path.node_list = slice.PhysicalNodeMap{path.node_list,'VirtualNode'};
                     path.id = this.path_identifier_generator.next;
                 end
             end
         end
         %%
-        % |finalize| should be called by subclass's _funalize_ method.
-        function finalize(this)
-            for i = 1:this.NumberSlices
-                sl = this.slices{i};
-                sl.setVnfCapacity;
-                %                 if strcmp(this.options.PricingPolicy, 'quadratic-price')
-                %% Reconfiguration Cost
-                % intra-slice reconfiguration: the flow reassignment cost and the VNF
-                % instance reconfiguration cost is denpendtent on the resource
-                % consummption in the slice; 
-                % inter-slice reoncfiguration: the VNF node resource allocation cost is
-                % dependent on the total load of the substrat network.
-                [~, edge_reconfig_cost ] = sl.fcnLinkPricing(...
-                    sl.VirtualLinks.Price, sl.VirtualLinks.Load);
-                sl.VirtualLinks.ReconfigCost = DynamicSlice.THETA*edge_reconfig_cost;
-                % here the |node_price| is the price of all data centers.
-                [~, node_reconfig_cost] = sl.fcnNodePricing(...
-                    sl.VirtualDataCenters.Price, sl.VirtualDataCenters.Load);
-                sl.VirtualDataCenters.ReconfigCost = ...
-                    DynamicSlice.THETA*node_reconfig_cost;
-                vrc = this.options.VNFReconfigCoefficient;
-                sl.vnf_reconfig_cost = vrc * repmat(node_reconfig_cost, sl.NumberVNFs, 1);
-                %                 else
-                %                 end
-            end
-        end
-    end
-    events
-        FlowArrive;
-        FlowDepart;
-        AddSliceSucceed;
-        AddSliceFailed;
-        RemoveSliceSucceed;
-        RemoveSliceFailed;          % NOT used.
-        AddFlowSucceed;
-        AddFlowFailed;
-        RemoveFlowSucceed;
-        RemoveFlowFailed;          % NOT used.
+        % |finalize| should be called by subclass's _finalize_ method.
+        %         function finalize(this, sub_slices)
+        %             if nargin <= 1
+        %                 sub_slices = this.slices;
+        %             end
+        %             num_slices = length(sub_slices);
+        %             for i = 1:num_slices
+        %                 sub_slices{i}.finalize;
+        %             end
+        %         end
     end
         
     methods(Static, Access = protected)
         %%%
         % subclass can override this method, Called by _createflow_ method.
         function slice_opt = updateDynamicSliceOptions(slice, slice_opt)
-            switch slice.Options.FlowPattern
+            switch slice.options.FlowPattern
                 case {FlowPattern.RandomSingleFlow, FlowPattern.RandomMultiFlow}
                     slice_opt.NodeSet = slice.VirtualNodes.PhysicalNode;
                 otherwise
                     error('error: cannot handle the flow pattern <%s>.', ...
-                        slice.Options.FlowPattern.char);
+                        slice.options.FlowPattern.char);
             end
         end
     end
