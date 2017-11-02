@@ -1,6 +1,6 @@
-%% Fast Reconfiguration with VNF Instance Re-scaling 
+%% Fast Reconfiguration with VNF Instance Re-scaling
 % Comparing with <_fastReconfigure_>, this method also considers VNF instance re-scaling,
-% i.e., the capacity of VNF instances could change during reconfiguration. 
+% i.e., the capacity of VNF instances could change during reconfiguration.
 % See also <fastReconfigure>.
 function profit = fastReconfigure2(this, action, options)
 global InfoLevel;
@@ -60,19 +60,20 @@ As(row_offset+(1:this.num_varv), (num_vars/2+this.num_vars+1):end) = -eye(this.n
 bs = [sparse(this.num_lcon_res+this.num_varv,1);
     this.VirtualDataCenters.Capacity; % The field will only change in slice dimensionging.
     this.VirtualLinks.Capacity;
-    this.old_variables.x;       % which have been pre-processed, so it can be
-    -this.old_variables.x;      % compared with the current states.
-    this.old_variables.z;
-    -this.old_variables.z;
-    this.VNFCapacity(:);
-    -this.VNFCapacity(:)];
+    this.topts.old_variables_x;       % which have been pre-processed, so it can be
+    -this.topts.old_variables_x;      % compared with the current states.
+    this.topts.old_variables_z;
+    -this.topts.old_variables_z;
+    this.old_variables.v;      % Equal to last stage's VNF capacity, size not change
+    -this.old_variables.v];
 
-var0 = [this.old_variables.x;
-    this.old_variables.z;
-    this.VNFCapacity(:);
-    this.old_variables.x;
-    this.old_variables.z;
-    this.VNFCapacity(:)];
+var0 = [this.topts.old_variables_x;
+    this.topts.old_variables_z;
+    this.old_variables.v;
+    this.topts.old_variables_x;
+    this.topts.old_variables_z;
+    this.old_variables.v];
+assert(this.checkFeasible(var0), 'error: infeasible start point.');
 
 %% Perform optimization
 fmincon_opt = optimoptions(@fmincon);
@@ -81,7 +82,8 @@ fmincon_opt.SpecifyObjectiveGradient = true;
 fmincon_opt.Display = InfoLevel.InnerModel.char;
 if nargin >= 2 && strcmpi(options.Form, 'compact')
     %% get the compact formulation
-    % There are lots of zeros in z_npf, which could be determined by h_np.
+    % There are lots of zeros in $z_npf$, which could be determined by $h_np$.
+    % If a row is all zero, this row is in-active, and could be removed.
     z_filter = sparse(repmat(...
         reshape(logical(this.I_node_path), numel(this.I_node_path),1),...
         NV,1));
@@ -97,9 +99,8 @@ if nargin >= 2 && strcmpi(options.Form, 'compact')
     fcn_opts.num_varx = this.NumberPaths;
     fcn_opts.num_varz = nnz(z_filter);
     fcn_opts.num_varv = this.num_varv;
-    old_z_reconfig_cost = this.z_reconfig_cost;
-    this.z_reconfig_cost = this.z_reconfig_cost(z_filter);
-    lbs = sparse(2*(fcn_opts.num_varx+fcn_opts.num_varz+fcn_opts.num_varv),1);
+    this.topts.z_reconfig_cost = this.topts.z_reconfig_cost(z_filter);
+    lbs = sparse(length(var0_compact),1);
     fmincon_opt.HessianFcn = ...
         @(x,lambda)DynamicSlice.fcnHessianCompact(x,lambda,this,fcn_opts);
     [x_compact, fval, exitflag] = ...
@@ -107,7 +108,6 @@ if nargin >= 2 && strcmpi(options.Form, 'compact')
         var0_compact, As_compact, bs, [], [], lbs, [], [], fmincon_opt);
     x = zeros(num_vars, 1);
     x(this.I_active_variables) = x_compact;
-    this.z_reconfig_cost = old_z_reconfig_cost;     % recover.
 else
     lbs = sparse(2*this.num_vars,1);
     fmincon_opt.HessianFcn = @(x,lambda)Slice.fcnHessian(x,lambda,this);
@@ -130,33 +130,18 @@ elseif exitflag ~= 1
     warning('(exitflag = %d) local optimal solution found.', exitflag);
 end
 options.Action = action;    % This might be used when check feasible solution.
-if ~this.checkFeasible(x, options)
-    error('error: infeasible solution.');
-end
+options.ConstraintTolerance = fmincon_opt.ConstraintTolerance;
+assert(this.checkFeasible(x,options), 'error: infeasible solution.');
+
 %%%
 % The post processing like <optimalFlowRate> is not needed, since the
-% objective function will force those variables to be zero.
-this.x_path = x(1:NP);
-this.z_npf = x((NP+1):this.num_vars);
-this.flow_rate = this.getFlowRate(this.x_path);
-if nargout == 1    % final results
-    this.Variables.x = this.x_path;
-    this.Variables.z = this.z_npf;
-    %                 this.Variables.z(this.Variables.z<10^-3) = 0;
-    %                 this.Variables.x(this.Variables.x<10^-3) = 0;
-    tol_zero = this.Parent.options.NonzeroTolerance;
-    this.Variables.x(this.Variables.x<tol_zero*max(this.Variables.x)) = 0;
-    this.Variables.z(this.Variables.z<tol_zero*max(this.Variables.z)) = 0;
-    if ~this.checkFeasible([], options)
-        if InfoLevel.UserModelDebug >= DisplayLevel.Iteration
-            warning('optimalFlowRate: the rounding of variables %s', ...
-                'with small quantity will make the solution infeasible.');
-        end
-    end
-    this.setPathBandwidth;
-    this.FlowTable.Rate = this.getFlowRate;
-    this.VirtualLinks.Load = this.getLinkLoad;
-    this.VirtualDataCenters.Load = this.getNodeLoad;
-    profit = -fval;
-end
+% objective function (reconfiguration cost) will force those variables to be zero.
+this.convert(x, 0);
+this.flow_rate = this.getFlowRate(this.temp_vars.x);
+this.postProcessing(struct('VNFCapacity',true));
+this.setPathBandwidth;
+this.FlowTable.Rate = this.getFlowRate;
+this.VirtualLinks.Load = this.getLinkLoad;
+this.VirtualDataCenters.Load = this.getNodeLoad;
+profit = -fval - this.getSliceCost(options.PricingPolicy);
 end
