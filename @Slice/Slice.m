@@ -4,17 +4,20 @@
 classdef Slice < VirtualNetwork
     % Specify the properties that can only be modified by Physcial Network directly
     properties (SetAccess = {?Slice,?CloudNetwork,?SliceFlowEventDispatcher})
-        Variables;      % [x,z]
-        x_path;             % allocated bandwidth of paths
-        z_npf;              % allocated resource on nodes
-        alpha_f;
+        temp_vars;      % [x,z]: temporary variables that will not be rounded.
+        Variables;      % [x,z]: final results from |temp_vars|, with rounding.
         weight;             % weight for the slice user's utility.
-        I_path_function;        % used by <singleSliceOptimization>.
+        As_res;             % coefficient matrix of the processing constraints
+        prices;
     end
     
     properties (Access = protected)
-        As_res;             % coefficient matrix of the processing constraints
-        Hrep;               % coefficient used to compute node resource consumption.
+        % coefficient used to compute node resource consumption.
+        % is a function of node-path incident matrix (I_node_path).
+        Hrep;
+        % coefficient used to compute VNF intance capacity
+        % is a function of node-path incident matrix (I_node_path).
+        Hdiag;              
         x0;                 % start point
         link_load;          % temporary results of link load.
         node_load;          % temporary results of node load.
@@ -55,11 +58,37 @@ classdef Slice < VirtualNetwork
             if isfield(slice_data,'Weight')
                 this.weight = slice_data.Weight;
             end
-            
-            if isfield(slice_data, 'Alpha_f')
-                this.alpha_f = slice_data.Alpha_f;
+            if ~isfield(slice_data, 'Method')
+                this.options.Method = 'dynamic-slicing';
+                warning('Method option is not provided, set as ''%s''.', ...
+                    this.options.Method);
+            else
+                this.options.Method = slice_data.Method;
             end
             this.getAs_res;
+            this.getHrep;
+            this.getHdiag;
+        end
+        
+        function finalize(this, node_price, link_price)
+            this.Variables.x = this.temp_vars.x;
+            this.Variables.z = this.temp_vars.z;
+            % subclass inctance may have different implementation of _postProcessing_, it
+            % is recommended, that the subclass maintains the default behavior of this
+            % function.
+            this.postProcessing();  
+            this.VirtualDataCenters.Load = this.getNodeLoad;
+            this.VirtualLinks.Load = this.getLinkLoad;
+            this.VirtualDataCenters.Capacity = this.VirtualDataCenters.Load;
+            this.VirtualLinks.Capacity = this.VirtualLinks.Load;
+            this.FlowTable.Rate = this.getFlowRate;
+            this.setPathBandwidth;
+            if nargin >= 2 && ~isempty(node_price)
+                this.VirtualDataCenters.Price = node_price(this.getDCPI);
+            end
+            if nargin >= 3 && ~isempty(link_price)
+                this.VirtualLinks.Price = link_price(this.VirtualLinks.PhysicalLink);
+            end
         end
     end
     
@@ -68,7 +97,9 @@ classdef Slice < VirtualNetwork
         % On row i, the non-zero elements located at (i-1)+(1:NC:((NP-1)*NC+1)) for the
         % first |NC*NP| columns, and then the first |NC*NP| columns are duplicated for
         % |NV| times, resulting in |NC*NP*NV| columns.
-        function H = get.Hrep(this)
+        %
+        % The base matrix is the same as in <Hdiag>.
+        function H = getHrep(this)
             NP = this.NumberPaths;
             NC = this.NumberDataCenters;
             NV = this.NumberVNFs;
@@ -81,9 +112,34 @@ classdef Slice < VirtualNetwork
             end
             col_index = col_index(:);
             for n = 1:NC
-                H(n, col_index) = repmat(this.I_node_path(n,:),1, NV);
+                H(n, col_index) = repmat(this.I_node_path(n,:),1, NV);  %#ok<SPRIX>
                 col_index = col_index + 1;
             end
+            this.Hrep = H;
+        end
+
+        % For the node capacity constraint for VNF |f|, the coeffiect matrix Hs is
+        % filled block-by-block. In the |k|th block (NC*NC), we put the |k|th column
+        % of H_np to the diagnal of the block. Then |H_np| is duplicated into a larger
+        % diagonal corresponding to all VNFs.
+        %
+        % The capacity of VNF instance |VNFCapacity|, has been calculate after
+        % allocating resource to the slice. Some component of |VNFCapacity| might be
+        % zero, since VNF f may not be located at node n.
+        %
+        % See also <Hrep>.
+        function Hs = getHdiag(this)
+            global DEBUG; %#ok<NUSED>
+            NC = this.NumberDataCenters;
+            NP = this.NumberPaths;
+            Hs_np = spalloc(NC, NC*NP, nnz(this.I_node_path));
+            col_index = 1:NC;
+            for p = 1:NP
+                Hs_np(1:NC,col_index) = diag(this.I_node_path(:,p));  %#ok<SPRIX>
+                col_index = col_index + NC;
+            end
+            Hs = block_diag(Hs_np, this.NumberVNFs);
+            this.Hdiag = Hs;
         end
 
         function n = get.num_vars(this)
@@ -98,15 +154,15 @@ classdef Slice < VirtualNetwork
             n = size(this.As_res,1);
         end
         
-        function setPathBandwidth(this, x_path)
+        function setPathBandwidth(this, x)
             if nargin == 1
-                x_path = this.Variables.x;
+                x = this.Variables.x;
             end
             p = 1;
             for i = 1:this.NumberFlows
                 pathlist = this.FlowTable{i,'Paths'}.paths;
                 for l = 1:length(pathlist)
-                    pathlist{l}.bandwidth = x_path(p);
+                    pathlist{l}.bandwidth = x(p);
                     p = p + 1;
                 end
             end
@@ -158,18 +214,19 @@ classdef Slice < VirtualNetwork
             end
             %%
             % |node_vars| is index by |(node,path,function)|.
+            v_n = this.Hrep*node_vars;
             % node_load = sum(f, node_vars(:,:,f).*I_node_path).
-            NC = this.NumberDataCenters;
-            NP = this.NumberPaths;
-            v_n = zeros(NC,1);
-            np = NC * NP;
-            z_index = 1:np;
-            for i = 1:this.NumberVNFs
-                node_vars_fi = reshape(node_vars(z_index), NC, NP);
-                v_n = v_n + sum(this.I_node_path.*node_vars_fi,2);
-                z_index = z_index + np;
-            end
-            
+            %             NC = this.NumberDataCenters;
+            %             NP = this.NumberPaths;
+            %             v_n = zeros(NC,1);
+            %             np = NC * NP;
+            %             z_index = 1:np;
+            %             for i = 1:this.NumberVNFs
+            %                 node_vars_fi = reshape(node_vars(z_index), NC, NP);
+            %                 v_n = v_n + sum(this.I_node_path.*node_vars_fi,2);
+            %                 z_index = z_index + np;
+            %             end
+            %             assert(isempty(find(abs(this.Hrep*node_vars-v_n)>10^-6,1)), 'error: unequal node load');
             %% Alternative way to compute the node load.
             %             col_index = (1:NC:((NP-1)*NC+1))';
             %             col_index = repmat(col_index, 1, NV);
@@ -184,7 +241,18 @@ classdef Slice < VirtualNetwork
             %             end
             %             vn = As*node_vars;
         end
-                
+            
+        function vc = getVNFCapacity(this, z)
+            %       znpf = reshape(full(this.Variables.z), this.NumberDataCenters, ...
+            %       this.NumberPaths, this.NumberVNFs);
+            %       znpf = znpf.* full(this.I_node_path);  % compatible arithmetic operation
+            %       this.VNFCapacity = reshape(sum(znpf,2), this.NumberDataCenters*this.NumberVNFs,1);
+            if nargin <= 1
+                z = this.Variables.z;
+            end
+            vc = this.Hdiag * z;
+        end
+        
         function c = link_unit_cost(this)
             % the virtual links's unit cost
             c = this.Parent.getLinkField('UnitCost', this.VirtualLinks.PhysicalLink); 
@@ -207,49 +275,31 @@ classdef Slice < VirtualNetwork
             end
         end
         
-        function b = checkFeasible(this, vars)
-            global InfoLevel;
+        function b = checkFeasible(this, vars, opt_opts)
             if nargin <= 1 || isempty(vars)
-                var_x = this.Variables.x; 
-                var_z = this.Variables.z;
+                vars = [this.Variables.x; this.Variables.z];
             else
-                var_x = vars(1:this.NumberPaths);
-                var_z = vars((this.NumberPaths+1):end);
-            end            
-            options = getstructfields(this.Parent.options, 'ConstraintTolerance');
-            %             ub = this.As_res*vars;
-            A1 = this.As_res(:,1:this.NumberPaths);
-            A2 = this.As_res(:,(this.NumberPaths+1):end);
-            v1 = A1*var_x;
-            v2 = A2*var_z;
-            mid_v = (abs(v1)+abs(v2))/2;
-            nz_index = mid_v~=0;
-            ub = (v1(nz_index)+v2(nz_index))./mid_v(nz_index);
-            if isempty(find(ub(nz_index) > options.ConstraintTolerance, 1))
-                b = true;
+                vars = vars(1:this.num_vars);
+            end
+            if nargin >=3 && isfield(opt_opts, 'ConstraintTolerance')
+                b = isempty(find(this.As_res*vars>opt_opts.ConstraintTolerance,1));
             else
-                b = false;
-                if InfoLevel.UserModelDebug >= DisplayLevel.Notify
-                    if issparse(ub)
-                        cprintf('Comments', 'sparse vector\n');
-                    end
-                    warning('checkFeasible: Maximal violation is %.4f.', full(max(ub)));
-                end
+                b = isempty(find(this.As_res*vars>1e-10,1));
             end
         end
-        
-        profit = optimalFlowRate( this, new_opts );
-        [utility, node_load, link_load] = priceOptimalFlowRate(this, x0, new_opts);
+                
         [payment, grad, pseudo_hess] = fcnLinkPricing(this, link_price, link_load);
         [payment, grad, pseudo_hess] = fcnNodePricing(this, node_price, node_load);        
     end
-    
-    methods (Static)
+
+    methods(Static)
         %% TODO: move to Network and split it according to type
         slice_template = loadSliceTemplate(index);
-
+    end
+    
+    methods (Static,Access=protected)
         % Objective function and gradient
-        [profit, grad]= fcnProfit(var_x, S, options);
+        [profit, grad]= fcnProfit(vars, slice, options);
         %% Evaluate the objective function and gradient
         % only active independent variables are passed into the objective function.
         % Considering the constraint's coefficient matrix, if the corresponding column of the
@@ -258,50 +308,47 @@ classdef Slice < VirtualNetwork
         %
         % NOTE: we can also remove the all-zero rows of the coefficient matrix, which do not
         % influence the number of variables. See also <optimalFlowRate>.
-        function [profit, grad]= fcnProfitCompact(act_vars, S, options)
-            vars = zeros(S.num_vars,1);
-            vars(S.I_active_variables) = act_vars;
+        % 
+        % *options* must be specified with 'num_orig_vars'.
+        function [profit, grad]= fcnProfitCompact(act_vars, slice, options)
+            vars = zeros(options.num_orig_vars,1);
+            vars(slice.I_active_variables) = act_vars;
             
-            if nargin == 2
-                options = struct;
-            end
             % we extend the active variables by adding zeros to the inactive ones.
             if nargout <= 1
-                profit = Slice.fcnProfit(vars, S, options);
+                profit = Slice.fcnProfit(vars, slice, options);
             else
-                [profit, grad] = Slice.fcnProfit(vars, S, options);
+                [profit, grad] = Slice.fcnProfit(vars, slice, options);
                 % eliminate the inactive variable's derivatives.
-                grad = grad(S.I_active_variables);
+                grad = grad(slice.I_active_variables);
             end
         end
         
-        [profit, grad] = fcnSocialWelfare(x_vars, S, options);
-        function [profit, grad] = fcnSocialWelfareCompact(act_vars, S, options)
-            vars = zeros(S.num_vars,1);
-            vars(S.I_active_variables) = act_vars;
+        [profit, grad] = fcnSocialWelfare(x_vars, S);
+        function [profit, grad] = fcnSocialWelfareCompact(act_vars, slice)
+            vars = zeros(slice.num_vars,1);
+            vars(slice.I_active_variables) = act_vars;
             
-            if nargin == 2
-                options = struct;
-            end
             if nargout <= 1
-                profit = S.fcnSocialWelfare(vars, S, options);
+                profit = Slice.fcnSocialWelfare(vars, slice);
             else
-                [profit, grad] = S.fcnSocialWelfare(vars, S, options);
-                grad = grad(S.I_active_variables);
+                [profit, grad] = Slice.fcnSocialWelfare(vars, slice);
+                grad = grad(slice.I_active_variables);
             end
         end
 
         % Hessian matrix
-        hess = fcnHessian(var_x, ~, S, options);
+        hess = fcnHessian(var_x, ~, slice, options);
         %% Compact form of Hessian matrix of the Lagrangian
-        function hess = fcnHessianCompact(act_vars, lambda, S, options) %#ok<INUSL>
-            vars = zeros(S.num_vars,1);
-            vars(S.I_active_variables) = act_vars;
+        function hess = fcnHessianCompact(act_vars, lambda, slice, options) %#ok<INUSL>
+            vars = zeros(options.num_orig_vars,1);
+            vars(slice.I_active_variables) = act_vars;
             if nargin == 3
-                options = struct;
+                hess = Slice.fcnHessian(vars, [], slice);
+            else
+                hess = Slice.fcnHessian(vars, [], slice, options);
             end
-            hess = Slice.fcnHessian(vars, [], S, options);
-            hess = hess(S.I_active_variables, S.I_active_variables);
+            hess = hess(slice.I_active_variables, slice.I_active_variables);
         end
         
     end
@@ -346,10 +393,10 @@ classdef Slice < VirtualNetwork
         % _getNetworkCost_ .
         function rc = getResourceCost(this, node_load, link_load)
             if nargin <= 1 || isempty(node_load)
-                node_load = this.VirtualDataCenters.Load;
+                node_load = this.VirtualDataCenters.Capacity;
             end
             if nargin <= 2 || isempty(link_load)
-                link_load = this.VirtualLinks.Load;
+                link_load = this.VirtualLinks.Capacity;
             end
             
             %% A temporary slice should be assigned the parent network
@@ -364,6 +411,9 @@ classdef Slice < VirtualNetwork
             % cost, and the slices should further calculate the static cost outside
             % this method.
             rc = dot(link_uc, link_load) + dot(node_uc, node_load);
+            if rc == 0
+                warning('zero slice cost.');
+            end
         end
     end
     
@@ -403,68 +453,197 @@ classdef Slice < VirtualNetwork
         %
         % NOTE: it is not necessary to evaluate As_res each time when visiting it. so, we
         % define a normal function to update the property |As_res|.
-        function As = getAs_res(this)
+        function As = getAs_res(this, flow_owner, alpha_f)
             NC = this.NumberDataCenters;
             NP = this.NumberPaths;
-            NV = this.NumberVNFs;
+            NV = this.NumberVNFs;       % For 'single-function', NV=1.
             nnz_As = NV*(NP+nnz(this.I_node_path));
             num_lcon = NP*NV;
-            % old_As = this.As_res
             As = spalloc(num_lcon, this.num_vars, nnz_As);
             row_index = 1:NP;
-            col_index = NP+(1:NC);
             for f = 1:NV
-                if nargin >= 2 && ~isempty(this.alpha_f) 
-                    % used when treat all VNFs as one function.
+                if nargin >= 3   % used when treat all VNFs as one function.
                     for p = 1:NP
-                        As(p,p) = this.alpha_f(this.path_owner(p)); %#ok<SPRIX>
+                        As(p,p) = alpha_f(flow_owner(this.path_owner(p))); %#ok<SPRIX>
                     end
                 else
                     af = this.Parent.VNFTable{this.VNFList(f),{'ProcessEfficiency'}};
                     As(row_index,1:NP) = af * eyesparse(NP); %#ok<SPRIX>
                 end
-                for p = 1:NP
-                    As(row_index(p), col_index) = -this.I_node_path(:,p); %#ok<SPRIX>
-                    col_index = col_index + NC;
-                end
                 row_index = row_index + NP;
             end
+            col_index = 1:NC;
+            Hst = zeros(NP, NC*NP);     % |Hst| is a staircase-like diagnoal.
+            for p = 1:NP
+                Hst(p, col_index) = -this.I_node_path(:,p);
+                col_index = col_index + NC;
+            end
+            As(:, (NP+1):end) = block_diag(Hst, NV);
             this.As_res = As;
         end
 
     end
   
     methods (Access = protected)
+        % Called by _optimalFlowRate_, if 'Form=compact', options should be speicifed with
+        % 'num_orig_vars'.
         function [x, fval, exitflag] = optimize(this, params, options)
-            if strfind(options.Method, 'price') % 'price', 'slice-price'
+            if contains(options.Method, 'price') % 'price', 'slice-price'
                 if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
-                    [x, fval, exitflag] = fmincon(@(x)Slice.fcnProfitCompact(x,this), ...
+                    [x_compact, fval, exitflag] = ...
+                        fmincon(@(x)Slice.fcnProfitCompact(x, this, options), ...
                         params.x0, params.As, params.bs, params.Aeq, params.beq, ...
                         params.lb, params.ub, [], options.fmincon_opt);
                 else
-                    [x, fval, exitflag] = fmincon(@(x)Slice.fcnProfit(x,this), ...
+                    [x, fval, exitflag] = ...
+                        fmincon(@(x)Slice.fcnProfit(x, this, options), ...
                         params.x0, params.As, params.bs, params.Aeq, params.beq, ...
                         params.lb, params.ub, [], options.fmincon_opt);
                 end
             else  % 'normal', 'single-function', ...
                 if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
-                    [x, fval, exitflag] = ...
+                    [x_compact, fval, exitflag] = ...
                         fmincon(@(x)Slice.fcnSocialWelfareCompact(x,this), ...
-                        params.x0, params.As, params.bs, params.Aeq, params.beq, params.lbs, ...
+                        params.x0, params.As, params.bs, params.Aeq, params.beq, ...
                         params.lb, params.ub, [], options.fmincon_opt);
                 else
                     [x, fval, exitflag] = ...
                         fmincon(@(x)Slice.fcnSocialWelfare(x,this), ...
-                        params.x0, params.As, params.bs, params.Aeq, params.beq, params.lbs, ...
+                        params.x0, params.As, params.bs, params.Aeq, params.beq, ...
                         params.lb, params.ub, [], options.fmincon_opt);
                 end
             end
             
             if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
-                x = zeros(this.num_vars, 1);
+                x = spalloc(this.num_vars, 1, nnz(x_compact));
                 x(this.I_active_variables) = x_compact;
             end
         end
+        
+        %%%
+        % Flow processing constraint might be violated, due to rounding of x,z. Three
+        % candidate method can be applied for post processing:
+        %       (1) round the x components, so that flow processing demand is meet;
+        %       (2) drop the items in x that violates the constraint;
+        %       (3) recover those z components corresponding to violated constraints. This
+        %           would result in more small components.
+        % NOTE: (2) and (3) cannot retain the feasibility of the solution, since it ignore
+        % small violations.
+        % To support post-processing, we return the index of violated-constriants.
+        %
+        % NOTE: due to rounding to zero, the capacity constraints will not be violated.
+        function [tf, vars] = postProcessing(this)
+            global InfoLevel;
+            var_x = this.Variables.x;
+            var_z = this.Variables.z;
+            tol_zero = this.Parent.options.NonzeroTolerance;
+            var_x(var_x<tol_zero*max(var_x)) = 0;
+            var_z(var_z<tol_zero*max(var_z)) = 0;
+            A1 = this.As_res(:,1:this.NumberPaths);
+            A2 = this.As_res(:,(this.NumberPaths+1):end);
+            v1 = A1*var_x;
+            v2 = A2*var_z;
+            index_violate = find(v1+v2>0);      % re = v1+v2
+            if ~isempty(index_violate)
+                if InfoLevel.UserModel >= DisplayLevel.Notify
+                    warning('[Post Processing]: Maximal violation is %.4f.', full(max(v1+v2)));
+                end
+                
+                NP = this.NumberPaths;
+                NV = this.NumberVNFs;
+                post_process = this.Parent.options.PostProcessing;
+                switch post_process
+                    case 'round'
+                        b_violate = false(size(v1));
+                        b_violate(index_violate) = true;
+                        pid = 1:NP:((NV-1)*NP+1);
+                        for i = 1:NP
+                            p_violate = find(b_violate(pid));
+                            if ~isempty(p_violate)
+                                t = v1(pid(p_violate))./abs(v2(pid(p_violate)));
+                                var_x(i) = var_x(i) ./ max(t);
+                            end
+                            pid = pid + 1;
+                        end
+                        % The rounding error may still leads to postive error, therefore we set a
+                        % relatively small tolerance, i.e. 1e-10. 
+                        assert(this.checkFeasible([var_x; var_z], struct('ConstraintTolerance', 1e-10)), ...
+                            '[Post Processing]: failed infeasible solution.');
+                    case {'drop','recover'}
+                        %% Ignore the tiny components
+                        % Use the differentiation of |v1-v2|/|v1+v2| is more flexible than use only
+                        % |v1-v2|.
+                        %   # if |v1-v2| is remarkable, both form can eaily identify the difference;
+                        %   # If both v1 and v2 is large while |v1-v2| is small, the former can
+                        %     identify the small value regardless of the tolerance, while the later
+                        %     relies on the tolerance;
+                        %   # Otherwise, if both v1 and v2 is small (most small value should have been
+                        %     rounding in the former process), then both form rely on tolerance.
+                        %
+                        %% ISSUE
+                        % |tol_zero| should not be too large compared to the absolute
+                        % value of variables. It leads to inaccurate solution (the
+                        % violation still exists), which cannot pass the feasible assertion.
+                        % Therfore, *'drop' is not recommend*.  So |tol_zero| should be
+                        % smaller, so that all violated ones can be
+                        % identified.
+                        %   # If we use the 'drop' option, some large components of the
+                        %     solution might be discarded (even if the absolute value of
+                        %     residual is large),  which degenerate the solution to the
+                        %     sub-optmal.
+                        %   # If we use the 'recover' option, then some trivial components
+                        %     will be recovered. However the quality of solution declines.
+                        %
+                        % Since the |tol_zero| might lead to miss some violated components, we
+                        % do not perform feasible assertion after processing. We Since the
+                        % constraint tolerance in optimization is 10^-6 by default, the
+                        % residual error's magnitude may be higher than 10^-6.
+                        % Therefore, we have to set |tol_zero| to 10^-3~10^-4 (tuned according
+                        % to the real data).
+                        re = v1 + v2;
+                        re(re<tol_zero) = 0;
+                        mid_v = (abs(v1)+abs(v2))/2;
+                        nz_index = find(mid_v~=0);
+                        tol_con = this.Parent.options.ConstraintTolerance;
+                        b_violate = (re(nz_index)./mean(mid_v(nz_index))) > tol_con; 
+                        % => mean(mid_v(nz_index)) | max(mid_v(nz_index))
+                        vi_idx = nz_index(b_violate);
+                        pidx = mod(vi_idx-1, NP)+1;
+                        if strcmpi(post_process, 'recover')
+                            fidx = ceil(vi_idx/NV);
+                            for i = 1:length(vi_idx)
+                                zidx = (1:this.NumberDataCenters)+ ...
+                                    ((fidx(i)-1)*this.NumberDataCenters*NP + ...
+                                    (pidx(i)-1)*this.NumberDataCenters);
+                                var_z(zidx) = this.temp_vars.z(zidx);
+                            end
+                        else
+                            pidx = unique(pidx);
+                            var_x(pidx) = 0;
+                        end
+                    otherwise
+                        error('[Post Processing]: invalid processing option (%s).', post_process);
+                end
+            end
+            if nargout >= 2
+                vars = [var_x; var_z];
+            end
+            this.Variables.x = var_x;
+            this.Variables.z = var_z;
+            tf = true;
+        end
+        
+        function temp_vars = get_temp_variables(this)
+            temp_vars = [this.temp_vars.x; this.temp_vars.z];
+        end
+
+    end
+    
+    methods (Access = {?Slice, ?CloudNetwork, ?SliceFlowEventDispatcher})
+        [utility, node_load, link_load] = priceOptimalFlowRate(this, x0, new_opts);
+    end
+    methods (Access = {?Slice, ?CloudNetwork})
+        profit = optimalFlowRate( this, new_opts );
     end
 end
 
@@ -484,7 +663,7 @@ end
 %
 % * *fcnProfit* |static| : Evalute the objective function and gradient.
 %
-%      [profit, grad]= fcnProfit(var_x, S)
+%      [profit, grad]= fcnProfit(vars, slice, options)
 %
 % |grad|: the gradient value of the objective function.
 % The upper bound number of non-zero elements in the gradient vector: the gradient on path
