@@ -1,13 +1,28 @@
-function tf = executeMethod(this, action)
-global g_results event_num DEBUG; %#ok<NUSED>
-options = getstructfields(this.Parent.options, {'Method', 'Form'});  % Form = {'compact'|'normal'}
-this.getAs_res;         % TODO, incremental upate of As_res.
-% |edge_reconfig_cost| is a vector, and we know edge-path incident matrix, so
-% we can calculate the |x_reconfig_cost| for all paths.
-this.x_reconfig_cost = (this.I_edge_path)' * this.VirtualLinks.ReconfigCost;
-this.z_reconfig_cost = repmat(this.VirtualDataCenters.ReconfigCost, ...
-    this.NumberPaths*this.NumberVNFs, 1);
-switch options.Method
+function [exitflag, fidx] = executeMethod(this, action)
+global g_results event_num DEBUG InfoLevel; %#ok<NUSED>
+%% Initialize Variables
+% this.Variables = struct;????
+this.temp_vars = struct;
+
+%%
+options = getstructfields(this.Parent.options, {'Form'});  % Form = {'compact'|'normal'}
+options.PricingPolicy = 'quadratic-price';
+this.getAs_res;         % TODO, incremental upate of As_res, Hrep, and Hdiag.
+this.getHrep;
+this.getHdiag;
+if ~strcmpi(this.options.Method, 'fastconfig')
+    this.vnf_reconfig_cost = this.Parent.options.VNFReconfigCoefficient * ...
+        repmat(this.VirtualDataCenters.ReconfigCost, this.NumberVNFs, 1);
+    this.topts.vnf_reconfig_cost = this.options.ReconfigScaler*this.vnf_reconfig_cost;
+    %% Save the VNF capacity to the previous state, berfore optimization
+    % After the slice is created, |VNFCapacity| is recorded. After each optimization, the
+    % |VNFCapacity| is updated.
+    % When perform 'dimconfig' or 'dimconfig2', if the topology is augmented with new data
+    % centers, |this.old_variables.v| will be modified to match the size of the new
+    % vector (See <DimensioningReconfigure>).
+    this.old_variables.v = this.VNFCapacity(:);
+end
+switch this.options.Method
     case 'reconfig'
         % provide 'method' and 'model' to customize the <optimalFlowRate>
         % Since we adopt |FixedCost| model, the resource cost that is a
@@ -15,75 +30,66 @@ switch options.Method
         % should exclude it from the |profit|, as well as the reconfiguration
         % cost.
         options.CostModel = 'fixcost';
+        options.Method = 'slice-price';
+        this.prices.Link = this.VirtualLinks.Price;
+        this.prices.Node = this.VirtualDataCenters.Price;
         profit = this.optimalFlowRate(options);
-        %%
-        % After reconfiguration VNF instance capcity has changed.
-        this.VNFCapacity = this.getVNFInstanceCapacity;
-        g_results.Profit(event_num,1) = ...
-            profit - this.getSliceCost('quadratic-price', 'const');
-        g_results.Solution(event_num,1) = this.Variables;
-        [   g_results.Cost(event_num,1), ...
-            g_results.NumberReconfig(event_num,1),...
-            g_results.RatioReconfig(event_num,1),...
-            g_results.NumberVariables(event_num,1)] ...
-            = this.get_reconfig_cost('const');
-        %% Save the VNF capacity to the previous state.
-        this.prev_vnf_capacity = this.VNFCapacity;
     case 'fastconfig'
         profit = this.fastReconfigure(action, options);
-        % Reconfiguration cost has been counted in |profit|, while resource
-        % cost is not. So we need to exlude only part of the resource cost
-        % from the profit.
-        g_results.Solution(event_num,1) = this.Variables;
-        [   g_results.Cost(event_num,1),...
-            g_results.NumberReconfig(event_num,1),...
-            g_results.RatioReconfig(event_num,1),...
-            g_results.NumberVariables(event_num,1)]...
-            = this.get_reconfig_cost('const');
-        g_results.Profit(event_num,1) = ...
-            profit - g_results.Cost(event_num,1) + ...
-            this.get_reconfig_cost('linear') - ...
-            this.getSliceCost('quadratic-price', 'none');
     case 'fastconfig2'
         profit = this.fastReconfigure2(action, options);
-        this.VNFCapacity = this.getVNFInstanceCapacity;
-        g_results.Solution(event_num,1) = this.Variables;
-        [   g_results.Cost(event_num,1),...
-            g_results.NumberReconfig(event_num,1),...
-            g_results.RatioReconfig(event_num,1),...
-            g_results.NumberVariables(event_num,1)]...
-            = this.get_reconfig_cost('const');
-        g_results.Profit(event_num,1) = ...
-            profit - g_results.Cost(event_num,1) + ...
-            this.get_reconfig_cost('linear') - ...
-            this.getSliceCost('quadratic-price', 'none');
-        this.prev_vnf_capacity = this.VNFCapacity;
     case {'dimconfig', 'dimconfig2'}
-        if mod(this.num_received_events, this.interval_events) == 1
-            profit = this.DimensioningReconfigure(action, options);
-            this.VNFCapacity = this.getVNFInstanceCapacity;
-        elseif strcmpi('dimconfig', options.Method)
-            profit = this.fastReconfigure(action, options);
-        else
-            profit = this.fastReconfigure2(action, options);
-            this.VNFCapacity = this.getVNFInstanceCapacity;
-        end
-        g_results.Solution(event_num,1) = this.Variables;
-        [   g_results.Cost(event_num,1),...
-            g_results.NumberReconfig(event_num,1),...
-            g_results.RatioReconfig(event_num,1),...
-            g_results.NumberVariables(event_num,1)]...
-            = this.get_reconfig_cost('const');
-        g_results.Profit(event_num,1) = ...
-            profit - g_results.Cost(event_num,1) + ...
-            this.get_reconfig_cost('linear') - ...
-            this.getSliceCost('quadratic-price', 'none');
-        this.prev_vnf_capacity = this.VNFCapacity;
+        profit = this.DimensioningReconfigure(action, options);
     otherwise
         error('NetworkSlicing:UnsupportedMethod', ...
             'error: unsupported method (%s) for network slicing.', ...
-            options.Method) ;
+            this.options.Method) ;
 end
-g_results.NumberFlows(event_num,1) = this.NumberFlows;
-tf = true;
+if contains(this.options.Method, {'dimconfig', 'dimconfig2'}) && isempty(profit)
+    exitflag = -1;
+    return;
+end
+% stat.Solution = this.Variables;
+stat = this.get_reconfig_stat();
+switch this.options.Method
+    case 'reconfig'
+        stat.Profit = profit - stat.Cost;
+    case {'fastconfig','fastconfig2'}
+        stat.Profit = profit + stat.LinearCost - stat.Cost;        
+    case{'dimconfig', 'dimconfig2'}
+        stat.Profit = profit + stat.LinearCost - stat.Cost;
+        if this.b_dim && this.getOption('Adhoc')
+            % If the slice do not support Adhoc flows, then we do not release resource
+            % decriptors for the slice.
+            this.release_resource_description(); 
+        end
+end
+g_results(event_num) = stat;
+
+%% Reset temporary variables
+% These variables should be cleared. If it is used next time, it will be assigned with new
+% values. Some methods will execute according to the state (if it is initialized) of the
+% variables.
+this.prices.Link = [];
+this.prices.Node = [];
+this.topts = struct();
+this.changed_index = struct();
+this.net_changes = struct();
+
+fidx = find(this.FlowTable.Rate<=0);
+if isempty(fidx)
+    exitflag = 1;
+    if nargout >= 2
+        fidx = [];
+    end
+else
+    exitflag = 0;
+    if InfoLevel.UserModel>=DisplayLevel.Notify ||...
+            InfoLevel.UserModelDebug>=DisplayLevel.Final
+        if ~isempty(setdiff(this.FlowTable.Identifier(fidx), this.reject_index))
+            warning('[%s]: reject flows due to zero rate.', this.options.Method);
+        end
+    end
+end
+this.reject_index = this.FlowTable.Identifier(fidx);
 end
