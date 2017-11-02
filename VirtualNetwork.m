@@ -12,17 +12,20 @@ classdef VirtualNetwork < matlab.mixin.Copyable
         VirtualDataCenters; % data centers in the slice 
         FlowTable;      % flow information in the slice
         VNFList;        % List of virtual network functions in the slice
-        Options;
+        options;
         
         I_edge_path;    % Edge-Path Incidence Matrix
         I_node_path;    % Node-Path Incidence Matrix
         I_flow_path;    % Flow-Path Incidence Matrix        
     end
     
-    properties (GetAccess = {?PhysicalNetwork,?Slice})
+    properties (Access = {?PhysicalNetwork,?Slice})
         PhysicalLinkMap;
-        PhyscialNodeMap;    %
-        path_owner;         % the associated flow of path;
+        PhysicalNodeMap;    %
+        
+        % the associated flow of path, to provide a fast inquiry method for associated
+        % flow than using |I_flow_path|. 
+        path_owner;         
     end
    
     properties (Dependent)
@@ -35,34 +38,36 @@ classdef VirtualNetwork < matlab.mixin.Copyable
     end
         
     methods
-        function this = VirtualNetwork(net_data)
+        function this = VirtualNetwork(vnet_data)
             declare_info_level;
             if nargin == 0
                 return;
-            elseif isa(net_data, 'VirtualNetwork')
-                this = net_data.copy;
+            elseif isa(vnet_data, 'VirtualNetwork')
+                this = vnet_data.copy;
                 return;
             end
-            this.Parent = net_data.Parent;
-            this.Topology = DirectedGraph(net_data.Adjacent);
-            if isfield(net_data, 'Type')
-                this.Type = net_data.Type;
+            this.Parent = vnet_data.Parent;
+            this.Topology = DirectedGraph(vnet_data.Adjacent);
+            if isfield(vnet_data, 'Type')
+                this.Type = vnet_data.Type;
             end
             %%%
             % Virtual Links
-            this.VirtualLinks = array2table(net_data.LinkMapS2P, ...
+            this.VirtualLinks = array2table(vnet_data.LinkMapS2P, ...
                 'VariableNames', {'PhysicalLink'});
             % Link capacity
-            if isfield(net_data, 'link_capacity')
-                this.VirtualLinks.Capacity = net_data.LinkCapacity;
+            if isfield(vnet_data, 'LinkCapacity')
+                this.VirtualLinks.Capacity = vnet_data.LinkCapacity;
+            else
+                this.VirtualLinks.Capacity = zeros(height(this.VirtualLinks),1);
             end
             % Link load
             this.VirtualLinks.Load = zeros(this.NumberVirtualLinks, 1);
-            this.PhysicalLinkMap = array2table(net_data.LinkMapP2S,...
+            this.PhysicalLinkMap = array2table(vnet_data.LinkMapP2S,...
                 'VariableNames', {'VirtualLink'});
             %%%
             % Virtual Nodes
-            this.VirtualNodes = array2table(net_data.NodeMapS2P,...
+            this.VirtualNodes = array2table(vnet_data.NodeMapS2P,...
                 'VariableNames', {'PhysicalNode'});
             %%%
             % Virtual Data Center Node
@@ -76,46 +81,45 @@ classdef VirtualNetwork < matlab.mixin.Copyable
                 (1:this.NumberDataCenters)';
             %%%
             % Data center node capacity
-            if isfield(net_data, 'Capacity')
-                this.VirtualDataCenters.Capacity = net_data.Capacity;
+            if isfield(vnet_data, 'NodeCapacity')
+                this.VirtualDataCenters.Capacity = vnet_data.NodeCapacity;
             else
                 this.VirtualDataCenters.Capacity = zeros(this.NumberDataCenters,1);
             end
             %%%
             % Data center node load
             this.VirtualDataCenters.Load = zeros(this.NumberDataCenters, 1);
-            this.PhyscialNodeMap = array2table(net_data.NodeMapP2S,...
+            this.PhysicalNodeMap = array2table(vnet_data.NodeMapP2S,...
                 'VariableNames', {'VirtualNode'});
             %%%
             % Flow Table
             % convert node index to virtual node index
-            for k = 1:height(net_data.FlowTable)
-                path_list = net_data.FlowTable{k,{'Paths'}};
+            for k = 1:height(vnet_data.FlowTable)
+                path_list = vnet_data.FlowTable{k,{'Paths'}};
                 for p = 1:path_list.Width
                     path = path_list.paths{p};
-                    path.node_list = this.PhyscialNodeMap{path.node_list, 'VirtualNode'};
+                    path.node_list = this.PhysicalNodeMap{path.node_list, 'VirtualNode'};
                 end
             end
-            this.FlowTable = net_data.FlowTable;
+            this.FlowTable = vnet_data.FlowTable;
             
-            this.VNFList = net_data.VNFList;
+            this.VNFList = vnet_data.VNFList;
             this.initializeState;
 
-            this.Options = getstructfields(net_data, {'Identifier', 'FlowPattern', ...
-                'DelayConstraint', 'NumberPaths', 'Method'}, 'ignore');                        
-            if ~isfield(net_data, 'FlowPattern')
+            if isfield(vnet_data, 'Identifier')
+                this.Identifier = vnet_data.Identifier;
+            end
+            
+            this.options = getstructfields(vnet_data, {'Identifier', 'FlowPattern', ...
+                'DelayConstraint', 'NumberPaths'}, 'ignore');                        
+            if ~isfield(vnet_data, 'FlowPattern')
                 warning('FlowPattern option is not provided.');
             end
-            if ~isfield(net_data, 'DelayConstraint')
+            if ~isfield(vnet_data, 'DelayConstraint')
                 warning('DelayConstraint option is not provided.');
             end
-            if ~isfield(net_data, 'NumberPaths')
+            if ~isfield(vnet_data, 'NumberPaths')
                 warning('NumberPaths option is not provided.');
-            end    
-            if ~isfield(net_data, 'Method')
-                this.Options.Method = 'dynamic-slicing';
-                warning('Method option is not provided, set as ''%s''.', ...
-                    this.Options.Method);
             end    
         end
         
@@ -196,6 +200,11 @@ classdef VirtualNetwork < matlab.mixin.Copyable
                 
         function tf = isDynamicFlow(~)
             tf = false;
+        end
+        
+        function v = getOption(this, field)
+            v = getstructfields(this.options, field, 'default-ignore');
+            v = v.(field);
         end
         
         function initializeState(this)
