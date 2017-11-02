@@ -7,9 +7,9 @@
 %
 %   [profit, grad] = fcnSocialWelfare(var_x, S)
 %
-function [profit, grad] = fcnSocialWelfare(var_x, S)
-var_path = var_x(1:S.NumberPaths);
-flow_rate = S.getFlowRate(var_path);
+function [profit, grad] = fcnSocialWelfare(vars, slice)
+var_path = vars(1:slice.NumberPaths);
+flow_rate = slice.getFlowRate(var_path);
 
 %% Calculate the cost of network and slices
 % When calculate the cost of the network as a single slice, we can use both
@@ -21,34 +21,34 @@ flow_rate = S.getFlowRate(var_path);
 %%%
 %     profit = -sum(weight.*fcnUtility(flow_rate)) + ...
 %         S.Parent.getNetworkCost(node_load, link_load);
-if isempty(S.weight)        % for network as a single slice.    TODO: remove this block
-    weight = S.FlowTable.Weight;
+if isempty(slice.weight)        % for network as a single slice.    TODO: remove this block
+    weight = slice.FlowTable.Weight;
 else                        % for network as multiple slice.
-    weight = S.weight*ones(S.NumberFlows, 1);
+    weight = slice.weight*ones(slice.NumberFlows, 1);
 end
-var_node = var_x((S.NumberPaths+1):end);
-node_load = S.getNodeLoad(var_node);
-link_load = S.getLinkLoad(var_path);
-profit = -sum(weight.*fcnUtility(flow_rate)) + S.getResourceCost(node_load, link_load);
+var_node = vars((slice.NumberPaths+1):end);
+node_load = slice.getNodeLoad(var_node);
+link_load = slice.getLinkLoad(var_path);
+profit = -sum(weight.*fcnUtility(flow_rate)) + slice.getResourceCost(node_load, link_load);
 
 % If there is only one output argument, return the real profit (positive)
 if nargout <= 1
     profit = -profit;
 else
-    link_price = S.link_unit_cost;
-    node_price = S.node_unit_cost;
-    grad = spalloc(length(var_x),1, S.NumberPaths+nnz(S.I_node_path)*S.NumberVNFs);
-    for p = 1:S.NumberPaths
-        i = S.path_owner(p);
-        grad(p) = -weight(i)/(1+S.I_flow_path(i,:)*var_path) + ...
-            dot(link_price, S.I_edge_path(:,p)); %#ok<SPRIX>
+    link_price = slice.link_unit_cost;
+    node_price = slice.node_unit_cost;
+    grad = spalloc(length(vars),1, slice.NumberPaths+nnz(slice.I_node_path)*slice.NumberVNFs);
+    for p = 1:slice.NumberPaths
+        i = slice.path_owner(p);
+        grad(p) = -weight(i)/(1+slice.I_flow_path(i,:)*var_path) + ...
+            dot(link_price, slice.I_edge_path(:,p)); %#ok<SPRIX>
     end
     
-    nz = S.NumberDataCenters*S.NumberPaths;
-    z_index = S.NumberPaths+(1:nz);
-    for f = 1:S.NumberVNFs
+    nz = slice.NumberDataCenters*slice.NumberPaths;
+    z_index = slice.NumberPaths+(1:nz);
+    for f = 1:slice.NumberVNFs
         % compatiable arithmetic operation
-        grad(z_index) = node_price.*S.I_node_path; %#ok<SPRIX>
+        grad(z_index) = node_price.*slice.I_node_path; %#ok<SPRIX>
         z_index = z_index + nz;
     end
 end

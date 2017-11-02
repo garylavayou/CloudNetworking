@@ -2,7 +2,7 @@
 % override <Slice.fcnSocialWelfare>.
 % Slice resource cost is fixed, since the price is given and the resource amount is known.
 % When using the |'fixcost'| option, the slice's resource cost is
-% constant, and we do not consider it in the objective and thus in the gradient.
+% constant, and we do not consider it in the objective as well as in the gradient.
 function [profit, grad] = fcnSocialWelfare(var_x, S, options)
 if strcmp(options.CostModel, 'fixcost')
     var_path = var_x(1:S.NumberPaths);
@@ -23,7 +23,7 @@ else
     if nargout <= 1
         profit = fcnSocialWelfare@Slice(var_x, S);
     else
-        [profit, grad] = fcnSocialWelfare(var_x, S);
+        [profit, grad] = fcnSocialWelfare@Slice(var_x, S);
     end
 end
 end

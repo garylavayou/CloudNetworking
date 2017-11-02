@@ -89,18 +89,14 @@ slice_opt.NumberEdges = nnz(slice_opt.Adjacent);
 slice_opt.NodeMapS2P = phy_node_id;
 % slice_opt.node_price = ones(length(phy_node_id),1);
 slice_opt.NodeMapP2S = zeros(this.NumberNodes,1);
-for i = 1:slice_opt.NumberNodes
-    slice_opt.NodeMapP2S(slice_opt.NodeMapS2P(i)) = i;
-end
-
+slice_opt.NodeMapP2S(phy_node_id) = (1:slice_opt.NumberNodes)';
 slice_opt.LinkMapS2P = zeros(slice_opt.NumberEdges,1);
 slice_opt.LinkMapP2S = zeros(this.NumberLinks,1);
 [head, tail] = find(slice_opt.Adjacent~=0);
 %%
-% head and tail is the index of node in slice, this.graph.IndexEdge require the physical
-% ID of the node
+% |head| and |tail| is the index of node in slice, <this.graph.IndexEdge> require the physical
+% ID of the node.
 slice_opt.LinkMapS2P = this.graph.IndexEdge(phy_node_id(head),phy_node_id(tail));
-% slice_opt.link_price = ones(length(head),1);
 slice_opt.LinkMapP2S(slice_opt.LinkMapS2P) = 1:length(head);
 slice_opt.FlowTable.Source = slice_opt.NodeMapP2S(slice_opt.FlowTable.Source);
 slice_opt.FlowTable.Target = slice_opt.NodeMapP2S(slice_opt.FlowTable.Target);
@@ -117,10 +113,9 @@ global DEBUG; %#ok<NUSED>
 sl.FlowTable.Identifier = this.flow_identifier_generator.next(sl.NumberFlows);
 this.allocatepathid(sl);
 
-%% TODO
-% used for resource partitioning and pricing.
-slice_link_usage = slice_opt.LinkMapP2S~=0;
-this.link_usage = [this.link_usage slice_link_usage];
-slice_node_usage = slice_opt.NodeMapP2S~=0;
-this.node_usage = [this.node_usage slice_node_usage];
+%% resource usage
+link_id = sl.VirtualLinks.PhysicalLink;
+this.AggregateLinkUsage(link_id) = this.AggregateLinkUsage(link_id) + 1;
+node_id = sl.VirtualNodes.PhysicalNode;
+this.AggregateNodeUsage(node_id) = this.AggregateNodeUsage(node_id) + 1;
 end

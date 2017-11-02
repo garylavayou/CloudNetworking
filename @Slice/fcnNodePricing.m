@@ -6,7 +6,7 @@ function [ payment, grad, pseudo_hess ] = fcnNodePricing(this, node_price, node_
 theta = 3;
 b = node_price;
 node_id = this.getDCNI;
-aggr_node_usage = sum(this.Parent.node_usage,2);
+aggr_node_usage = this.Parent.AggregateNodeUsage;
 a = (theta-1)*b.*aggr_node_usage(node_id)./this.Parent.getNodeField('Capacity', node_id);
 
 if nargout == 3

@@ -9,7 +9,7 @@ theta = 3;
 % b = (2/(1+theta))*link_price;
 b = link_price;
 link_id = this.VirtualLinks.PhysicalLink;
-aggr_link_usage = sum(this.Parent.link_usage,2);
+aggr_link_usage = this.Parent.AggregateLinkUsage;
 %%%
 % Since $\mathit{S}$ slices share the resource amount |V|, we consider the price when the
 % load equals to 0 and $\frac{V}{\mathit{S}}$.

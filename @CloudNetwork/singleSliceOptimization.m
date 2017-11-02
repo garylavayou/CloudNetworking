@@ -9,9 +9,32 @@
 % right with |I_path_function| and the output.
 % * *TODO*: the solution of |'single-function'| is infeasible.
 % 
-%%
-function [output, runtime] = singleSliceOptimization( this )
+%% Single-Function Model
+% In the same slice, all flows request the same set of VNFs, and the processing demand is
+% proportion to flow rate, so we can treat all VNF on the function chain as one VNF
+% type,and its resource demand is the sum of all consisting VNFs.  
+% Since slices distinguish in VNF chains, the assembled VNF's processing demand also
+% diverses. Even that, the assembled VNFs of individual slices can also be treated as one
+% type, although the processing demand is different, which can be addressed by setting
+% coefficients for flows from different slices.   
+%
+% Post-processing is required to find an solution, we can allocate VNF resources by order.
+%
+% Note: The 'single-function' model can only be applied when all NFV-capable nodes can
+% instantiate all types of VNF. Otherwise, the assembled VNF cannot be located at any
+% NFV-capable nodes.
+% 
+% TODO: Part of the functionalities are moved to <ClouldNetworkEx>.
+function [output, runtime] = singleSliceOptimization( this, new_opts )
 % this.clearStates;
+options = getstructfields(this.options, 'Method');
+assert(contains(options.Method, {'single-normal', 'single-function'}),...
+    'error: unrecognized method (%s).', options.Method);
+if nargin < 2
+    new_opts = struct;
+end
+options = structmerge(options, getstructfields(new_opts, 'bCompact', 'default', true));
+options.PricingPolicy = 'linear';       % can be specified by the input argument.
 
 %% Merge slices into one single big slice
 NL = this.NumberLinks;
@@ -29,7 +52,6 @@ slice_data.FlowTable = table([],[],[],[],[],[],[],'VariableNames',...
 NF = this.NumberFlows;
 flow_owner = zeros(NF, 1);
 nf = 0;
-% b_vnf = false(this.NumberVNFs, 1);
 for s = 1:NS
     sl = this.slices{s};
     new_table = sl.FlowTable;
@@ -53,47 +75,72 @@ end
 slice_data.FlowPattern = FlowPattern.Default;
 slice_data.DelayConstraint = inf;
 
-slice_data = this.updateSliceData(slice_data);      % override by subclasses
+slice_data = this.updateSliceData(slice_data, options);      % override by subclasses
+slice_data.NumberPaths = [];             % avoid warning, no use here.
+slice_data.Method = [];
 slice_data.Parent = this;
 % the flow id and path id has been allocated in each slice already, no need to reallocate.
 ss = Slice(slice_data);
-I_flow_function = zeros(NF, this.NumberVNFs);
-for f = 1:NF
-    I_flow_function(f, this.slices{flow_owner(f)}.VNFList) = 1;
+if strcmpi(options.Method, 'single-function')
+    ss.getAs_res(flow_owner, slice_data.Alpha_f);
+    options.Alpha_f = slice_data.Alpha_f;
+elseif strcmpi(options.Method, 'single-normal')
+    %% Coefficient for global optimization
+    % When all slices are combined into one slice, a VNF might not be used by all paths
+    % (_i.e._ all flows). If a VNF |f| is not used by a path |p|, there is no
+    % processing-rate constraints on $f \times p$(|delete_items|). To form the constraint
+    % coefficient matrix, the related items in |As| should be removed. See also <Slice
+    % file://E:/workspace/MATLAB/Projects/Documents/CloudNetworking/Slice.html>.
+    %
+    % By the way, $z_{n,p,f}=0, \forall n$, if |p| does not use NFV |f|.
+    I_flow_function = zeros(NF, ss.NumberVNFs);
+    for f = 1:NF
+        [~, vid] = ismember(this.slices{flow_owner(f)}.VNFList, ss.VNFList);
+        I_flow_function(f, vid) = 1;
+    end
+    I_path_function = ss.I_flow_path'*I_flow_function;
+    ss.As_res = ss.As_res(logical(I_path_function(:)),:);
 end
-ss.I_path_function = ss.I_flow_path'*I_flow_function;
 
 if nargout == 2
     tic;
 end
-options = getstructfields(this.options, 'Method');
-[~] = ss.optimalFlowRate(options);
+% Only return intermediate results, so no return value provided.
+ss.optimalFlowRate(options);  
 if nargout == 2
     runtime.Serial = toc;
     runtime.Parallel = runtime.Serial;
 end
-output = calculateOptimalOutput(this, ss, slice_data);
+if strcmpi(options.Method, 'single-normal')
+    nz = ss.NumberDataCenters*ss.NumberPaths;
+    z_index = 1:nz;
+    for v = 1:ss.NumberVNFs
+        mask_npf = ss.I_node_path.*I_path_function(:,v)'; % compatible arithmetic operation
+        ss.temp_vars.z(z_index) = mask_npf(:).*ss.temp_vars.z(z_index);
+        z_index = z_index + nz;
+    end
+end
+output = calculateOptimalOutput(this, ss);
 
 %% Partition the network resources according to the global optimization
 pid_offset = 0;
-z_npf = output.Znpf;
-output = rmfield(output, 'Znpf');
+z_npf = reshape(full(ss.temp_vars.z), ss.NumberDataCenters, ss.NumberPaths, ss.NumberVNFs);
 % node_load = zeros(this.NumberNodes, 1);
 % link_load = zeros(this.NumberLinks, 1);
+fmincon_opt = optimoptions('fmincon');
 for s = 1:NS
     sl = this.slices{s};
     pid = 1:sl.NumberPaths;
-    sl.x_path = ss.Variables.x(pid_offset+pid);
+    sl.temp_vars.x = ss.temp_vars.x(pid_offset+pid);
     nid = sl.getDCPI;       % here is the DC index, not the node index.
-    vid = sl.VNFList;
-    sl.z_npf = ...
+    [~, vid] = ismember(sl.VNFList, ss.VNFList);
+    sl.temp_vars.z = ...
         reshape(z_npf(nid,pid+pid_offset,vid),sl.num_vars-sl.NumberPaths, 1);
     pid_offset = pid_offset + sl.NumberPaths;
-    if ~sl.checkFeasible([sl.x_path; sl.z_npf])
-        error('error: infeasible solution.');
-    end
-    sl.VirtualDataCenters.Capacity = sl.getNodeLoad(sl.z_npf);
-    sl.VirtualLinks.Capacity = sl.getLinkLoad(sl.x_path);
+    assert(sl.checkFeasible([sl.temp_vars.x; sl.temp_vars.z], ...
+        struct('ConstraintTolerance', fmincon_opt.ConstraintTolerance)), 'error: infeasible solution.');
+    sl.VirtualDataCenters.Capacity = sl.getNodeLoad(sl.temp_vars.z);
+    sl.VirtualLinks.Capacity = sl.getLinkLoad(sl.temp_vars.x);
     % DEBUG
 %     eid = sl.VirtualLinks.PhysicalLink;
 %     node_load(nid) = node_load(nid) + sl.VirtualNodes.Capacity;
@@ -103,17 +150,18 @@ end
 % disp(max(link_load-this.getLinkField('Capacity')));
 
 %% Compute the real resource demand with given prices
+options = structmerge(options, getstructfields(new_opts, 'PricingPolicy', 'ignore'));
 if nargout == 2
-    [node_price, link_price, rt] = pricingFactorAdjustment(this);
+    [node_price, link_price, rt] = pricingFactorAdjustment(this, options);
     runtime.Serial = runtime.Serial + rt.Serial;
     runtime.Parallel = runtime.Parallel + rt.Parallel;
 else
-    [node_price, link_price] = pricingFactorAdjustment(this);
+    [node_price, link_price] = pricingFactorAdjustment(this, options);
 end
 % Finalize substrate network
 this.finalize(node_price, link_price);
 
 %% Calculate the output
 output.SingleSlice = ss;
-output = this.calculateOutput(output);
+output = this.calculateOutput(output, options);
 end
