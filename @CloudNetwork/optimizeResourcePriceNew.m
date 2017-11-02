@@ -1,9 +1,17 @@
 % Optimize resource price
-% * *TODO* Resource Cost Model: linear, convex (quatratic)
+% * Resource Cost Model: linear, convex (quatratic)
 % DATE: 2017-04-23
-function [output, runtime] = optimizeResourcePriceNew(this, init_price)
+%% Reconfiguration Cost Model (optional)
+% profit of Slice Customer: utility - resource payment - reconfiguration payment;
+% profit of Slice Customer: resource payment - resource cost
+%       (resource payment + reconfiguration payment - resource cost - reconfiguration
+%       payment);
+% net social welfare: utility - resource cost - reconfiguration payment.
+% 
+% NOTE: the model should be refined to dexcribe the reconfiguration cost.
+function [output, runtime] = optimizeResourcePriceNew(this, init_price, slices)
 global InfoLevel;
-options = getstructfields(this.options, {'Threshold','Form'});
+options = getstructfields(this.options, {'Threshold','Form'}, 'default', '');
 options.PricingPolicy = 'quadratic-price';
 % options.Threshold = '';
 switch options.Threshold
@@ -22,13 +30,31 @@ if nargout == 2
 else
     options.CountTime = false;
 end
+if nargin <= 2
+    slices = this.slices;       % all slices are involved in slice dimensioning
+end
+options.Slices = slices;
 
 % network data
 NC = this.NumberDataCenters;
-NS = this.NumberSlices;
+NS = length(slices);
 NL = this.NumberLinks;
-node_capacity = this.getDataCenterField('Capacity');
-link_capacity = this.getLinkField('Capacity');
+if nargin <= 2
+    node_capacity = this.getDataCenterField('Capacity');
+    link_capacity = this.getLinkField('Capacity');
+else
+    %% 
+    % residual capacity + reallocatable capacity.
+    node_capacity = this.getDataCenterField('ResidualCapacity');
+    link_capacity = this.getLinkField('ResidualCapacity');
+    for i = 1:NS
+        sl = slices{i};
+        node_capacity(sl.getDCPI) = node_capacity(sl.getDCPI) + ...
+            sl.VirtualDataCenters.Capacity;
+        link_capacity(sl.VirtualLinks.PhysicalLink) = ...
+            link_capacity(sl.VirtualLinks.PhysicalLink) + sl.VirtualLinks.Capacity;
+    end
+end
 link_uc = this.getLinkCost;
 node_uc = this.getNodeCost;
 
@@ -57,8 +83,7 @@ if b_profit_ratio
 end
 while true
     new_net_welfare = SolveSCP(node_price, link_price);
-    sp_profit_new = this.getSliceProviderProfit(node_price, link_price, ...
-        options.PricingPolicy);
+    sp_profit_new = this.getSliceProviderProfit(node_price, link_price, options);
     %% Stop condtion 
     % if the profit of SP is non-increasing, or the profit ratio reaches the predefined
     % threshold, then no need to further increase the resource prices.
@@ -67,12 +92,11 @@ while true
     else
         sp_profit = sp_profit_new;
     end
-    if b_profit_ratio && this.checkProfitRatio(node_price, link_price, ...
-            getstructfields(options, 'PricingPolicy'))
+    if b_profit_ratio && this.checkProfitRatio(node_price, link_price, options)
         b_forced_break = true;
         break;
     end
-    [node_load, link_load] = this.getNetworkLoad;
+    [node_load, link_load] = this.getNetworkLoad(slices, 'sum');
     %%%
     % Adjust the step according to how much the capacity constraints have been violated.
     % If the resource is over provisioned, the multiplier is larger than 2.
@@ -114,8 +138,9 @@ if ~b_profit_ratio || ~b_forced_break
             (1/3)*link_price_prev(:,1)+(2/3)*link_price_prev(:,2)];
         for i = 1:2
             new_net_welfare = SolveSCP(node_price_middle(:,i), link_price_middle(:,i));
-            sp_profit_new(i) = this.getSliceProviderProfit(node_price_middle(:,i), ...
-                link_price_middle(:,i), options.PricingPolicy);
+            sp_profit_new(i) = this.getSliceProviderProfit(...
+                node_price_middle(:,i), link_price_middle(:,i), ...
+                getstructfields(options, {'Slices','PricingPolicy'}));
         end
         if sp_profit_new(1) > sp_profit_new(2)
             node_price_prev(:,2) = node_price_middle(:,2);
@@ -144,7 +169,7 @@ end
 k = 1;
 while true
     %%% Compute the new resource price according to the resource consumption
-    [node_load, link_load] = this.getNetworkLoad;
+    [node_load, link_load] = this.getNetworkLoad(slices, 'sum');
     b_link_violate = (link_capacity-link_load) < 1;
     b_node_violate = (node_capacity-node_load) < 1;
     if isempty(find(b_link_violate==1,1)) && isempty(find(b_node_violate==1,1))
@@ -177,9 +202,10 @@ if k>1
     stop_cond2 = ~isempty(find(delta_node_price > d0 * node_uc, 1));
     if b_profit_ratio
         stop_cond3 = this.checkProfitRatio(node_price, link_price, ...
-        getstructfields(options, 'PricingPolicy'));
+        getstructfields(options, {'PricingPolicy'}));
     else
-        sp_profit = this.getSliceProviderProfit(node_price, link_price, options.PricingPolicy);
+        sp_profit = this.getSliceProviderProfit(node_price, link_price, ...
+            getstructfields(options, {'Slices','PricingPolicy'}));
         stop_cond3 = true;
     end
     partial_link_violate = false(NL, 1);
@@ -200,7 +226,7 @@ if k>1
         b_node = node_price > delta_node_price;
         node_price(b_node) = node_price(b_node) - delta_node_price(b_node);
         SolveSCP(node_price, link_price);
-        [node_load, link_load] = this.getNetworkLoad;
+        [node_load, link_load] = this.getNetworkLoad(slices, 'sum');
         
         if b_profit_ratio
             % the profit ratio of SP should not less than the predefined threshold.
@@ -209,7 +235,7 @@ if k>1
         else
             % we decrease the price, the profit of SP should increase.
             sp_profit_new = this.getSliceProviderProfit(node_price, link_price, ...
-                options.PricingPolicy);
+                getstructfields(options, {'Slices','PricingPolicy'}));
             stop_cond3 = sp_profit_new >= sp_profit;
         end
         b_link_violate = (link_capacity - link_load)<0;
@@ -270,10 +296,10 @@ end
 % slice.
 % # After the optimization, each network slice has record the final prices.
 % # Record the substrate network's node/link load, price.
-this.finalize(node_price, link_price);
+this.finalize(node_price, link_price, slices);
 
 % Calculate the output
-output = this.calculateOutput([], getstructfields(options, 'PricingPolicy'));
+output = this.calculateOutput([], getstructfields(options, {'Slices','PricingPolicy'}));
 
 % output the optimization results
 if InfoLevel.UserModel > DisplayLevel.Off
@@ -286,22 +312,26 @@ end
 %%
     function netprofit = SolveSCP(node_price_t, link_price_t)
         for s = 1:NS
-            sl = this.slices{s};
-            options.LinkPrice = link_price_t(sl.VirtualLinks.PhysicalLink);
+            sl = slices{s};
+            sl.prices.Link = link_price_t(sl.VirtualLinks.PhysicalLink);
             % |node_price| only contain the price of data center nodes.
             dc_id = sl.getDCPI;
-            options.NodePrice = node_price_t(dc_id);  
+            sl.prices.Node = node_price_t(dc_id);  
             if options.CountTime
                 tic;
             end
-            netprofit = this.slices{s}.priceOptimalFlowRate([], ...
-                getstructfields(options, ...
-                {'Form','PricingPolicy', 'LinkPrice', 'NodePrice'}, 'ignore'));
+            %%%
+            % dynamically decide which version of _priceOptimalFlowRate_ to call.
+            % See also <Slice.priceOptimalFlowRate> and
+            % <DynamciSlice.priceOptimalFlowRate>.
+            netprofit = sl.priceOptimalFlowRate([], options);
             if options.CountTime
                 t = toc;
                 slice_runtime = max(slice_runtime, t);
                 runtime.Serial = runtime.Serial + t;
             end
+            sl.prices.Link = [];
+            sl.prices.Node = [];
         end
         if options.CountTime
             runtime.Parallel = runtime.Parallel + slice_runtime;
