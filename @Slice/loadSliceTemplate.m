@@ -4,6 +4,8 @@
 
 %% Slice Template
 % 
+%% TODO
+% time unit: second;
 function [ slice_template ] = loadSliceTemplate(type_index)
 type_index = unique(type_index);
 slice_template = struct;
@@ -86,18 +88,18 @@ for i = 1:length(type_index)
         case 32      % Type 2 for experiment 3
             slice_template(i).Type = 32;
             slice_template(i).FlowPattern = FlowPattern.RandomInterBaseStation;
-            slice_template(i).Weight = 10;
+            slice_template(i).Weight = 20;
             slice_template(i).NumberPaths = 2;
-            slice_template(i).NumberFlows = 100;
+            slice_template(i).NumberFlows = 200;
             slice_template(i).VNFList = [1,2,4,5];
             slice_template(i).ServiceInterval = 12;
             slice_template(i).Probability = 1/6;
         case 33      % Type 3 for experiment 3
             slice_template(i).Type = 33;
             slice_template(i).FlowPattern = FlowPattern.RandomDataCenter2BaseStation;
-            slice_template(i).Weight = 100;
+            slice_template(i).Weight = 200;
             slice_template(i).NumberPaths = 3;
-            slice_template(i).NumberFlows = 20;
+            slice_template(i).NumberFlows = 10;
             slice_template(i).VNFList = [1,4,6];
             slice_template(i).ServiceInterval = 4;
             slice_template(i).Probability = 5/6;
@@ -140,44 +142,128 @@ for i = 1:length(type_index)
             slice_template(i).Flow.ArrivalRate = 100; % 100 arrivals/hour  
             slice_template(i).Flow.ServiceInterval = 0.2; 
             slice_template(i).FlowPattern = FlowPattern.RandomDataCenter2BaseStation;
-        case 44     % Type 1 for experiment 4-2: DynamicNetwork
-            slice_template(i).Type = 44;
+        case {44,441,442,443}     
+            %% Type-1 for experiment 4-2: DynamicNetwork
+            % Type-1 is a long term service (1 arrivals/day, 3 days lifetime). So the
+            % average number of Type-1 slices is 3. This type can also be used as
+            % persitent slice. In that case, the settings of |ArrivalRate| and
+            % |SrviceInterval| do not take effect. 
+            %
+            % The target network <Sample-2> has 15 nodes, so we set the number of flows
+            % to: 75 = 1/3*(15*15);
+            %
+            % Flow arrival rate is set to 4 sec/arrival, i.e., 900 arrivals/hour, for
+            % emulating the dynamics of users. The service interval is set to 300s(5min),
+            % so that the average number of users stays at 75.
+            slice_template(i).Type = type_index(i);
             slice_template(i).Weight = 25;
             slice_template(i).NumberPaths = 1;
             slice_template(i).VNFList = [1,2,3];
-            slice_template(i).ArrivalRate = 0.01;   % 0.01 arrivals/min  =>  100 min/arrival
-            slice_template(i).ServiceInterval = 300;
-            slice_template(i).NumberFlows = 80;
-            slice_template(i).Flow.ArrivalRate = 120; % 1/120 min/arrival
-            slice_template(i).Flow.ServiceInterval = 0.5; 
+            slice_template(i).ArrivalRate = 1/(3600*24);   % 1 arrivals/24 hour => 3600 sec/arrival
+            slice_template(i).ServiceInterval = 3600*24*7;
+            slice_template(i).NumberFlows = 75;
+            slice_template(i).Flow.ArrivalRate = 900/3600; 
+            slice_template(i).Flow.ServiceInterval = 300; 
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
-        case 45     % Type 2 for experiment 4-2: DynamicNetwork
-            slice_template(i).Type = 45;
-            slice_template(i).Weight = 40;
+        case {45,451,452,453}     
+            %% Type-2 for experiment 4-2: DynamicNetwork
+            % Type-2 is a middle term service, e.g. inter-data centers communications (1
+            % arrival/hour, 6 hours lifetime). So the average number of Type-2 slices is
+            % 6. 
+            %
+            % Assuming that the target network <Sample-2> has 6 data centers, so we set
+            % the number of flows to: 18 = 1/2*(6*6);
+            %
+            % Flow arrival rate is set to 60 sec/arrival, i.e., 60 arrivals/hour, while
+            % the service interval is set to 1080s(18min), so that the average number of
+            % flows stays at 18. 
+            slice_template(i).Type = type_index(i);
+            slice_template(i).Weight = 50;
             slice_template(i).NumberPaths = 2;
             slice_template(i).VNFList = [1,2,4,5];
-            slice_template(i).ArrivalRate = 1;     % 1 arrivals/hour
-            slice_template(i).ServiceInterval = 12;
-            slice_template(i).NumberFlows = 20;
-            slice_template(i).Flow.ArrivalRate = 1000; % 1000 arrivals/hour  
-            slice_template(i).Flow.ServiceInterval = 0.1; 
+            slice_template(i).ArrivalRate = 1/3600;  % 1 arrival/hour => 3600 sec/arrival
+            slice_template(i).ServiceInterval = 3600*6; % 
+            slice_template(i).NumberFlows = 18;
+            slice_template(i).Flow.ArrivalRate = 60/3600;  % 60 arrivals/hour  
+            slice_template(i).Flow.ServiceInterval = 1080; 
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
-        case 46     % Type 3 for experiment 4-2: DynamicNetwork
-            slice_template(i).Type = 46;
-            slice_template(i).Weight = 200;
+        case {46,461,462,463}     
+            %% Type-3 for experiment 4-2: DynamicNetwork
+            % Type-3 is a middle term service with high QoS-demand (10 arrivals/hour, 1
+            % hour lifetime). So the average number of Type-3 slices is 10. 
+            %
+            % While the service has strigent QoS requirement, the number of flows is
+            % relaively fewer, thus set to 4.
+            %
+            % Those flows always arrive at the creation of the slice and depart when the
+            % slice is released. Thus the arrival rate of flow is relatively lower. Flow
+            % arrival rate is set to 450 sec/arrival, i.e., 8 arrivals/hour, while  
+            % the service interval is set to 1800s(30min), so that the average number of
+            % flows stays at 4. 
+            slice_template(i).Type = type_index(i);
+            slice_template(i).Weight = 300;
             slice_template(i).NumberPaths = 3;
             slice_template(i).VNFList = [1,4,6];
-            slice_template(i).ArrivalRate = 4;   % 4 arrivals/hour
-            slice_template(i).ServiceInterval = 4;
-            slice_template(i).NumberFlows = 5;
-            slice_template(i).Flow.ArrivalRate = 100; % 100 arrivals/hour  
-            slice_template(i).Flow.ServiceInterval = 0.2; 
+            slice_template(i).ArrivalRate = 10/3600;   % 4 arrivals/hour
+            slice_template(i).ServiceInterval = 3600;
+            slice_template(i).NumberFlows = 4;
+            slice_template(i).Flow.ArrivalRate = 8/3600; % 100 arrivals/hour  
+            slice_template(i).Flow.ServiceInterval = 1800; 
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
         otherwise
-            error('error: unrecognized slice type.')
+            error('error: unrecognized slice type (%d).', type_index(i));
     end
 end
 
+for i = 1:length(slice_template)
+    switch slice_template(i).Type
+        case {441,451,461}
+            slice_template(i).Trigger = 'EventBased';
+        case {442,452,462}
+            slice_template(i).Trigger = 'TimeBased';
+        case {443,453,463}
+            slice_template(i).Trigger = 'ProfitBased';
+    end
+    switch slice_template(i).Type
+        case 441
+            slice_template(i).EventInterval = 10;
+        case 451
+            slice_template(i).EventInterval = 10;
+        case 461
+            slice_template(i).EventInterval = 10;
+        case 442
+            slice_template(i).TimeInterval = 0.01;
+        case 452
+            slice_template(i).TimeInterval = 10;
+        case 462
+            slice_template(i).TimeInterval = 10;
+        case 443
+        case 453
+        case 463
+    end
+    if slice_template(i).Type>100
+        switch floor(slice_template(i).Type/10)
+            case 44
+                %%
+                % Flows may originate from uncovered nodes.
+                % Unused nodes and links will be recycled.
+                slice_template(i).Adhoc = true;
+                slice_template(i).ReconfigScaler = 1;
+            case 45
+                %%
+                % Flows only originated within the existing virtual nodes
+                % Unused node and link resources will be recycled, but the nodes and links
+                % themself will be maintained.
+                slice_template(i).Adhoc = false;
+                slice_template(i).ReconfigScaler = 0.4;
+            case 46
+                slice_template(i).Adhoc = true;
+                % The L1 approximation of reconfiguration cost should be normalized, so it
+                % will have the same magitude as the original formulation.
+                slice_template(i).ReconfigScaler = 0.1;
+        end
+    end
+end
 %% Adjust Parameters
 % If the network is averagely partitioned between network slices, the low weight slice
 % will cannot fully utilize the allocated network resources, and the high weight slice
