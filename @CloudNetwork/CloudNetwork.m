@@ -15,23 +15,25 @@ classdef CloudNetwork < PhysicalNetwork
         %       _PricingFactor_ is used for <singleSliceOptimization> and <staticSlicing>. 
         %       _Threshold_ is used for resource pricing. 
         %       _Method_ is used for selecting method to solve sub-problem.
+        %
+        % NOTE: only put common options ('Method', 'Form', etc.)in the constructor. Put
+        % those method-specific options to the correspongding method.
         function this = CloudNetwork(varargin)
             global InfoLevel;
             this@PhysicalNetwork(varargin{:});
             if length(varargin)>=4
                 this.options = structmerge(this.options, ...
                     getstructfields(varargin{4}, ...
-                    {'PricingFactor', 'Threshold', 'Method', 'Form', 'AdmitPolicy',...
-                    'Method', 'ConstraintTolerance', 'NonzeroTolerance'}, 'ignore'));
-            end
-            if ~isfield(this.options, 'PricingFactor')
-                % specified for _pricingFactorAjustment_ and .....
-                this.options.PricingFactor = 0; 
+                    {'Threshold', 'Method', 'Form', 'ConstraintTolerance', ...
+                    'NonzeroTolerance', 'PostProcessing'}, 'ignore'));
             end
             if ~isfield(this.options, 'ConstraintTolerance')
                 this.options.ConstraintTolerance = 10^-3;
                 if InfoLevel.Class >= DisplayLevel.Notify
                     warning('''ConstraintTolerance'' is not specified, set as %E.', ...
+                        this.options.ConstraintTolerance);
+                else
+                    cprintf('comment', '''ConstraintTolerance'' set as %E.\n', ...
                         this.options.ConstraintTolerance);
                 end
             end
@@ -40,15 +42,41 @@ classdef CloudNetwork < PhysicalNetwork
                 if InfoLevel.Class >= DisplayLevel.Notify
                     warning('''NonzeroTolerance'' is not specified, set as %E.', ...
                         this.options.NonzeroTolerance);
+                else
+                    cprintf('comment', '''NonzeroTolerance'' set as %E.\n', ...
+                        this.options.NonzeroTolerance);
                 end
             end
             if ~isfield(this.options, 'Method')
                 this.options.Method = 'dynamic-slicing';
                 if InfoLevel.Class >= DisplayLevel.Notify
-                    warning('''Method'' option not specified, set as ''%s''.', ...
+                    warning('Slicing ''Method'' option not specified, set as ''%s''.', ...
                         this.options.Method);
+                end                
+                cprintf('comment', 'Slicing ''Method'' set as ''%s''.\n', ...
+                    this.options.Method);
+            end
+            if ~isfield(this.options, 'PostProcessing')
+                this.options.PostProcessing = 'round';
+                if InfoLevel.Class >= DisplayLevel.Notify
+                    warning('''PostProcessing'' is not specified, set as %s.', ...
+                        this.options.PostProcessing);
+                else
+                    cprintf('comment', '''PostProcessing'' set as %s.\n', ...
+                        this.options.PostProcessing);
+
                 end
             end
+            if contains(this.options.Method, {'static', 'single'})
+                % specified for _pricingFactorAjustment_ and .....
+                this.options = structmerge(this.options, ...
+                    getstructfields(varargin{4}, 'PricingFactor', 'default', 0));     
+            end
+            if contains(this.options.Method, {'static'})
+                % specified for _pricingFactorAjustment_ and .....
+                this.options = structmerge(this.options, ...
+                    getstructfields(varargin{4}, 'AdmitPolicy'));
+            end            
         end
     end
     
@@ -155,11 +183,26 @@ classdef CloudNetwork < PhysicalNetwork
                 node_uc = this.getDataCenterField('UnitCost', dc_id);
             end
         end
+        
+        function setOptions(this, opt_name, opt_value)
+            if ~iscell(opt_name)
+                opt_name = {opt_name};
+            end
+            if ~iscell(opt_value)
+                opt_value = {opt_value};
+            end
+            for i = 1:length(opt_name)
+                switch opt_name{i}
+                    case 'Method'
+                        this.options.Method = opt_value{i};
+                end
+            end
+        end
     end
     
     methods (Access=protected) 
         function graph = residualgraph(this, slice_opt)
-            if isfield(slice_opt, 'Method') && strcmp(slice_opt.Method, 'static-slicing')
+            if contains(slice_opt.Method, 'static')
                 % If a link's residual capacity is zero, then this link should be removed
                 % from the grpah.
                 % If a node's residual capacity is zero, then this node and the adjacent
@@ -194,17 +237,24 @@ classdef CloudNetwork < PhysicalNetwork
         end
         
         % Implement the abstract function.
-        function slice_opt = preAddingSlice(this, slice_opt)  %#ok<INUSL>
+        % By default, the options including 'Method' and 'AdmitPolicy' is inherited from
+        % the network. But slice can use its own options in the configuration file.
+        function slice_opt = preAddingSlice(this, slice_opt)  
             global InfoLevel;
             if ~isfield(slice_opt,'Weight') || isempty(slice_opt.Weight) ...
                     || slice_opt.Weight == 0
                 error('error: invalid slice weight.'); %     slice_opt.Weight = 1;
             end
             if ~isfield(slice_opt, 'Method') || isempty(slice_opt.Method)
-                slice_opt.Method = 'dynamic-slicing';
+                slice_opt = structmerge(slice_opt, getstructfields(this.options, 'Method'));
                 if InfoLevel.Class >= DisplayLevel.Notify
                     warning('''Method'' option is not specified, set as ''%s''', ...
                         slice_opt.Method);
+                end
+            end
+            if contains(this.options.Method, 'static')
+                if ~isfield(slice_opt, 'AdmitPolicy') || isempty(slice_opt.AdmitPolicy)
+                    slice_opt = structmerge(slice_opt, getstructfields(this.options, 'AdmitPolicy'));
                 end
             end
         end
@@ -215,7 +265,11 @@ classdef CloudNetwork < PhysicalNetwork
         end
         %%%
         % calculate the profit ratio of slices and network
-        % 
+        % |options|: 'PricingPolicy','Epsilon'.
+        % No matter whether all slices are reconfigured, the profit ratio of all slices
+        % will be checked.
+        % _checkProfitRatio_ is a stop condition, which is not directly related to the
+        % optimization problem
         function [b, profit_gap] = checkProfitRatio(this, node_price, link_price, new_opts)
             slice_profit_ratio = zeros(this.NumberSlices,1);
             options = getstructfields(this.options, {'Threshold'});
@@ -229,16 +283,16 @@ classdef CloudNetwork < PhysicalNetwork
             end
             for s = 1:this.NumberSlices
                 sl = this.slices{s};
-                revenue = sl.getRevenue;
-                options.LinkPrice = link_price(sl.VirtualLinks.PhysicalLink);
-                options.NodePrice = node_price(sl.getDCPI);
-                % Prices have been announced to each slice.
-                slice_profit_ratio(s) = Slice.fcnProfit([], sl, options)/revenue;
+                revenue = sl.getRevenue;        % get utility
+                % Prices announced to each slice.
+                sl.prices.Link = link_price(sl.VirtualLinks.PhysicalLink);
+                sl.prices.Node = node_price(sl.getDCPI);
+                slice_profit_ratio(s) = sl.getProfit(options)/revenue;
             end
             clear revenue;
             
             [sp_profit, sp_revenue] = this.getSliceProviderProfit(...
-                node_price, link_price, options.PricingPolicy);
+                node_price, link_price, rmstructfields(options, 'Slices'));
             network_profit_ratio = sp_profit/sp_revenue;
             % a = 1;        % {0.5|0.75|1}
             switch options.Threshold
@@ -277,33 +331,42 @@ classdef CloudNetwork < PhysicalNetwork
         %%%
         % * *getSliceProviderProfit*
         % If |node_price| and |link_price| are not provided, the stored price are used.
+        % |options|: |PricingPolicy| must be specified.
+        %            if |Slices| is provided, only calsulate the revenue and cost of
+        %            the specified |Slices|.
+        %
+        % Reconfiguration cost does not influence the profit of Slice Provider, see also
+        % <optimizeResourcePriceNew>. 
         function [profit, revenue] = ...
-                getSliceProviderProfit(this, node_price, link_price, pricing_policy)
+                getSliceProviderProfit(this, node_price, link_price, new_opts)
             revenue = 0;
-            [node_load, link_load] = this.getNetworkLoad;
+            if nargin <= 3
+                new_opts = struct('Slices', this.slices);
+            end
+            options = getstructfields(new_opts, {'Slices'}, 'default-ignore', ...
+                this.slices);
+            options = structmerge(options, getstructfields(new_opts, 'PricingPolicy',...
+                'default', 'linear'));
+            [node_load, link_load] = this.getNetworkLoad(options.Slices, 'sum');            
             if isempty(node_price) || isempty(link_price)
                 node_price = this.getDataCenterField('Price');
                 link_price = this.getLinkField('Price');
-            end                
-            if nargin == 4
-                if strcmpi(pricing_policy, 'quadratic-price')
-                    for s = 1:this.NumberSlices
-                        sl = this.slices{s};
+            end
+            switch options.PricingPolicy
+                case 'quadratic-price'
+                    for s = 1:length(options.Slices)
+                        sl = options.Slices{s};
                         link_id = sl.VirtualLinks.PhysicalLink;
                         dc_id = sl.getDCPI;
                         revenue = revenue + ...
-                            sl.fcnLinkPricing(link_price(link_id), sl.getLinkLoad(sl.x_path)) + ...
-                            sl.fcnNodePricing(node_price(dc_id), sl.getNodeLoad(sl.z_npf));
+                            sl.fcnLinkPricing(link_price(link_id), sl.getLinkLoad(sl.temp_vars.x)) + ...
+                            sl.fcnNodePricing(node_price(dc_id), sl.getNodeLoad(sl.temp_vars.z));
                     end
-                end
-            elseif nargin == 3
-                revenue = dot(node_load, node_price) + dot(link_load, link_price);
-            else
-                error('error: input parameters are not enough.');
+                otherwise
+                    revenue = dot(node_load, node_price) + dot(link_load, link_price);
             end
             profit = revenue - this.getNetworkCost(node_load, link_load);
-        end
-        
+        end        
         %%%
         % * *Finalize substrate network*
         %
@@ -319,28 +382,18 @@ classdef CloudNetwork < PhysicalNetwork
         % NOTE: the price here might be only prcing parameters (for varing pricing
         % policy). To calculate the payment, using _fcnLinkPricing_ and _fcnNodePricing_
         % function.
-        function finalize(this, node_price, link_price)
-            for i = 1:this.NumberSlices
-                sl = this.slices{i};
-                sl.Variables.x = sl.x_path;
-                sl.Variables.z = sl.z_npf;
-                sl.VirtualDataCenters.Load = sl.getNodeLoad;
-                sl.VirtualLinks.Load = sl.getLinkLoad;
-                sl.VirtualDataCenters.Capacity = sl.VirtualDataCenters.Load;
-                sl.VirtualLinks.Capacity = sl.VirtualLinks.Load;
-                sl.FlowTable.Rate = sl.getFlowRate;
-                sl.setPathBandwidth;
-                if nargin >= 2 && ~isempty(node_price)
-                    sl.VirtualDataCenters.Price = node_price(sl.getDCPI);
-                end
-                if nargin >= 3 && ~isempty(link_price)
-                    sl.VirtualLinks.Price = link_price(sl.VirtualLinks.PhysicalLink);
-                end
+        function finalize(this, node_price, link_price, sub_slices)
+            if nargin <= 3
+                sub_slices = this.slices;
+            end
+            num_slices = length(sub_slices);
+            for i = 1:num_slices
+                sub_slices{i}.finalize(node_price, link_price);                
             end
             [node_load, link_load] = this.getNetworkLoad;
             this.setLinkField('Load', link_load);
             this.setDataCenterField('Load', node_load);
-            if nargin == 3
+            if nargin >= 3
                 this.setLinkField('Price', link_price);
                 this.setDataCenterField('Price', node_price);
             end
@@ -357,28 +410,37 @@ classdef CloudNetwork < PhysicalNetwork
             end
         end
         
-        function slice_data = updateSliceData(this, slice_data)
-            if strcmp(this.options.Method, 'normal')
-                slice_data.VNFList = 1:this.NumberVNFs;
-                %         b_vnf(this.slices{s}.VNFList) = true;
-                %     slice_data.VNFList = find(b_vnf);
+        %% ISSUE: VNFlist is not conmmonly shared.
+        function slice_data = updateSliceData(this, slice_data, options)
+            if strcmp(options.Method, 'single-normal')
+                if options.bCompact
+                    b_vnf = false(this.NumberVNFs, 1);
+                    for s = 1:this.NumberSlices
+                        b_vnf(this.slices{s}.VNFList) = true;
+                        if isempty(find(b_vnf==false,1))
+                            break;
+                        end
+                    end
+                    slice_data.VNFList = find(b_vnf);
+                else
+                    slice_data.VNFList = 1:this.NumberVNFs;
+                end
             end
         end
-        function output = calculateOptimalOutput(this, ss, ~)
+        % This function use intermediate results.
+        function output = calculateOptimalOutput(this, ss)
             global InfoLevel;
+            [node_load, link_load] = this.getNetworkLoad(ss, 'sum');
             output.WelfareOptimal = sum(...
-                ss.FlowTable.Weight.*fcnUtility(ss.FlowTable.Rate)) ...
-                - this.getNetworkCost(ss.VirtualDataCenters.Load, ss.VirtualLinks.Load);
-            if InfoLevel.ClassDebug > DisplayLevel.Off
-                fprintf('\tThe optimal net social welfare of the network: %G.\n', ...
+                ss.FlowTable.Weight.*fcnUtility(ss.getFlowRate(ss.temp_vars.x))) ...
+                - this.getNetworkCost(node_load, link_load);
+            if InfoLevel.Class > DisplayLevel.Final
+                fprintf('\t\tCloudNetwork: calculateOptimalOutput:The optimal net social welfare of the network: %G.\n', ...
                     output.WelfareOptimal);
             end
-            output.Znpf = reshape(full(ss.Variables.z), ...
-                this.NumberDataCenters, this.NumberPaths, this.NumberVNFs);
         end
-        argout = calculateOutput(this, argin, new_opts);    
-        [tb, stbs] = saveStatTable(PN, output, rt, slice_types, method);
         
+        argout = calculateOutput(this, argin, new_opts);            
         % Now the same as <PhysicalNetwork>, subclasses might override it.
         %         function [flow_table, phy_adjacent, flag] = ...
         %                 generateFlowTable(this, graph, slice_opt)
@@ -388,8 +450,8 @@ classdef CloudNetwork < PhysicalNetwork
     end
     
     methods (Access = private)
-        [node_price, link_price, runtime] = pricingFactorAdjustment(this);
-        function runtime = priceIteration(this, node_price, link_price)
+        [node_price, link_price, runtime] = pricingFactorAdjustment(this, new_opts);
+        function runtime = priceIteration(this, node_price, link_price, options)
             if nargout == 1
                 slice_runtime = 0;
                 runtime.Serial = 0;
@@ -398,19 +460,21 @@ classdef CloudNetwork < PhysicalNetwork
                 sl = this.slices{s};
                 link_id = sl.VirtualLinks.PhysicalLink;
                 dc_id = sl.getDCPI;
-                sl.VirtualLinks.Price = link_price(link_id);
-                sl.VirtualDataCenters.Price = node_price(dc_id);
+                sl.prices.Link= link_price(link_id);
+                sl.prices.Node = node_price(dc_id);
                 %%%
                 % optimize each slice with price and resource constraints.
                 if nargout == 1
                     tic;
                 end
-                sl.optimalFlowRate();
+                sl.optimalFlowRate(options);
                 if nargout == 1
                     t = toc;
                     slice_runtime = max(slice_runtime, t);
                     runtime.Serial = runtime.Serial + t;
                 end
+                sl.prices.Link = [];
+                sl.prices.Node = [];
             end
             if nargout == 1
                 runtime.Parallel = slice_runtime;
@@ -420,18 +484,23 @@ classdef CloudNetwork < PhysicalNetwork
     
     methods (Static, Access=protected)
         function flag = assert_path_list(end_points, path_list, slice_opt)
+            global InfoLevel;
             if isempty(path_list)
-                if strcmp(slice_opt.Method, 'static-slicing')
+                if contains(slice_opt.Method, 'static')
                     % two choice: reject the slice or reject the flow.
-                    if isfield(slice_opt, 'AdmitPloicy') && ...
-                            strcmp(slice_opt.AdmitPloicy, 'reject-slice')
-                        warning('Reject the slice request.');
+                    if isfield(slice_opt, 'AdmitPolicy') && ...
+                            strcmp(slice_opt.AdmitPolicy, 'reject-slice')
+                        if InfoLevel.ClassDebug >= DisplayLevel.Notify
+                            warning('Reject the slice request.');
+                        end
                         flag = 2;
                     else
-                        % slice_opt.AdmitPloicy = 'reject-slice', the actual number
+                        % slice_opt.AdmitPolicy = 'reject-slice', the actual number
                         % of generated flow may less than |number_flow|
-                        warning('Reject the flow (%d,%d) in the slice request.',...
+                        if InfoLevel.ClassDebug >= DisplayLevel.Notify
+                            warning('Reject the flow (%d,%d) in the slice request.',...
                             end_points(1), end_points(2));
+                        end
                         flag = 1;
                     end
                 else
@@ -442,13 +511,17 @@ classdef CloudNetwork < PhysicalNetwork
             end
         end
         
-        [stat, slice_stat] = createStatTable(num_point, num_type, type);
     end
     
     methods
         [output, runtime] = optimizeResourcePrice(this, init_price);
-        [output, runtime] = optimizeResourcePriceNew(this, init_price);
-        [output, runtime] = singleSliceOptimization(this);
+        [output, runtime] = optimizeResourcePriceNew(this, init_price, sub_slices);
+        [output, runtime] = singleSliceOptimization(this, new_opts);
         output = StaticSlicing(this, slice);
+        [tb, stbs] = saveStatTable(PN, output, rt, slice_types, method);
+    end
+    
+    methods (Static)
+        [stat, slice_stat] = createStatTable(num_point, num_type, type);
     end
 end
