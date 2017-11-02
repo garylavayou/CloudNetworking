@@ -8,6 +8,7 @@ classdef DispatchEventData < EventData
     
     properties(Dependent)
         entity;
+        Time;
     end
     
     methods
@@ -22,6 +23,9 @@ classdef DispatchEventData < EventData
         end
         function et = get.entity(this)
             et = this.event.Entity;
+        end
+        function t = get.Time(this)
+            t = this.event.Time;
         end
     end
     

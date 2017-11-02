@@ -5,6 +5,13 @@ classdef (Abstract) EventSender < handle
         listeners;  % We need to remove some listeners, when the listeners have been destoryed. [Deprecated].
         targets;
     end
+    
+    properties 
+        Results;    % Used by <EventReceiver>, return the event handling results.
+                    % The data structure is defined by <EventSender>, and should at least
+                    % include a field named as 'Value'. <EventReceiver> should return
+                    % infromation requested by <EventSender>.
+    end
         
     methods
         function this = EventSender()

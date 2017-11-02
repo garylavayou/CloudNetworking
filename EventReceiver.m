@@ -1,8 +1,8 @@
 classdef (Abstract) EventReceiver < handle & matlab.mixin.Heterogeneous
-    %UNTITLED3 Summary of this class goes here
-    %   Detailed explanation goes here
+    % Heterogeneous array can define empty array.
     
-    properties
+    properties (Access = protected)
+        event = struct('Count', 0);     %statistics of events
     end
     
     methods(Static, Abstract)

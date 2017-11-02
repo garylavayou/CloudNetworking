@@ -20,7 +20,7 @@ classdef DynamicCloudAccessNetwork < CloudAccessNetwork & DynamicNetwork
         
         function sl = RemoveSlice(this, arg1)
             sl = RemoveSlice@CloudNetwork(this, arg1);
-            this.optimizeResourcePriceNew([], options);
+            this.optimizeResourcePriceNew();
         end
         
     end
@@ -37,7 +37,7 @@ classdef DynamicCloudAccessNetwork < CloudAccessNetwork & DynamicNetwork
         function sl = onAddingSlice(this, sl)          
             %             output2 = this.singleSliceOptimization(this.options);
             %             vnf2 = sl.VNFCapacity;
-            output = this.optimizeResourcePriceNew([]);
+            output = this.optimizeResourcePriceNew();
             %             vnf1 = sl.VNFCapacity;
             if isempty(sl)
                 this.RemoveSlice(sl);
@@ -52,7 +52,7 @@ classdef DynamicCloudAccessNetwork < CloudAccessNetwork & DynamicNetwork
                 [g_results.Cost(event_num,1),...
                     g_results.NumberReconfig(event_num,1),...
                     g_results.RatioReconfig(event_num,1)]...
-                    = sl.get_reconfig_cost;
+                    = sl.get_reconfig_cost('const');
                 g_results.NumberFlows(event_num,1) = sl.NumberFlows;
             end
         end
@@ -60,7 +60,8 @@ classdef DynamicCloudAccessNetwork < CloudAccessNetwork & DynamicNetwork
         % |finalize| should only be called when dimensiong network slices.
         function finalize(this, node_price, link_price)
             finalize@CloudAccessNetwork(this, node_price, link_price);
-            finalize@DynamicNetwork(this);
+            %             finalize@DynamicNetwork(this);    % >>> no need to call twice the finalize
+            %             function.
         end
     end
     
@@ -72,7 +73,7 @@ classdef DynamicCloudAccessNetwork < CloudAccessNetwork & DynamicNetwork
         % NOTE: this method is derived from <DynamicNetwork>, different from the
         % non-static _updateSliceData_ method, inheirited from <CloudNetwork>.
         function slice_opt = updateDynamicSliceOptions(slice, slice_opt)
-            switch slice.Options.FlowPattern
+            switch slice.options.FlowPattern
                 case FlowPattern.RandomInterDataCenter
                     slice_opt.NodeSet = slice.getDCNI;
                 case FlowPattern.RandomInterBaseStation
@@ -82,7 +83,7 @@ classdef DynamicCloudAccessNetwork < CloudAccessNetwork & DynamicNetwork
                     slice_opt.DCNodeSet = slice.getDCNI;
                 otherwise
                     error('error: cannot handle the flow pattern <%s>.', ...
-                        slice.Options.FlowPattern.char);
+                        slice.options.FlowPattern.char);
             end
             slice_opt.MiddleNodes = slice.getDCNI;
         end

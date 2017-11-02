@@ -49,7 +49,7 @@ classdef CloudAccessNetwork < CloudNetwork
             node_opt.Location = net.node(:,1:2);
             node_opt.Capacity = zeros(net.Size,1);
             node_opt.Capacity(dc.Core) = 5000;
-            node_opt.Capacity(dc.Gateway) = 500;
+            node_opt.Capacity(dc.Gateway) = 1000;
             if isfield(node_opt, 'CapacityFactor')
                 warning('CapacityFactor (%.2f) changes the node capacity configuration.',...
                     node_opt.CapacityFactor);
