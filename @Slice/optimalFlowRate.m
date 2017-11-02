@@ -2,70 +2,47 @@
 % optimize flow rate with link and node capacity constraints.
 % Since the capacity constraints is considered in the problem, the solution can utilize
 % multi-path to serve flows.
-%% Methods
-% * *normal*: combine all flows in one slice, and solve it as a global optimization;
-% * *single-function*:
-% * *slice*: solve each slice's problem independently;
-% * *slice-price*: solve each slice's problem independently, with resource price known.
-% * *fixcost*: 
 %% Model
 % * *Accurate*
 % * *Approximate*
 % * *FixedCost*: used when slice's resource amount and resource prices are fixed, resource
 % cost is fixed. See also <fcnSocialWelfare>, <DynamicSlice>.
+%% Options: 
+%  _Methods_
+%	*single-normal*: combine all flows in one slice, and solve it as a global
+%           optimization; 
+%   *single-function*:
+%   *slice*: solve each slice's problem independently;
+%   *price*: solve each slice's problem independently, with resource price known. resource
+%   prices should be set beforehand.
+%   _Form_: 'compact'|'normal'.
+%% Output
+% If output argument is provided, _optimalFlowRate_ will calculate the final results.
+% Otherwise, the results is stored in temporary variables.
 function profit = optimalFlowRate( this, new_opts )
 global InfoLevel;
-options = getstructfields(this.Parent.options, 'Method');
-if nargin >= 2
-    options = structmerge(options, new_opts, 'exclude');
+if nargin < 2
+    new_opts = struct;
+end
+options = structmerge(...
+    getstructfields(this.Parent.options, {'Method', 'Form'}, 'default', {'','compact'}),...
+    new_opts);  % |new_opts| may contains other fields than 'Method', specified by caller, such as 'CostModel'.
+if contains(options.Method, 'price')
+    options = structmerge(options, ...
+        getstructfields(new_opts, {'PricingPolicy'}, 'default', 'linear'));
 end
 
 NL = this.NumberVirtualLinks;
 NC = this.NumberDataCenters;
 NV = this.NumberVNFs;
 NP = this.NumberPaths;
-
 % Coefficient for process-rate constraints
-if strcmp(options.Method, 'normal')
-    %% Coefficient for global optimization
-    % When all slices are combined into one slice, a VNF might not be used by all paths
-    % (_i.e._ all flows). If a VNF |f| is not used by a path |p|, there is no
-    % processing-rate constraints on $f \times p$(|delete_items|). To form the constraint
-    % coefficient matrix, the related items in |As| should be removed. See also <Slice
-    % file://E:/workspace/MATLAB/Projects/Documents/CloudNetworking/Slice.html>. 
-    %
-    % By the way, $z_{n,p,f}=0, \forall n$, if |p| does not use NFV |f|.
-    % 
-    %     delete_items = reshape(this.I_path_function, numel(this.I_path_function),1)==0;
-    %     this.As_res(delete_items,:) = [];
-    idx = 1:NP;
-    for v = 1:NV
-        vid = this.VNFList(v);
-        delete_items = this.I_path_function(:,vid)==0;
-        this.As_res(idx(delete_items),:) = [];
-        idx = idx + nnz(this.I_path_function(:,vid));
-    end
-end
 nnz_As = nnz(this.As_res) + NV*nnz(this.I_node_path) + nnz(this.I_edge_path);
 num_lcon = this.num_lcon_res + NC + NL;
 parameters.As = spalloc(num_lcon, this.num_vars, nnz_As);
 parameters.As(1:this.num_lcon_res,:) = this.As_res;
 
 %% Add node and link capacity constraint coefficient
-% For the node capacity constraint, the coefficient matrix is filled row-by-row.
-% On row i, the non-zero elements located at (i-1)+(1:NC:((NP-1)*NC+1)) for the first
-% |NC*NP| columns, and then the first |NC*NP| columns are duplicated for |NV| times, result in
-% |NC*NP*NV| columns. 
-% col_index = NP+(1:NC:((NP-1)*NC+1))';
-% col_index = repmat(col_index, 1, NV);
-% for v = 2:NV
-%     col_index(:,v) = col_index(:,v-1) + NC*NP;
-% end
-% col_index = col_index(:);
-% for n = 1:NC
-%     parameters.As(row_index+n, col_index) = repmat(this.I_node_path(n,:),1, NV);
-%     col_index = col_index + 1;
-% end
 row_index = this.num_lcon_res + (1:NC);
 col_index = NP + (1:this.num_varz);
 parameters.As(row_index, col_index) = this.Hrep;
@@ -81,8 +58,9 @@ parameters.bs = [sparse(this.num_lcon_res,1);
 %%%
 % * *Upper Bound*: Not necessary, to facilitate the algorithm, we give a relaxed
 % upper-bound.
-parameters.ub = [max(this.Parent.getLinkField('Capacity'))*ones(NP,1);...
-    max(this.Parent.getDataCenterField('Capacity'))*ones(this.num_vars-NP,1)];
+% max(this.Parent.getLinkField('Capacity'))*ones(NP,1);...
+%     max(this.Parent.getDataCenterField('Capacity'))*ones(this.num_vars-NP,1)
+parameters.ub = [];
 %%%
 % * Remove the capacity constraints with infinity capacity;
 idx = find(parameters.bs==inf);
@@ -95,9 +73,7 @@ parameters.bs(idx) = [];
 parameters.x0 = zeros(this.num_vars,1);
 switch options.Method
     case 'single-function'
-        max_alpha_f = max(this.alpha_f);
-    case 'normal'
-        max_alpha_f = max(this.Parent.VNFTable.ProcessEfficiency);
+        max_alpha_f = max(options.Alpha_f);
     otherwise
         max_alpha_f = max(this.Parent.VNFTable{this.VNFList, 'ProcessEfficiency'});
 end
@@ -117,9 +93,7 @@ end
 % end
 parameters.x0(1:NP) = 1;
 parameters.x0((NP+1):end) = max_alpha_f;
-if ~this.checkFeasible(parameters.x0)
-    error('error: infeasible start point.');
-end
+assert(this.checkFeasible(parameters.x0), 'error: infeasible start point.');
 parameters.Aeq = [];
 parameters.beq = [];
 
@@ -134,13 +108,21 @@ if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
     parameters.As = parameters.As(:, this.I_active_variables);
     parameters.x0 = parameters.x0(this.I_active_variables);
     parameters.lb = sparse(length(parameters.x0),1);
-    parameters.ub = parameters.ub(this.I_active_variables);
+    if ~isempty(parameters.ub)
+        parameters.ub = parameters.ub(this.I_active_variables);
+    end
+    options.num_orig_vars = this.num_vars;
     options.fmincon_opt.HessianFcn = ...
         @(x,lambda)Slice.fcnHessianCompact(x, lambda, this, options);
 else
+    if contains(options.Method, 'price')
+        options.fmincon_opt.HessianFcn = ...
+            @(x,lambda)Slice.fcnHessian(x, lambda, this, options);
+    else
+        options.fmincon_opt.HessianFcn = ...
+            @(x,lambda)Slice.fcnHessian(x, lambda, this);
+    end
     parameters.lb = sparse(this.num_vars,1);
-    options.fmincon_opt.HessianFcn = ...
-        @(x,lambda)Slice.fcnHessian(x, lambda, this, options);
 end
 [x, fval, exitflag] = this.optimize(parameters, options);
 % x is a local solution to the problem when exitflag is positive.
@@ -152,16 +134,15 @@ elseif exitflag < 0
     error('optimalFlowRate: abnormal exit with flag %d.',exitflag);
 elseif exitflag ~= 1
 %     disp('residual link capacity:');
-%     disp(this.getLinkLoad(this.x_path) - this.VirtualLinks.Capacity);
+%     disp(this.getLinkLoad(this.temp_vars.x) - this.VirtualLinks.Capacity);
 %     disp('residual node capacity:');
-%     disp(this.getNodeLoad(this.z_npf) - this.VirtualNodes.Capacity);
+%     disp(this.getNodeLoad(this.temp_vars.z) - this.VirtualNodes.Capacity);
     if InfoLevel.UserModel >= DisplayLevel.Notify
         warning('optimalFlowRate: (exitflag = %d) local optimal solution found.', exitflag);
     end
 end
-if ~this.checkFeasible(x)
-    error('error: infeasible solution.');
-end
+assert(this.checkFeasible(x, struct('ConstraintTolerance', options.fmincon_opt.ConstraintTolerance)), ...
+    'error: infeasible solution.');
 
 %% Additional Process
 % Under the problem formulation, if node |n| is not used by path |p|($h_{np} = 0$) or path
@@ -171,11 +152,13 @@ end
 % the value of those related $z_{npf}$ to zero.
 %
 % On the other hand, too small components should be rounded.
-this.x_path = x(1:NP);
+this.temp_vars.x = x(1:NP);
 switch options.Method
     case 'single-function'
+        %% TODO
+        % allocate VNF instance by order.
         this.VNFList = 1:this.Parent.NumberVNFs;
-        this.initializeState(this.alpha_f, 2);
+        this.getAs_res;
         z_np = x(NP+1:end);
         z_np = reshape(this.I_node_path(:).*z_np, NC,NP);
         znpf = zeros(NC, NP, this.NumberVNFs);
@@ -185,51 +168,26 @@ switch options.Method
             p_slice = this.path_owner(idx_path);
             znpf(:, idx_path, v) = z_np(:, idx_path).*(af./this.alpha_f(p_slice))';
         end
-        this.z_npf = znpf(:);
-    case 'normal'
-        this.VNFList = 1:this.Parent.NumberVNFs;    % recover the original number of VNFs
-        znpf = x(NP+1:end);
-        this.z_npf = zeros(NC*NP*this.NumberVNFs,1);
-        nz = this.NumberDataCenters*this.NumberPaths;
-        z_index = 1:nz;
-        new_z_index = z_index;
-        for v = 1:this.NumberVNFs
-            %         if b_vnf(v)
-            mask_npf = this.I_node_path.*this.I_path_function(:,v)';    % compatible arithmetic operation
-            this.z_npf(new_z_index) = mask_npf(:).*znpf(z_index);
-            z_index = z_index + nz;
-            %         end
-            new_z_index = new_z_index + nz;
-        end
+        this.temp_vars.z = znpf(:);
     otherwise
-        this.z_npf = x(NP+1:end);
+        this.temp_vars.z = x((NP+1):end);
         nz = this.NumberDataCenters*this.NumberPaths;
         z_index = 1:nz;
         for f = 1:this.NumberVNFs
-            this.z_npf(z_index) = this.I_node_path(:).*this.z_npf(z_index);
+            this.temp_vars.z(z_index) = this.I_node_path(:).*this.temp_vars.z(z_index);
             z_index = z_index + nz;
         end
 end
 clear znpf;
-this.flow_rate = this.getFlowRate(this.x_path);
-if nargout == 1    % final results
-    this.Variables.x = sparse(this.x_path);
-    this.Variables.z = sparse(this.z_npf);
-    %     this.Variables.z(this.Variables.z<10^-3) = 0;
-    %     this.Variables.x(this.Variables.x<10^-3) = 0;
-    tol_zero = this.Parent.options.NonzeroTolerance;
-    this.Variables.x(this.Variables.x<tol_zero*max(this.Variables.x)) = 0;
-    this.Variables.z(this.Variables.z<tol_zero*max(this.Variables.z)) = 0;
-    if ~this.checkFeasible()
-        if InfoLevel.UserModel >= DisplayLevel.Notify
-            warning('optimalFlowRate: the rounding of variables %s', ...
-                'with small quantity will make the solution infeasible.');
-        end
-    end
+this.flow_rate = this.getFlowRate(this.temp_vars.x);
+profit = -fval;
+if nargout >= 1    % final results
+    this.Variables.x = this.temp_vars.x;
+    this.Variables.z = sparse(this.temp_vars.z);
+    this.postProcessing();
     this.setPathBandwidth;
     this.FlowTable.Rate = this.getFlowRate;
     this.VirtualLinks.Load = this.getLinkLoad;
     this.VirtualDataCenters.Load = this.getNodeLoad;
-    profit = -fval;
 end
 end
