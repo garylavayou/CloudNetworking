@@ -1,6 +1,4 @@
-function profit = fastReconfigure(this, action, new_opts)
-options = getstructfields(this.Parent.options, {'Method'});
-options = structmerge(options, new_opts, 'exclude');
+function profit = fastReconfigure(this, action, options)
 NL = this.NumberVirtualLinks;
 NN = this.NumberDataCenters;
 NV = this.NumberVNFs;
@@ -37,15 +35,16 @@ As(row_offset+(1:this.num_varz), (this.num_vars+NP+1):end) = -eye(this.num_varz)
 bs = [sparse(this.num_lcon_res,1);
     this.VNFCapacity(:);
     this.VirtualLinks.Capacity;
-    this.old_variables.x;       % which have been pre-processed, so it can be
-    -this.old_variables.x;      % compared with the current states.
-    this.old_variables.z;
-    -this.old_variables.z];
+    this.topts.old_variables_x;       % which have been pre-processed, so it can be
+    -this.topts.old_variables_x;      % compared with the current states.
+    this.topts.old_variables_z;
+    -this.topts.old_variables_z];
 
-var0 = [this.old_variables.x;
-    this.old_variables.z;
-    this.old_variables.x;
-    this.old_variables.z];
+var0 = [this.topts.old_variables_x;
+    this.topts.old_variables_z;
+    this.topts.old_variables_x;
+    this.topts.old_variables_z];
+assert(this.checkFeasible(var0), 'error: infeasible solution.');
 
 %% Perform optimization
 fmincon_opt = optimoptions(@fmincon);
@@ -68,8 +67,7 @@ if nargin >= 2 && strcmpi(options.Form, 'compact')
     bs = bs(active_rows);
     fcn_opts.num_varx = this.NumberPaths;
     fcn_opts.num_varz = nnz(z_filter);
-    old_z_reconfig_cost = this.z_reconfig_cost;
-    this.z_reconfig_cost = this.z_reconfig_cost(z_filter);
+    this.topts.z_reconfig_cost = this.topts.z_reconfig_cost(z_filter);
     lbs = sparse(2*(fcn_opts.num_varx+fcn_opts.num_varz),1);
     fmincon_opt.HessianFcn = ...
         @(x,lambda)DynamicSlice.fcnHessianCompact(x,lambda,this, fcn_opts);
@@ -78,7 +76,6 @@ if nargin >= 2 && strcmpi(options.Form, 'compact')
         var0_compact, As_compact, bs, [], [], lbs, [], [], fmincon_opt);
     x = zeros(num_vars, 1);
     x(this.I_active_variables) = x_compact;
-    this.z_reconfig_cost = old_z_reconfig_cost;     % recover.
 else
     lbs = sparse(num_vars,1);
     fmincon_opt.HessianFcn = @(x,lambda)Slice.fcnHessian(x,lambda,this);
@@ -94,44 +91,38 @@ end
 
 % x is a local solution to the problem when exitflag is positive.
 if exitflag == 0
-    if InfoLevel.UserModel >= DisplayLevel.Notify
+    if InfoLevel.UserModelDebug >= DisplayLevel.Notify
         warning('reaching maximum number of iterations.');
     end
 elseif exitflag < 0
     error('abnormal exit with flag %d.',exitflag);
 elseif exitflag ~= 1
-    if InfoLevel.UserModel >= DisplayLevel.Notify
+    if InfoLevel.UserModelDebug >= DisplayLevel.Notify
         warning('(exitflag = %d) local optimal solution found.', exitflag);
     end
 end
 options.Action = action;    % This might be used when check feasible solution.
-if ~this.checkFeasible(x, options)
-    error('error: infeasible solution.');
-end
+options.ConstraintTolerance = fmincon_opt.ConstraintTolerance;
+assert(this.checkFeasible(x,options), 'error: infeasible solution.');
 %%%
 % The post processing like <optimalFlowRate> is not needed, since the
 % objective function will force those variables to be zero.
-this.x_path = x(1:NP);
-this.z_npf = x((NP+1):this.num_vars);
-this.flow_rate = this.getFlowRate(this.x_path);
-if nargout == 1    % final results
-    this.Variables.x = this.x_path;
-    this.Variables.z = this.z_npf;
-    %                 this.Variables.z(this.Variables.z<10^-3) = 0;
-    %                 this.Variables.x(this.Variables.x<10^-3) = 0;
-    tol_zero = this.Parent.options.NonzeroTolerance;
-    this.Variables.x(this.Variables.x<tol_zero*max(this.Variables.x)) = 0;
-    this.Variables.z(this.Variables.z<tol_zero*max(this.Variables.z)) = 0;
-    if ~this.checkFeasible([], options)
-        if InfoLevel.UserModelDebug >= DisplayLevel.Iteration
-            warning('FastReconfigure: the rounding of variables %s', ...
-                'with small quantity will make the solution infeasible.');
-        end
-    end
-    this.setPathBandwidth;
-    this.FlowTable.Rate = this.getFlowRate;
-    this.VirtualLinks.Load = this.getLinkLoad;
-    this.VirtualDataCenters.Load = this.getNodeLoad;
-    profit = -fval;
-end
+this.temp_vars.x = x(1:NP);
+this.temp_vars.z = x((NP+1):this.num_vars);
+this.flow_rate = this.getFlowRate(this.temp_vars.x);
+this.Variables.x = this.temp_vars.x;
+this.Variables.z = this.temp_vars.z;
+this.postProcessing();
+% if ~b
+%     if InfoLevel.UserModelDebug >= DisplayLevel.Iteration
+%         warning('FastReconfigure: the rounding of variables %s\n%s', ...
+%             'with small quantity will make the solution infeasible.',...
+%             'successfully recoverd.');
+%     end
+% end
+this.setPathBandwidth;
+this.FlowTable.Rate = this.getFlowRate;
+this.VirtualLinks.Load = this.getLinkLoad;
+this.VirtualDataCenters.Load = this.getNodeLoad;
+profit = -fval - this.getSliceCost(options.PricingPolicy);
 end
