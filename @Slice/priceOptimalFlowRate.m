@@ -2,12 +2,26 @@
 % priceOptimalFlowRate return the optimal flow rate for each flow in the slice, and the
 % net profit of the slice. 
 % TODO: by setting the capacity as |inf|, this method is equivalent to _optimalFlowRate_.
+% NOTE: prices should be updated before calling this function.
+
 %% Function Prototype
 %   [net_profit, node_load, link_load] = priceOptimalFlowRate(this, x0, options)
 % |options|: if price is not provided in |options|, then this method will use the price
 % stored in the slice.
 function [net_profit, node_load, link_load] = priceOptimalFlowRate(this, x0, options)
 global InfoLevel;
+options = structmerge(...
+    getstructfields(options, 'PricingPolicy', 'empty-ignore'),...
+    getstructfields(this.Parent.options, 'Form', 'empty-ignore'));
+if isempty(options.Form)
+    options.Form = 'normal';
+    warning('Slice.calculateOutput: <Form> set to default (%s).', options.Form);
+end
+if isempty(options.PricingPolicy)
+    options.PricingPolicy = 'linear';
+    warning('Slice.calculateOutput: <PricingPolicy> set to default (%s).', options.PricingPolicy);
+end
+
 NP = this.NumberPaths;
 NV = this.NumberVNFs;
 
@@ -19,11 +33,10 @@ else%if isempty(this.x0)
     alpha_max = max(this.Parent.VNFTable.ProcessEfficiency(this.VNFList));
     this.x0((NP+1):end) = alpha_max;
 end
-if ~this.checkFeasible(this.x0)
-    error('error: infeasible start point.');
-end
+assert(this.checkFeasible(this.x0), 'error: infeasible start point.');
 
 bs = sparse(this.num_lcon_res,1);
+
 %% Set the optimization options
 % * *Algorithm* : since the problem contains linear constraints and bound
 % constraints, then |trust-region-reflective| method is not applicable. Hence,
@@ -50,6 +63,7 @@ if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
     As_compact = this.As_res(:, this.I_active_variables);
     var0_compact = this.x0(this.I_active_variables);
     lbs = sparse(length(var0_compact),1);
+    options.num_orig_vars = this.num_vars;
     fmincon_opt.HessianFcn = ...
         @(x,lambda)Slice.fcnHessianCompact(x, lambda, this, options);
     [x_compact, fval, exitflag] = ...
@@ -79,47 +93,41 @@ elseif exitflag ~= 1
 end
 
 %% Output solution
-if ~this.checkFeasible(x)
-    error('error: infeasible solution.');
-end
-this.x_path = x(1:this.NumberPaths);
-this.z_npf = x((this.NumberPaths+1):end);
+assert(this.checkFeasible(x, struct('ConstraintTolerance', fmincon_opt.ConstraintTolerance)),...
+    'error: infeasible solution.');
+this.temp_vars.x = x(1:this.NumberPaths);
+this.temp_vars.z = x((this.NumberPaths+1):end);
 %%%
 % When compute node load, z_npf corresponding to h_np = 0 has been set as zero.
 nz = this.NumberDataCenters*this.NumberPaths;
 z_index = 1:nz;
 for f = 1:this.NumberVNFs
-    this.z_npf(z_index) = this.I_node_path(:).*this.z_npf(z_index);
+    this.temp_vars.z(z_index) = this.I_node_path(:).*this.temp_vars.z(z_index);
     z_index = z_index + nz;
 end
-% this.x_path(this.x_path<10^-3) = 0;
-% this.z_npf(this.z_npf<10^-3) = 0;
-tol_zero = this.Parent.options.NonzeroTolerance;
-this.x_path(this.x_path<tol_zero*max(this.x_path)) = 0;
-this.z_npf(this.z_npf<tol_zero*max(this.z_npf)) = 0;
-if ~this.checkFeasible([this.x_path; this.z_npf])
-    if InfoLevel.UserModel >= DisplayLevel.Notify
-        warning('priceOptimalFlowRate: the rounding of variables %s', ...
-            'with small quantity will make the solution infeasible.');
-    end
-end
-this.x0 = [this.x_path; this.z_npf];
-
-%     this.x_path = sparse();
-%     z = reshape(this.x0((this.NumberPaths+1):end), ...
-%         this.NumberVirtualNodes, this.NumberPaths, this.NumberVNFs);
-%     this.z_node_path_vnf = cell(this.NumberVNFs,1);
-%     for f = 1:this.NumberVNFs
-%         this.z_node_path_vnf{f} = sparse(z(:,:,f));
+% tol_zero = this.Parent.options.NonzeroTolerance;
+% this.temp_vars.x(this.temp_vars.x<tol_zero*max(this.temp_vars.x)) = 0;
+% this.temp_vars.z(this.temp_vars.z<tol_zero*max(this.temp_vars.z)) = 0;
+% if ~this.checkFeasible([this.temp_vars.x; this.temp_vars.z])
+%     if InfoLevel.UserModel >= DisplayLevel.Notify
+%         warning('priceOptimalFlowRate: the rounding of variables %s', ...
+%             'with small quantity will make the solution infeasible.');
 %     end
-node_load = zeros(this.Parent.NumberDataCenters,1);
-link_load = zeros(this.Parent.NumberLinks,1);
-data_center_id = this.getDCPI;
-node_load(data_center_id) = this.getNodeLoad(this.z_npf);
-link_load(this.VirtualLinks.PhysicalLink) = this.getLinkLoad(this.x_path);
-this.flow_rate = this.getFlowRate(this.x_path);
+% end
+this.x0 = x;
+
+if nargout >= 2
+    node_load = zeros(this.Parent.NumberDataCenters,1);
+    data_center_id = this.getDCPI;
+    node_load(data_center_id) = this.getNodeLoad(this.temp_vars.z);
+end
+if nargout >= 3
+    link_load = zeros(this.Parent.NumberLinks,1);
+    link_load(this.VirtualLinks.PhysicalLink) = this.getLinkLoad(this.temp_vars.x);    
+end
+this.flow_rate = this.getFlowRate(this.temp_vars.x);
 net_profit = -fval;
 %%%
 % FOR DEBUG
-% this.setPathBandwidth(this.x_path);
+% this.setPathBandwidth(this.temp_vars.x);
 end
