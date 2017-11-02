@@ -1,9 +1,14 @@
 %% Adjust the pricing factor
 % If 'PricingFactor' is specified, use the given 'PricingFactor'. Otherwise
 % (options.PricingFactor=0),  adjust the pricing factor by three-division method.
-function [node_price, link_price, runtime] = pricingFactorAdjustment(this)
-options = getstructfields(this.options, {'PricingFactor'});
+function [node_price, link_price, runtime] = pricingFactorAdjustment(this, new_opts)
+if nargin < 2
+    new_opts = struct;
+end
+options = structmerge(getstructfields(this.options, {'PricingFactor'}), ...
+    getstructfields(new_opts, {'PricingPolicy'}, 'default', 'linear'));
 options.Method = 'slice-price';
+
 if nargout == 3
     runtime.Serial = 0;
     runtime.Parallel = 0;
@@ -32,7 +37,7 @@ while true
     end
     %%%
     % compute and compare the SP's profit
-    sp_profit_new = this.getSliceProviderProfit(node_price, link_price);
+    sp_profit_new = this.getSliceProviderProfit(node_price, link_price, options);
     if sp_profit_new > sp_profit
         PricingFactor_l = PricingFactor_h;
         PricingFactor_h = PricingFactor_h * 2;
@@ -50,13 +55,13 @@ if options.PricingFactor == 0
             link_price = link_uc * (1 + m(i));
             node_price = node_uc * (1 + m(i));
             if nargout == 3
-                t = priceIteration(this, node_price, link_price);
+                t = priceIteration(this, node_price, link_price, options);
                 runtime.Serial = runtime.Serial + t.Serial;
                 runtime.Parallel = runtime.Parallel + t.Parallel;
             else
-                priceIteration(this, node_price, link_price);
+                priceIteration(this, node_price, link_price, options);
             end
-            sp_profit(i) = this.getSliceProviderProfit(node_price, link_price);
+            sp_profit(i) = this.getSliceProviderProfit(node_price, link_price, options);
         end
         
         if sp_profit(1) > sp_profit(2)
