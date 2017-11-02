@@ -21,6 +21,7 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
         LinkOptions;         % Options for link properties
         NodeOptions;         % Options for node properties
     end
+    
     properties (GetAccess = public)
         %%%
         % * *Topology*: including a NodeTable |Nodes| and an EdgeTable |Edges|.
@@ -42,13 +43,14 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
         slice_template;
     end
     
-    properties (SetAccess = private, GetAccess = {?Slice})
-        link_usage;
-        node_usage;
-    end
+
     properties (Access = protected)
         path_identifier_generator = SerialNumber(1, [], true);
         flow_identifier_generator = SerialNumber(1, [], true);
+    end
+    properties (Access = {?PhysicalNetwork,?VirtualNetwork})
+        AggregateLinkUsage;
+        AggregateNodeUsage;
     end
     properties (Access = {?PhysicalNetwork, ?Slice})
         options;
@@ -98,13 +100,16 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
             [s,t] = this.Topology.findedge;
             idx = this.graph.IndexEdge(s,t);
             this.Topology.Edges.Index = idx;
-            this.Topology.Edges.Properties.VariableDescriptions{4} = ...
+            this.Topology.Edges.Properties.VariableDescriptions{5} = ...
                 'Index the edges by column in the adjacent matrix.';
             this.setLinkField('Load', 0);
             this.setDataCenterField('Load', 0);
             
             % Initialize VNF Specification
-            this.initializeVNF(VNF_opt);      
+            this.initializeVNF(VNF_opt);   
+            
+            this.AggregateLinkUsage = zeros(this.NumberLinks,1);
+            this.AggregateNodeUsage = zeros(this.NumberNodes,1);
         end
     end
     
@@ -141,7 +146,12 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
             if isfield(VNF_opt, 'ProcessEfficiency')
                 this.VNFTable.ProcessEfficiency = VNF_opt.ProcessEfficiency;
             else
-                rng(VNF_opt.RandomSeed(1));
+                if isfield(VNF_opt, 'RandomSeed')
+                    rng(VNF_opt.RandomSeed(1));
+                else
+                    rng(floor(now));
+                    warning('random seed is not sepecifed for VNF, set as %d', floor(now));
+                end
                 this.VNFTable.ProcessEfficiency = 0.5 + rand([VNF_opt.Number, 1]);
             end
         end
@@ -269,35 +279,24 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
             end
         end
         
+        setOptions(this, opt_name, opt_value);
     end
 
     methods    
         %%%
         % statistics of slices.
-        function count = CountSlices(this)
-            if this.NumberSlices == 0
-                count = 0;
-                return;
-            end
-            b_unknown_type = false;
-            max_type = 0;
+        function type_count = CountSlices(this)
+            type_list = [this.slice_template.Type];
+            type_count = zeros(1,length(type_list));
+            type = zeros(1,this.NumberSlices);
             for i = 1:this.NumberSlices
-                if isempty(this.slices{i}.Type)
-                    b_unknown_type = true;
-                elseif max_type < this.slices{i}.Type
-                    max_type = this.slices{i}.Type;
-                end
+                type(i) = this.slices{i}.Type;
             end
-            max_type = max_type + b_unknown_type;
-            count = zeros(max_type,1);
-            for i = 1:this.NumberSlices
-                if isempty(this.slices{i}.Type)
-                    count(end) = count(end)+1;
-                else
-                    count(this.slices{i}.Type) = count(this.slices{i}.Type)+1;
-                end
+            [~, tid] = ismember(type, type_list);
+            for t = tid
+                assert(t~=0, 'error: unknown slice type.');
+                type_count(t) = type_count(t) + 1;
             end
-            count = count(find(count~=0,1):end);
         end
         %%%
         % * *LinkId*: link index of links in the edge table
@@ -480,7 +479,7 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
         % if no slice with identifier |id|, this method do not perform any operation.
         % |b_update| should be 1, if using static slicing method.
         function sl = RemoveSlice(this, arg1)
-            if isinteger(arg1)
+            if isnumeric(arg1)
                 id = arg1;
                 sid = this.findSlice(id, 'Identifier');
             elseif isa(arg1, 'Slice')
@@ -492,11 +491,10 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
 %             end
             if ~isempty(sid)
                 sl = this.slices{sid};
-                %%% 
-                % remove the slice's link and node statistics.
-                slice_index = this.findSlice(sl);
-                this.link_usage(:,slice_index) = [];
-                this.node_usage(:,slice_index) = [];
+                link_id = sl.VirtualLinks.PhysicalLink;
+                this.AggregateLinkUsage(link_id) = this.AggregateLinkUsage(link_id) - 1;
+                node_id = sl.VirtualNodes.PhysicalNode;
+                this.AggregateNodeUsage(node_id) = this.AggregateNodeUsage(node_id) - 1;
 %                 if b_update
 %                     %%%
 %                     % Update the load of the substrate network.
@@ -586,25 +584,36 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
             end
         end
                 
-        % use the temporary variables |x_path| and |z_npf| to calculate load.
-        % if providing 2 arguments , copy load from each slice.
-        function [node_load, link_load] = getNetworkLoad(this, ~)
-            node_load = zeros(this.NumberDataCenters,this.NumberSlices);
-            link_load = zeros(this.NumberLinks,this.NumberSlices);
-            for i = 1:this.NumberSlices
-                sl = this.slices{i};
+        %% getNetworkLoad
+        % If the 2nd argument is provided, calculate load from the set of |sub_slices|,
+        % otherwise, calculate from all slices. 
+        % If |option| is not provided, directly copy from 'Load' field of each slice.
+        % Otheriwse if |option='sum'|, use the temporary variables |x| and |z| of
+        % each slice, to calculate load.  
+        % Makesure the temporary variables is up-to-date , when calling this method.
+        function [node_load, link_load] = getNetworkLoad(this, sub_slices, option)
+            if nargin <= 1 || isempty(sub_slices)
+                sub_slices = this.slices;
+            elseif ~iscell(sub_slices)
+                sub_slices = {sub_slices};
+            end
+            if nargin <= 2
+                option = 'copy';
+            end
+            node_load = zeros(this.NumberDataCenters, 1);
+            link_load = zeros(this.NumberLinks, 1);
+            for i = 1:length(sub_slices)
+                sl = sub_slices{i};
                 link_id = sl.VirtualLinks.PhysicalLink;
                 dc_id = sl.getDCPI;
-                if nargin == 1
-                    node_load(dc_id,i) = sl.getNodeLoad(sl.z_npf);
-                    link_load(link_id,i) = sl.getLinkLoad(sl.x_path);
-                else
-                    node_load(dc_id,i) = sl.VirtualDataCenters.Load;
-                    link_load(link_id,i) = sl.VirtualLinks.Load;
+                if strcmpi(option, 'copy')
+                    node_load(dc_id) = node_load(dc_id) + sl.VirtualDataCenters.Load;
+                    link_load(link_id) = link_load(link_id) + sl.VirtualLinks.Load;
+                else  % 'sum'
+                    node_load(dc_id) = node_load(dc_id) + sl.getNodeLoad(sl.temp_vars.z);
+                    link_load(link_id) = link_load(link_id)+ sl.getLinkLoad(sl.temp_vars.x);                    
                 end
             end
-            node_load = sum(node_load, 2);
-            link_load = sum(link_load, 2);
         end
                 
     end
