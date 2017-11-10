@@ -3,11 +3,13 @@ classdef Entity < matlab.mixin.Copyable & matlab.mixin.Heterogeneous
     properties (SetAccess = protected)
         EntityIdentifier;   % Global identifer of entities, might not be used.
         ArriveTime;
-        ServiceTime;      
-        Builder;            % Entity builder;
+        ServiceTime;
     end
     properties (Access = {?PhysicalNetwork, ?Entity})
-        Description;        % Detailed information about the type; 
+        Description;        % Detailed information about the type;
+    end
+    properties (SetAccess = {?Entity, ?RandomEventDispatcher})
+        Builder;            % Entity builder;
     end
     properties (Dependent)
         DepartTime;
@@ -16,7 +18,8 @@ classdef Entity < matlab.mixin.Copyable & matlab.mixin.Heterogeneous
     
     methods
         function this = Entity(time_arrive, time_serve, src, info)
-            persistent entity_id;
+            % replace <persistent>, thus we can backup and recover the identifier out of the class.
+            global entity_id;
             if isempty(entity_id)
                 entity_id = int64(0);
             end
@@ -44,7 +47,20 @@ classdef Entity < matlab.mixin.Copyable & matlab.mixin.Heterogeneous
         end
         
     end
-
+    
+    methods (Access = protected)
+        function this = copyElement(et)
+            this = copyElement@matlab.mixin.Copyable(et);
+            %% Deep Copy Issue
+            % *Builder* is an exterior link. When performing copy, we should not make a copy of this
+            % object. Instead, the link should be updated by the caller of the _copy_ function. To
+            % secure the original data, we detach the link in the new copy from the original data.
+            if ~isempty(et.Builder)
+                this.Builder = et.Builder.empty();
+            end
+        end
+    end
+    
     methods (Sealed)
         function tf = isPermanent(this)
             if isempty(this.ArriveTime) || isempty(this.ServiceTime)
