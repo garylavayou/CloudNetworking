@@ -61,7 +61,6 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             % interface (without data member). Thus, through <CloudAccessNetwork> the
             % initilization has finished.
         end
-
         function sl = AddSlice(this, slice_opt, varargin)
             slice_opt = this.preAddingSlice(slice_opt);
             % We select the method of <DynamicNetwork> to perform adding slice.
@@ -77,12 +76,38 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
     end
     
     methods(Access=protected)
+        %% Deep Copy
+        function this = copyElement(pn)
+            % Make a shallow copy of all properties
+            this = copyElement@CloudNetwork(pn);
+            %% Deep Copy Issue.
+            % Make a deep copy of the DeepCp object
+            % *pending_slices* is just a soft link to data (slices). Therefore, we do not directly
+            % call <ListArray.copy> to avoid copying the content in the List. Instead, we will
+            % update the corresponding elements with new links to the data. 
+            %             temp = copyElement@DynamicNetwork(pn);
+            %             this.listeners = temp.listeners;
+            %             this.targets = temp.targets;
+            this.listeners = ListArray('event.listener');
+            this.targets = ListArray('EventReceiver');
+            this.pending_slices = ListArray('DynamicSlice');
+            for i = 1:pn.pending_slices.Length
+                sid = pn.FindSlice(pn.pending_slices{i});
+                this.pending_slices.Add(this.slices{sid});
+            end
+        end
+
         function tf = onRemovingSlice(this) %#ok<MANU>
             tf = true;
         end
-        function sl = createslice(this, slice_opt)
-            this.slices{end+1} = DynamicSlice(slice_opt);
-            sl = this.slices{end};
+        function sl = createslice(this, slice_opt, varargin)
+            if isfield(slice_opt, 'ClassName')
+                sl = instantiateclass(slice_opt.ClassName, ...
+                    rmfield(slice_opt, 'ClassName'), varargin{:});
+            else
+                sl = DynamicSlice(slice_opt);
+            end
+            this.slices{end+1} = sl;
             sl.FlowTable{:, 'Type'} = FlowType.Normal;  % Specify flow type
         end
         
@@ -96,6 +121,12 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 sl = sl.empty;
             else
                 this.pending_slices.Add(sl);
+                if ~isa(sl, 'DynamicSlice')
+                    % We may add static slices to the network. In that case, we will allocate
+                    % resource resource mannually (e.g, calling _optimizeResourcePriceNew_) or wait
+                    % until a dynamic slice is added and resource allocation is triggered.
+                    return;
+                end
                 output = this.optimizeResourcePriceNew([], this.pending_slices{:});
                 this.pending_slices.Clear();
                 global g_results; %#ok<TLEV>
@@ -103,6 +134,7 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 % reconfiguration cost.
                 stat = sl.get_reconfig_stat();
                 stat.Profit = output.Profit(1);
+                stat.ResourceCost = sl.getSliceCost('quadratic-price');   % _optimizeResourcePriceNew_ use 'quadratic-price'
                 g_results = stat;       % The first event.
             end
         end
