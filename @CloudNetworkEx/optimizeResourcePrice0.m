@@ -54,9 +54,9 @@ while true
     alpha = alpha0;  % /number_iter;
     % announce the resource price and optimize each network slice
     for s = 1:NS
-        this.slices{s}.VirtualLinks.Price = ...
+        this.slices{s}.prices.Link= ...
             link_price(this.slices{s}.VirtualLinks.PhysicalLink);
-        this.slices{s}.VirtualNodes.Price = ...
+        this.slices{s}.prices.Node = ...
             node_price(this.slices{s}.VirtualNodes.PhysicalNode);
         if nargout == 2
             tic;
@@ -68,6 +68,8 @@ while true
             slice_runtime = max(slice_runtime, t);
             runtime.Serial = runtime.Serial + t;
         end
+        this.slices{s}.prices.Link = [];
+        this.slices{s}.prices.Node = [];
     end
     if nargout == 2
         runtime.Parallel = runtime.Parallel + slice_runtime;
@@ -84,7 +86,7 @@ while true
     % residual capacity of each link and node. Given the log barrier function
     % $\beta\log{(1-\frac{y_e}{c_e})}$, the resource price is calculated as follows.
     %
-    [node_load, link_load] = this.getNetworkLoad(utility);
+    [node_load, link_load] = this.getNetworkLoad([], 'sum');
     residual_link_capacity = link_capacity - link_load;
     b_violate = residual_link_capacity<=0;
     delta_link_price(b_violate) = delta_link_price(b_violate) * 2;
@@ -154,24 +156,26 @@ while true && ~(nnz(a_link_violate)==0 && nnz(a_node_violate)==0)
     node_price(a_node_violate) = ...
         node_price(a_node_violate) + alpha*delta_node_price(a_node_violate);
     for s = 1:NS
-        this.slices{s}.VirtualLinks.Price = ...
+        this.slices{s}.prices.Link = ...
             link_price(this.slices{s}.VirtualLinks.PhysicalLink);
-        this.slices{s}.VirtualNodes.Price = ...
+        this.slices{s}.prices.Node = ...
             node_price(this.slices{s}.VirtualNodes.PhysicalNode);
         if nargout == 2
             tic;
         end
-        [profit(s), ~, ~] = this.slices{s}.priceOptimalFlowRate();
+        [profit(s), ~, ~] = this.slices{s}.priceOptimalFlowRate([], options);
         if nargout == 2
             t = toc;
             slice_runtime = max(slice_runtime, t);
             runtime.Serial = runtime.Serial + t;
         end
+        this.slices{s}.prices.Link = [];
+        this.slices{s}.prices.Node = [];
     end
     if nargout == 2
         runtime.Parallel = runtime.Parallel + slice_runtime;
     end
-    [node_load, link_load] = this.getNetworkLoad(utility);
+    [node_load, link_load] = this.getNetworkLoad([], 'sum');
     residual_link_capacity = link_capacity - link_load;
     residual_node_capacity = node_capacity - node_load;
     if isempty(find(residual_link_capacity<0,1)) && isempty(find(residual_node_capacity<0,1))

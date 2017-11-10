@@ -46,7 +46,7 @@ while true
     end
     prev_dual_fval = dual_fval;
     % check the primal feasibility
-    [node_load, link_load] = this.getNetworkLoad;
+    [node_load, link_load] = this.getNetworkLoad([], 'sum');
     b_feasible = true;
     if ~isempty(find(node_load>node_capacity,1))
         b_feasible = false;
@@ -94,7 +94,7 @@ while true
         dual_fval = dual_fval + fval;
     end
     dual_fval = dual_fval - dot(lambda.n, node_capacity) - dot(lambda.e, link_capacity);
-    [node_load, link_load] = this.getNetworkLoad;
+    [node_load, link_load] = this.getNetworkLoad([], 'sum');
     if InfoLevel.UserModelDebug == DisplayLevel.Iteration
         fprintf('\tDual problem: new value: %.3e, old value: %.3e, difference: %.3e.\n', ...
             dual_fval, prev_dual_fval, dual_fval-prev_dual_fval);
@@ -163,6 +163,7 @@ output.profit = table(t, t, t, t, 'VariableNames',...
     {'ApproximatePercent', 'ApproximatePrice', 'AccuratePercent', 'AccuratePrice'});
 clear t;
 options.Model = 'Accurate';
+options.Final;
 output.flow_rate = [];
 for s = 1:NS
     sl = this.slices{s};
@@ -198,7 +199,7 @@ for s = 1:NS
     %%%
     % *TODO* DEBUG the difference.
     output.profit.ApproximatePrice(s) = Slice.subproblemObjective(var_x, lambda_s, sl);
-    output.profit.AccuratePrice(s) = Slice.fcnProfit(var_x, sl);
+    output.profit.AccuratePrice(s) = sl.getProfit(options);
     
     output.welfare_accurate = output.welfare_accurate...
         + sl.weight*sum(fcnUtility(sl.FlowTable.Rate));

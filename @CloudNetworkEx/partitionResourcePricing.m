@@ -205,8 +205,8 @@ end
 % # Record the substrate network's node/link load, price.
 for s = 1:NS
     sl = this.slices{s};
-    sl.Variables.x = sl.x_path;
-    sl.Variables.z = sl.z_npf;
+    sl.Variables.x = sl.temp_vars.x;
+    sl.Variables.z = sl.temp_vars.z;
     sl.setPathBandwidth;
     sl.VirtualNodes.Load = sl.getNodeLoad;
     sl.VirtualLinks.Load = sl.getLinkLoad;
@@ -239,6 +239,7 @@ output.profit = table(t, t, t, t, 'VariableNames',...
 clear t;
 output.flow_rate = [];
 options.Model = 'Accurate';
+options.bFinal = true;
 %% Calculate the net social welfare
 % The resource price is also keep fixed since it related to the linear resouce dynamic
 % cost, static cost and the prcing factor. Here, we use two model to assess the net
@@ -316,7 +317,7 @@ for s = 1:NS
     %                 = sum(slice_payment(price))) - cost(approximate/accurate)
     %
     % *NOTE*: fcnProfit evalute the profit using offered price.
-    output.profit.ApproximatePrice(s) = Slice.fcnProfit(var_x, sl);
+    output.profit.ApproximatePrice(s) = Slice.fcnProfit(sl,options);
 end
 if ~isempty(this.eta)
     embed_profit_approx = this.eta*this.getNetworkCost;
@@ -367,8 +368,8 @@ end
                 sl.VirtualNodes.Capacity(sb_node_violate) = ...
                     part_factor*partition_ratio.*this.getNodeField('Capacity', violate_node_id);
             end
-            sl.VirtualLinks.Price = link_price(link_id);
-            sl.VirtualNodes.Price = node_price(node_id);
+            sl.prices.Link = link_price(link_id);
+            sl.prices.Node = node_price(node_id);
             %%%
             % optimal each slice with price and resource constraints.
             if nargout == 2
@@ -381,6 +382,8 @@ end
                 slice_runtime = max(slice_runtime, t);
                 runtime.Serial = runtime.Serial + t;
             end
+            sl.prices.Link = [];
+            sl.prices.Node = [];
         end
         if nargout == 2
             runtime.Parallel = runtime.Parallel + slice_runtime;

@@ -31,7 +31,7 @@ while true
         dual_fval = dual_fval + fval;
     end
     % check the primal feasibility
-    [node_load, link_load] = this.getNetworkLoad(utility);
+    [node_load, link_load] = this.getNetworkLoad([], 'sum');
     b_feasible = true;
     if ~isempty(find(node_load>node_capacity,1))
         b_feasible = false;
@@ -75,7 +75,7 @@ while true
             [fval, ~, ~] = this.slices{s}.subproblemNetSocialWelfare2(lambda_s);
             dual_fval = dual_fval + fval;
         end
-        [node_load, link_load] = this.getNetworkLoad(utility);
+        [node_load, link_load] = this.getNetworkLoad([], 'sum');
         dual_fval = dual_fval - dot(temp_lambda.n, node_capacity) - ...
             dot(temp_lambda.e, link_capacity);
         fprintf('\tDual problem: new value: %.3e, old value: %.3e, difference: %.3e.\n', ...
@@ -123,7 +123,7 @@ prim_fval = 0;
 for s = 1:NS
     prim_fval = prim_fval + this.slices{s}.weight*sum(fcnUtility(this.slices{s}.FlowTable.Rate));
 end
-[node_load, link_load] = this.getNetworkLoad(utility);
+[node_load, link_load] = this.getNetworkLoad;
 this.setNodeField('Load', node_load);
 this.setLinkField('Load', link_load);
 prim_fval = prim_fval - this.getNetworkCost;

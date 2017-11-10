@@ -42,7 +42,7 @@ while true
     end
     prev_dual_fval = dual_fval;
     % check the primal feasibility
-    [node_load, link_load] = this.getNetworkLoad;
+    [node_load, link_load] = this.getNetworkLoad([], 'sum');
     b_feasible = true;
     if ~isempty(find(node_load>node_capacity,1))
         b_feasible = false;
@@ -117,7 +117,7 @@ while true
         prev_dual_fval = dual_fval;
     end
     
-    [node_load, link_load] = this.getNetworkLoad;
+    [node_load, link_load] = this.getNetworkLoad([], 'sum');
     delta_lambda.n = node_load - node_capacity;
     delta_lambda.e = link_load - link_capacity;
     if isempty(find([delta_lambda.n>0; delta_lambda.e>0],1))

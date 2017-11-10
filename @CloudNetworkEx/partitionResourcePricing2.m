@@ -236,8 +236,8 @@ end
 % # Record the substrate network's node/link load, price.
 for s = 1:NS
     sl = this.slices{s};
-    sl.Variables.x = sl.x_path;
-    sl.Variables.z = sl.z_npf;
+    sl.Variables.x = sl.temp_vars.x;
+    sl.Variables.z = sl.temp_vars.z;
     sl.setPathBandwidth;
     sl.VirtualNodes.Load = sl.getNodeLoad;
     sl.VirtualLinks.Load = sl.getLinkLoad;
@@ -271,6 +271,7 @@ output.profit = table(t, t, t, t, 'VariableNames',...
 clear t;
 output.flow_rate = [];
 options.Model = 'Accurate';
+options.bFinal = true;
 %% Calculate the net social welfare
 % The resource price is also keep fixed since it related to the linear resouce dynamic
 % cost, static cost and the prcing factor. Here, we use two model to assess the net
@@ -348,7 +349,7 @@ for s = 1:NS
     %                 = sum(slice_payment(price))) - cost(approximate/accurate)
     %
     % *NOTE*: fcnProfit evalute the profit using offered price.
-    output.profit.ApproximatePrice(s) = Slice.fcnProfit(var_x, sl);
+    output.profit.ApproximatePrice(s) = Slice.fcnProfit(sl, options);
 end
 if ~isempty(this.eta)
     embed_profit_approx = this.eta*this.getNetworkCost;
@@ -393,8 +394,8 @@ end
             partition_ratio = weighted_node_usage(node_id,si) ./ aggr_node_usage(node_id);
             sl.VirtualNodes.Capacity = ...
                 part_factor.Node*partition_ratio.*this.getNodeField('Capacity', node_id);
-            sl.VirtualLinks.Price = link_price(link_id);
-            sl.VirtualNodes.Price = node_price(node_id);
+            sl.prices.Link = link_price(link_id);
+            sl.prices.Node = node_price(node_id);
             %%%
             % optimal each slice with price and resource constraints.
             if nargout == 2
@@ -409,6 +410,8 @@ end
             end
             res_occupy_ratio.Link(si) = sum(link_load(:,si))/sum(link_capacity(link_id));
             res_occupy_ratio.Node(si) = sum(node_load(:,si))/sum(node_capacity(node_id));
+            sl.prices.Link = [];
+            sl.prices.Node = [];
         end
         if nargout == 2
             runtime.Parallel = runtime.Parallel + slice_runtime;

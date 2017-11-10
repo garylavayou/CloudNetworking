@@ -46,26 +46,28 @@ while true
     % announce the resource price and optimize each network slice
     number_iter = number_iter + 1;
     for s = 1:NS
-        this.slices{s}.VirtualLinks.Price = ...
+        this.slices{s}.prices.Link = ...
             link_price(this.slices{s}.VirtualLinks.PhysicalLink);
-        this.slices{s}.VirtualNodes.Price = ...
+        this.slices{s}.prices.Node = ...
             node_price(this.slices{s}.VirtualNodes.PhysicalNode);
         if nargout == 2
             tic;
         end
         [slice_profit(s), node_load(:,s), link_load(:,s)] ...
-            = this.slices{s}.priceOptimalFlowRate();
+            = this.slices{s}.priceOptimalFlowRate([], options);
         if nargout == 2
             t = toc;
             slice_runtime = max(slice_runtime, t);
             runtime.Serial = runtime.Serial + t;
         end
+        this.slices{s}.prices.Link = [];
+        this.slices{s}.prices.Node = [];
     end
     if nargout == 2
         runtime.Parallel = runtime.Parallel + slice_runtime;
     end
     %%% Compute the new resource price according to the resource consumption
-    [node_load, link_load] = this.getNetworkLoad(utility);
+    [node_load, link_load] = this.getNetworkLoad([], 'sum');
     b_link_violate = (link_capacity - link_load)<0;
     b_node_violate = (node_capacity - node_load)<0;
     if isempty(find(b_link_violate==1,1)) && isempty(find(b_node_violate==1,1))
@@ -108,24 +110,26 @@ while stop_cond1 && stop_cond2 && stop_cond3
     b_node = node_price > delta_node_price;
     node_price(b_node) = node_price(b_node) - delta_node_price(b_node);
     for s = 1:NS
-        this.slices{s}.VirtualLinks.Price = ...
+        this.slices{s}.prices.Link = ...
             link_price(this.slices{s}.VirtualLinks.PhysicalLink);
-        this.slices{s}.VirtualNodes.Price = ...
+        this.slices{s}.prices.Node = ...
             node_price(this.slices{s}.VirtualNodes.PhysicalNode);
         if nargout == 2
             tic;
         end
-        [slice_profit(s), ~, ~] = this.slices{s}.priceOptimalFlowRate();
+        [slice_profit(s), ~, ~] = this.slices{s}.priceOptimalFlowRate([], options);
         if nargout == 2
             t = toc;
             slice_runtime = max(slice_runtime, t);
             runtime.Serial = runtime.Serial + t;
         end
+        this.slices{s}.prices.Link = [];
+        this.slices{s}.prices.Node = [];
     end
     if nargout == 2
         runtime.Parallel = runtime.Parallel + slice_runtime;
     end
-    [node_load, link_load] = this.getNetworkLoad(utility);
+    [node_load, link_load] = this.getNetworkLoad([], 'sum');
     b_link_violate = (link_capacity - link_load)<0;
     b_node_violate = (node_capacity - node_load)<0;
     assert_link_1 = isempty(find(b_link_violate==1,1));			% no violate link
@@ -181,24 +185,26 @@ if stop_cond3
         link_price = link_price + delta_link_price;
         node_price = node_price + delta_node_price;
         for s = 1:NS
-            this.slices{s}.VirtualLinks.Price = ...
+            this.slices{s}.prices.Link = ...
                 link_price(this.slices{s}.VirtualLinks.PhysicalLink);
-            this.slices{s}.VirtualNodes.Price = ...
+            this.slices{s}.prices.Node = ...
                 node_price(this.slices{s}.VirtualNodes.PhysicalNode);
             if nargout == 2
                 tic;
             end
-            this.slices{s}.priceOptimalFlowRate();
+            this.slices{s}.priceOptimalFlowRate([], options);
             if nargout == 2
                 t = toc;
                 slice_runtime = max(slice_runtime, t);
                 runtime.Serial = runtime.Serial + t;
             end
+            this.slices{s}.prices.Link = [];
+            this.slices{s}.prices.Node = [];
         end
         if nargout == 2
             runtime.Parallel = runtime.Parallel + slice_runtime;
         end
-        [node_load, link_load] = this.getNetworkLoad(utility);
+        [node_load, link_load] = this.getNetworkLoad([], 'sum');
         stop_cond3 = ~this.checkProfitRatio(node_load, link_load, node_price, link_price, options);
         if ~stop_cond3
             delta_link_price = delta_link_price * 2;
@@ -216,24 +222,26 @@ if stop_cond3
         link_price = link_price + delta_link_price * alpha;
         node_price = node_price + delta_node_price * alpha;
         for s = 1:NS
-            this.slices{s}.VirtualLinks.Price = ...
+            this.slices{s}.prices.Link = ...
                 link_price(this.slices{s}.VirtualLinks.PhysicalLink);
-            this.slices{s}.VirtualNodes.Price = ...
+            this.slices{s}.prices.Node = ...
                 node_price(this.slices{s}.VirtualNodes.PhysicalNode);
             if nargout == 2
                 tic;
             end
-            this.slices{s}.priceOptimalFlowRate();
+            this.slices{s}.priceOptimalFlowRate([], options);
             if nargout == 2
                 t = toc;
                 slice_runtime = max(slice_runtime, t);
                 runtime.Serial = runtime.Serial + t;
             end
+            this.slices{s}.prices.Link = [];
+            this.slices{s}.prices.Node = [];
         end
         if nargout == 2
             runtime.Parallel = runtime.Parallel + slice_runtime;
         end
-        [node_load, link_load] = this.getNetworkLoad(utility);
+        [node_load, link_load] = this.getNetworkLoad([], 'sum');
         if this.checkProfitRatio(node_load, link_load, node_price, link_price, options)
             h = alpha;
         else

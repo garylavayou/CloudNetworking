@@ -58,7 +58,7 @@ while true
         %             -lambda.pf{i}(alpha_idx)./delta_lambda.pf{i}(alpha_idx));
     end
     % check the primal feasibility
-    [node_load, link_load] = this.getNetworkLoad;
+    [node_load, link_load] = this.getNetworkLoad([], 'sum');
     b_feasible = true;
     if ~isempty(find(node_load>node_capacity,1))
         b_feasible = false;
@@ -121,7 +121,7 @@ while true
         end
         
         % check the primal feasibility
-        [node_load, link_load] = this.getNetworkLoad;
+        [node_load, link_load] = this.getNetworkLoad([], 'sum');
         ide = link_load>link_capacity;
         idn = node_load>node_capacity;
         b_feasible = true;
@@ -265,7 +265,7 @@ utility = 0;
 for i = 1:NS
     utility = utility + this.slices{i}.weight*sum(fcnUtility(this.slices{i}.FlowTable.Rate));
 end
-[node_load, link_load] = this.getNetworkLoad(utility);
+[node_load, link_load] = this.getNetworkLoad;
 primal_fval = utility - this.getNetworkCost(node_load ,link_load);
 fprintf('\tOptimal solution: dual objective: %G, primal objective %G.\n', ...
     dual_fval, primal_fval);

@@ -3,11 +3,11 @@
 
 %% Method Prototype
 %
-%     AddSlice(phy_net, slice_opt) 
+%     AddSlice(phy_net, slice_opt)
 %
 % |slice_opt|: Options on how to creat a slice.
 %
-% * *Type*: 
+% * *Type*:
 % * *Weight*:
 % * *FlowPattern*: flow pattern of the slice, see alse _FlowPattern_.
 % * *NumberFlows*: this field is specified when |Pattern = 'RandomMultiFlow'|.
@@ -58,8 +58,8 @@ else
     % TODO check VNF list
     if isfield(slice_opt, 'NumberVNFs') && ~isempty(slice_opt.NumberVNFs)
         slice_opt.VNFList = slice_opt.VNFList(1:slice_opt.NumberVNFs);
-%     else
-%         slice_opt.VNFList = slice_opt.VNFList;
+        %     else
+        %         slice_opt.VNFList = slice_opt.VNFList;
     end
 end
 if ~isfield(slice_opt,'DelayConstraint') || isempty(slice_opt.DelayConstraint) || ...
@@ -105,8 +105,8 @@ slice_opt.Parent = this;
 % To perform the slice admitting control, we should first add the new slice into the
 % network, and perform resource allocation.
 %% TODO
-% change slice's storage to ListArray 
-sl = this.createslice(slice_opt, varargin{:});     
+% change slice's storage to ListArray
+sl = this.createslice(slice_opt, varargin{:});
 %%%
 % Assign identifier to flow/path of the slice.
 global DEBUG; %#ok<NUSED>

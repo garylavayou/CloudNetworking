@@ -1,4 +1,4 @@
-classdef EventData < event.EventData
+classdef EventData < event.EventData  % deriving from handle
     %UNTITLED13 Summary of this class goes here
     %   Detailed explanation goes here
     
@@ -8,7 +8,7 @@ classdef EventData < event.EventData
     
     methods
         function this = EventData(userdata)
-            if nargin >= 1 && ~isempty(userdata);
+            if nargin >= 1 && ~isempty(userdata)
                 this.userdata = userdata;
             end
         end

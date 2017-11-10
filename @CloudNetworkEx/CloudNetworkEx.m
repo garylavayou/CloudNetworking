@@ -219,8 +219,8 @@ classdef CloudNetworkEx < CloudNetwork
             warning('this function should be redesigned.');
             for i = 1:this.NumberSlices
                 sl = this.slices{i};
-                sl.Variables.x = sl.x_path;
-                sl.Variables.z = sl.z_npf;
+                sl.Variables.x = sl.temp_vars.x;
+                sl.Variables.z = sl.temp_vars.z;
                 sl.VirtualDataCenters.Load = sl.getNodeLoad;
                 sl.VirtualLinks.Load = sl.getLinkLoad;
                 sl.FlowTable.Rate = sl.getFlowRate;
@@ -256,31 +256,25 @@ classdef CloudNetworkEx < CloudNetwork
             slice_data.ConstantProfit = 0;
             if strcmp(this.options.Method, 'single-function')
                 slice_data.Alpha_f = zeros(NS, 1);
+                slice_data.VNFList = 1;
             end
             for s = 1:this.NumberSlices
                 sl = this.slices{s};
                 slice_data.ConstantProfit = slice_data.ConstantProfit + sl.constant_profit;
                 if strcmp(this.options.Method, 'single-function')
                     slice_data.Alpha_f(s) = sum(this.VNFTable{sl.VNFList,{'ProcessEfficiency'}});
-                elseif strcmp(this.options.Method, 'normal')
-                    %         b_vnf(this.slices{s}.VNFList) = true;
                 end
             end
-            if strcmp(this.options.Method, 'normal')
-                slice_data.VNFList = 1:this.NumberVNFs;
-                %     slice_data.VNFList = find(b_vnf);
-            else    % single-function
-                slice_data.VNFList = 1;
-            end
         end
-        function argout = calculateOptimalOutput(this, ss, slice_data)
+        
+        function argout = calculateOptimalOutput(this, ss)
             tempout = calculateOptimalOutput@CloudNetwork(this, ss);
             if cellstrfind(welfare_type, 'Accurate')
                 argout.WelfareAccurateOptimal = tempout.WelfareOptimal...
                     + ss.constant_profit;
             end
             if cellstrfind(welfare_type, 'Approximate')
-                argout.WelfareApproxOptimal = ss.fcnProfit([], ss);   % net profit
+                argout.WelfareApproxOptimal = ss.getProfit(struct('PricingPolicy', 'linear'));   % net profit
             end
             % if ~isempty(this.eta)
             %     embed_profit_approx = this.eta * ...
@@ -293,14 +287,6 @@ classdef CloudNetworkEx < CloudNetwork
             % end
             % argout.welfare_approx_optimal = argin.welfare_approx_optimal + embed_profit_approx;
             % argout.welfare_accurate_optimal = argin.welfare_accurate_optimal + embed_profit_accurate;
-            if strcmp(this.options.Method, 'single-function')    % TODO
-                % NV might not be the true number of VNFs when the method is 'single-function'
-                % NV = length(slice_data.VNFList);
-                argout.Znpf = reshape(full(ss.Variables.z), ...
-                    this.NumberDataCenters, this.NumberPaths, length(slice_data.VNFList));
-            elseif strcmp(this.options.Method, 'normal')
-                argout.Znpf = tempout.Znpf;
-            end
         end
     end
     

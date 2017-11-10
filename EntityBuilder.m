@@ -1,6 +1,8 @@
 %% Enity Builder
 % *EntityBuilder* stores necessary information, which is used to generate information for
 % creating entities. 
+%
+% _copyElement_: no handle class member, no need to override the method.
 classdef EntityBuilder < matlab.mixin.Copyable & matlab.mixin.Heterogeneous
     
     properties
@@ -25,7 +27,7 @@ classdef EntityBuilder < matlab.mixin.Copyable & matlab.mixin.Heterogeneous
             this.ArrivalRate = arrival_rate;
             this.ServiceInterval = service_interval;
             this.Options = options;
-            persistent builder_id;       % global entity ID;
+            global builder_id;       % global entity ID;
             if isempty(builder_id)
                 builder_id = int64(0);
             end

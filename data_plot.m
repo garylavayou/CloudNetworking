@@ -70,9 +70,9 @@ if exist('fig_netsocialwelfare', 'var') && fig_netsocialwelfare.isvalid
 else
     fig_netsocialwelfare = figure('Name', 'Network Social Welfare');
 end
-h = plot(stat.times(x_tick), stat_optimal.AccurateWelfare(x_tick,2),'--r', ...
-    stat.times(x_tick), stat_price2.AccurateWelfare(x_tick), '-b', ...
-    stat.times(x_tick), stat_static.AccurateWelfare(x_tick),'-.g');
+h = plot(stat.times(x_tick), stat_optimal.Welfare(x_tick,2),'r--', ...
+    stat.times(x_tick), stat_price.Welfare(x_tick), 'b-', ...
+    stat.times(x_tick), stat_static.Welfare(x_tick),'-.g');
 %     x, profit_accurate.price2(x), '-c', ...
 %     x, profit_accurate.part(x), '-g',...
 %     x, profit_accurate.partprice(x),'-k'
@@ -95,8 +95,8 @@ else
         'Name', 'Others');
 end
 subplot(2,3,1);
-devi1 = profit_accurate.optimal(x_tick) - profit_accurate.price(x_tick);
-devi2 = profit_accurate.optimal(x_tick) - profit_accurate.static(x_tick);
+devi1 = stat_optimal.Profit(x_tick) - stat_price.Profit(x_tick);
+devi2 = stat_optimal.Profit(x_tick) - stat_static.Profit(x_tick);
 % devi2 = profit_accurate.optimal(x) - profit_accurate.part(x);
 % devi4 = profit_accurate.optimal(x) - profit_accurate.price2(x);
 % devi5 = profit_accurate.optimal(x) - profit_accurate.partprice(x);
@@ -108,9 +108,9 @@ xlabel('Time (hour)');
 ylabel('Difference of optimal objective value');
 title('Distance to optimal net social welfare');
 subplot(2,3,2);
-plot(stat.times(x_tick), utilization.optimal(x_tick), '-r', ...
-    stat.times(x_tick), utilization.price(x_tick), '-b', ...
-    stat.times(x_tick), utilization.static(x_tick), '-m');
+plot(stat.times(x_tick), stat_optimal{x_tick, 'Utilization'}, '-r', ...
+    stat.times(x_tick), stat_price{x_tick, 'Utilization'}, '-b', ...
+    stat.times(x_tick),stat_static{x_tick, 'Utilization'}, '-m');
 %     x, utilization.price2(x), '-c', ...
 %     x, utilization.part(x), '-g', ...
 %     x, utilization.partprice(x), '-k'
@@ -121,17 +121,17 @@ xlabel('Time (hour)');
 ylabel('Network Utilization');
 title('Network utilization from different methods');
 subplot(2,3,3)
-plot(stat.times(x_tick), stat.number_flows(x_tick,1), '-b', ...
-    stat.times(x_tick), stat.number_flows_static(x_tick,1), 'x');
+plot(stat.times(x_tick), stat_optimal.NumberFlows(x_tick,1), '-b', ...
+    stat.times(x_tick), stat_static.NumberFlowsStatic(x_tick,1), 'x');
 legend({'Dynamic', 'Static'},'Location', 'northwest')
 xlabel('Time (hour)');
 ylabel('Number of Flows');
 title('Total number of flows in the network');
 xlim(xlimits);
 subplot(2,3,4)
-plot(stat.times(x_tick), runtime.optimal(x_tick,1), '-b', ...
-    stat.times(x_tick), runtime.price(x_tick,1), '-r',...
-    stat.times(x_tick), runtime.static(x_tick), '-m');
+plot(stat.times(x_tick), stat_optimal.Runtime(x_tick,1), '-b', ...
+    stat.times(x_tick), stat_price.Runtime(x_tick,1), '-r',...
+    stat.times(x_tick), stat_static.Runtime(x_tick), '-m');
 %     x, runtime.price2(x)./sum(stat.number_slices(x,:),2), '-c',...
 %     x, runtime.part(x)./sum(stat.number_slices(x,:),2), '-g',...
 xlabel('Time (hour)');
@@ -200,7 +200,7 @@ end
 %     0, 40, 1000, 6000;
 %     0, 40, 3000, 11000];
 h = plot(stat.times(x_tick), stat_optimal.Profit(x_tick), 'r--',...
-    stat.times(x_tick), stat_price2.Profit(x_tick), 'b-',...
+    stat.times(x_tick), stat_price.Profit(x_tick), 'b-',...
     stat.times(x_tick), stat_static.Profit(x_tick), 'g-.');
 h(1).Parent.FontName = font_name;
 h(1).Parent.FontSize = font_size;
@@ -225,7 +225,7 @@ fig_sc_profit.OuterPosition = [100 400 1200 380];
 for t = 1:length(type.Index)
     subplot(1,3,t)
     h = plot(stat.times(x_tick), slice_stat_optimal{t}.Profit(x_tick,1), 'r--',...
-        stat.times(x_tick), slice_stat_price2{t}.Profit(x_tick,1), 'b-',...
+        stat.times(x_tick), slice_stat_price{t}.Profit(x_tick,1), 'b-',...
         stat.times(x_tick), slice_stat_static{t}.Profit(x_tick,1), 'k-.');
     h(1).Parent.FontName = font_name;
     h(1).Parent.FontSize = font_size+2;
@@ -233,7 +233,7 @@ for t = 1:length(type.Index)
     h(2).LineWidth = line_width+0.5;
     h(3).LineWidth = line_width+0.5;
     h(3).Color = color.green;
-    legend(legend_label_compact);
+    legend(legend_label_compact, 'Orientation', 'horizontal');
     ylabel('Profit');
     xlabel('Time (hour)');
     axis([stat.times(1), stat.times(x_tick(end)) slice_profit_limit(t,:)]);

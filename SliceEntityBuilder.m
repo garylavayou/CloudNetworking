@@ -49,7 +49,7 @@ classdef SliceEntityBuilder < EntityBuilder
     
     methods(Access=protected)
         function entity = buildentity(this, time_arrive, time_serve)
-            persistent slice_id;    % Global slice ID;
+            global slice_id;    % Global slice ID;
             if isempty(slice_id)
                 slice_id = int64(0);
             end

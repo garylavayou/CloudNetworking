@@ -49,7 +49,7 @@ while true
     number_iter = number_iter + 1;
     SolveSCP(node_price, link_price);
     %%% Compute the new resource price according to the resource consumption
-    [node_load, link_load] = this.getNetworkLoad;
+    [node_load, link_load] = this.getNetworkLoad([], 'sum');
     b_link_violate = (link_capacity - link_load)<0;
     b_node_violate = (node_capacity - node_load)<0;
     if isempty(find(b_link_violate==1,1)) && isempty(find(b_node_violate==1,1))
@@ -93,7 +93,7 @@ while stop_cond1 && stop_cond2 && stop_cond3
     node_price(b_node) = node_price(b_node) - delta_node_price(b_node);
     SolveSCP(node_price, link_price);
     
-    [node_load, link_load] = this.getNetworkLoad;
+    [node_load, link_load] = this.getNetworkLoad([], 'sum');
     stop_cond3 = this.checkProfitRatio(node_price, link_price, options);
     b_link_violate = (link_capacity - link_load)<0;
     b_node_violate = (node_capacity - node_load)<0;
@@ -199,7 +199,7 @@ end
 this.finalize(node_price, link_price);
 
 % Calculate the output
-output = this.calculateOutput([]);
+output = this.calculateOutput([], options);
 
 % output the optimization results
 if InfoLevel.UserModel > DisplayLevel.Off
@@ -213,20 +213,20 @@ end
     function SolveSCP(node_price_t, link_price_t)
         for s = 1:NS
             sl = this.slices{s};
-            options.LinkPrice = link_price_t(sl.VirtualLinks.PhysicalLink);
+            sl.prices.Link = link_price_t(sl.VirtualLinks.PhysicalLink);
             dc_id = sl.getDCPI;
-            options.NodePrice = node_price_t(dc_id);
+            sl.prices.Node = node_price_t(dc_id);
             if options.CountTime
                 tic;
             end
-            this.slices{s}.priceOptimalFlowRate([], ...
-                getstructfields(options, ...
-                {'Form','PricingPolicy', 'LinkPrice', 'NodePrice'}, 'ignore'));
+            this.slices{s}.priceOptimalFlowRate([], options);
             if options.CountTime
                 t = toc;
                 slice_runtime = max(slice_runtime, t);
                 runtime.Serial = runtime.Serial + t;
             end
+            sl.prices.Link = [];
+            sl.prices.Node = [];
         end
         if options.CountTime
             runtime.Parallel = runtime.Parallel + slice_runtime;

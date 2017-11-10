@@ -136,8 +136,8 @@ classdef SliceEx < Slice
         %
         % Only active independent variables are passed into the objective function.
         %
-        [profit, grad]= fcnProfitCompact(act_var_x, S);
-        [fval,  grad] = subproblemObjective(var_x, lambda, S);
+        [profit, grad]= fcnProfitCompact(act_vars, slice);
+        [fval,  grad] = subproblemObjective(vars, lambda, slice);
         %%%
         % * *fcnHessianCompact* |static| : Compact form of Hessian matrix of the Largrangian.
         %

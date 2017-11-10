@@ -37,19 +37,19 @@ if exitflag == 1 || exitflag == 2
         error('error: infeasible solution.');
     end
     this.x_path = x(1:this.NumberPaths);
-    this.z_npf = x((this.NumberPaths+1):end);
+    this.temp_vars.z = x((this.NumberPaths+1):end);
     %% when compute node load, z_npf corresonding to h_np = 0 has been set as zero.
     nz = this.NumberVirtualNodes*this.NumberPaths;
     z_index = 1:nz;
     for f = 1:this.NumberVNFs
-        this.z_npf(z_index) = this.I_node_path(:).*this.z_npf(z_index);
+        this.temp_vars.z(z_index) = this.I_node_path(:).*this.temp_vars.z(z_index);
         z_index = z_index + nz;
     end
     %     this.x_path(this.x_path<10^-3) = 0;
     %     this.z_npf(this.z_npf<10^-3) = 0;
     this.x_path(this.x_path<(10^-4)*max(this.x_path)) = 0;
-    this.z_npf(this.z_npf<(10^-4)*max(this.z_npf)) = 0;
-    if ~this.checkFeasible([this.x_path; this.z_npf])
+    this.z_npf(this.temp_vars.z<(10^-4)*max(this.temp_vars.z)) = 0;
+    if ~this.checkFeasible([this.temp_vars.x; this.temp_vars.z])
         if InfoLevel.UserModelDebug >= DisplayLevel.Notify
             warning('subproblemNetSocialWelfare: the rounding of variables %s', ...
                 'with small quantity will make the solution infeasible.');
