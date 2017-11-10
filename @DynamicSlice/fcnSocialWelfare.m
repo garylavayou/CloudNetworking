@@ -1,8 +1,10 @@
 %% Net social welfare of a slice
 % override <Slice.fcnSocialWelfare>.
 % Slice resource cost is fixed, since the price is given and the resource amount is known.
-% When using the |'fixcost'| option, the slice's resource cost is
-% constant, and we do not consider it in the objective as well as in the gradient.
+% When using the |'fixcost'| option, the slice's resource cost is constant. Therefore, we
+% do not include it in the objective as well as in the gradient, to reduce computation. 
+% However, when comparing the profit with other methods, the fixed resource cost should be
+% considered.
 function [profit, grad] = fcnSocialWelfare(var_x, S, options)
 if strcmp(options.CostModel, 'fixcost')
     var_path = var_x(1:S.NumberPaths);
