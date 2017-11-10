@@ -1,7 +1,5 @@
 function [exitflag, fidx] = executeMethod(this, action)
 global g_results event_num DEBUG InfoLevel; %#ok<NUSED>
-%% Initialize Variables
-% this.Variables = struct;????
 this.temp_vars = struct;
 
 %%
@@ -21,7 +19,8 @@ if ~strcmpi(this.options.Method, 'fastconfig')
     % centers, |this.old_variables.v| will be modified to match the size of the new
     % vector (See <DimensioningReconfigure>).
     this.old_variables.v = this.VNFCapacity(:);
-end
+    if ~strcmpi(this.options.Method, 'fastconfig')
+    end
 switch this.options.Method
     case 'reconfig'
         % provide 'method' and 'model' to customize the <optimalFlowRate>
@@ -33,13 +32,13 @@ switch this.options.Method
         options.Method = 'slice-price';
         this.prices.Link = this.VirtualLinks.Price;
         this.prices.Node = this.VirtualDataCenters.Price;
-        profit = this.optimalFlowRate(options);
+        [profit,cost] = this.optimalFlowRate(options);
     case 'fastconfig'
-        profit = this.fastReconfigure(action, options);
+        [profit,cost] = this.fastReconfigure(action, options);
     case 'fastconfig2'
-        profit = this.fastReconfigure2(action, options);
-    case {'dimconfig', 'dimconfig2'}
-        profit = this.DimensioningReconfigure(action, options);
+        [profit,cost] = this.fastReconfigure2(action, options);
+    case {'dimconfig', 'dimconfig1', 'dimconfig2', 'dimconfig0'}
+        [profit,cost] = this.DimensioningReconfigure(action, options);
     otherwise
         error('NetworkSlicing:UnsupportedMethod', ...
             'error: unsupported method (%s) for network slicing.', ...
@@ -56,15 +55,25 @@ switch this.options.Method
         stat.Profit = profit - stat.Cost;
     case {'fastconfig','fastconfig2'}
         stat.Profit = profit + stat.LinearCost - stat.Cost;        
-    case{'dimconfig', 'dimconfig2'}
+    case{'dimconfig', 'dimconfig1', 'dimconfig2'}
         stat.Profit = profit + stat.LinearCost - stat.Cost;
         if this.b_dim && this.getOption('Adhoc')
             % If the slice do not support Adhoc flows, then we do not release resource
             % decriptors for the slice.
             this.release_resource_description(); 
         end
+    case {'dimconfig0'}
+        if this.b_dim
+            stat.Profit = profit + stat.LinearCost - stat.Cost;
+            if this.getOption('Adhoc')
+                this.release_resource_description(); 
+            end
+        else
+            stat.Profit = profit - stat.Cost;
+        end
 end
-g_results(event_num) = stat;
+stat.ResourceCost = cost;
+g_results(event_num,:) = stat;
 
 %% Reset temporary variables
 % These variables should be cleared. If it is used next time, it will be assigned with new
@@ -87,7 +96,7 @@ else
     if InfoLevel.UserModel>=DisplayLevel.Notify ||...
             InfoLevel.UserModelDebug>=DisplayLevel.Final
         if ~isempty(setdiff(this.FlowTable.Identifier(fidx), this.reject_index))
-            warning('[%s]: reject flows due to zero rate.', this.options.Method);
+            cprintf('SystemCommands', '[%s]: reject flows due to zero rate.\n', this.options.Method);
         end
     end
 end

@@ -1,4 +1,4 @@
-function profit = DimensioningReconfigure( this, action, new_opts )
+function [profit,cost] = DimensioningReconfigure( this, action, new_opts )
 global DEBUG; %#ok<NUSED>
 this.b_dim = false;
 
@@ -50,10 +50,18 @@ else
 end
 
 if ~this.b_dim
-    if strcmpi('dimconfig', this.options.Method)
-        profit = this.fastReconfigure(action, new_opts);
-    elseif strcmpi('dimconfig2', this.options.Method)
-        profit = this.fastReconfigure2(action, new_opts);
+    switch this.options.Method
+        case {'dimconfig', 'dimconfig1'}
+            [profit,cost] = this.fastReconfigure(action, new_opts);
+        case {'dimconfig2'}
+            [profit,cost] = this.fastReconfigure2(action, new_opts);
+        case {'dimconfig0'}
+            options.CostModel = 'fixcost';
+            options.Method = 'slice-price';
+            this.prices.Link = this.VirtualLinks.Price;
+            this.prices.Node = this.VirtualDataCenters.Price;
+            [profit,cost] = this.optimalFlowRate(options);
+        otherwise
     end
     return;
 end
@@ -96,7 +104,13 @@ if this.Results.Value == 0
 else
     profit = [];
 end
-
+if nargout>=2
+    if this.Results.Value == 0
+        cost = this.getSliceCost(new_opts.PricingPolicy);
+    else
+        cost =[];
+    end
+end
 %% Reset statistics
 this.time.LastDimensioning = this.time.Current;
 this.event.RecentCount = 0;
