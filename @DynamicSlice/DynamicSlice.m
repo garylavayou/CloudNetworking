@@ -185,10 +185,8 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
                 this.x_reconfig_cost = (this.I_edge_path)' * this.VirtualLinks.ReconfigCost;
                 this.z_reconfig_cost = repmat(this.VirtualDataCenters.ReconfigCost, ...
                     this.NumberPaths*this.NumberVNFs, 1);
-                if ~strcmpi(this.options.Method, 'fastconfig')
-                    this.vnf_reconfig_cost = this.Parent.options.VNFReconfigCoefficient * ...
-                        repmat(this.VirtualDataCenters.ReconfigCost, this.NumberVNFs, 1);
-                end
+                this.vnf_reconfig_cost = this.Parent.options.VNFReconfigCoefficient * ...
+                    repmat(this.VirtualDataCenters.ReconfigCost, this.NumberVNFs, 1);
                 this.VNFCapacity = this.getVNFCapacity;
                 this.old_variables = this.Variables;
                 this.get_state;
@@ -369,75 +367,70 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             nz_index_z = mid_z~=0;
             diff_z_norm = zeros(size(diff_z));
             diff_z_norm(nz_index_z) = abs(diff_z(nz_index_z)./mid_z(nz_index_z));
-            %%
-            % reconfiguration cost of VNF capacity
-            if ~strcmpi(this.options.Method, 'fastconfig')
-                if length(this.old_variables.v) <= length(this.Variables.v)
-                    new_vnf_capacity = this.VNFCapacity(:);
-                else
-                    new_vnf_capacity = zeros(length(this.old_variables.v),1);
-                    new_vnf_capacity(~this.changed_index.v) = this.VNFCapacity(:);
-                end
-                diff_v = abs(new_vnf_capacity-this.old_variables.v(:));
-                mid_v = 1/2*(abs(new_vnf_capacity)+abs(this.old_variables.v(:)));
-                nz_index_v = mid_v~=0;
-                diff_v_norm = zeros(size(diff_v));
-                diff_v_norm(nz_index_v) = abs(diff_v(nz_index_v)./mid_v(nz_index_v));
+            %%%
+            % Reconfiguration cost of VNF capacity.
+            % No reconfiguration of VNF instance for 'fastconfig'.
+            if length(this.old_variables.v) <= length(this.Variables.v)
+                new_vnf_capacity = this.VNFCapacity(:);
+            else
+                new_vnf_capacity = zeros(length(this.old_variables.v),1);
+                new_vnf_capacity(~this.changed_index.v) = this.VNFCapacity(:);
             end
+            diff_v = abs(new_vnf_capacity-this.old_variables.v(:));
+            mid_v = 1/2*(abs(new_vnf_capacity)+abs(this.old_variables.v(:)));
+            nz_index_v = mid_v~=0;
+            diff_v_norm = zeros(size(diff_v));
+            diff_v_norm(nz_index_v) = abs(diff_v(nz_index_v)./mid_v(nz_index_v));
             tol_vec = options.DiffNonzeroTolerance;
+            stat = table;
             for i = 1:length(stat_names)
                 %% Reconfiguration Cost
                 if contains(stat_names{i},{'All', 'Cost'},'IgnoreCase',true)
                     % logical array cannot be used as the first argument of dot.
                     stat.Cost = dot(this.x_reconfig_cost, diff_x_norm>tol_vec)...
-                        + dot(this.z_reconfig_cost, diff_z_norm>tol_vec);
-                    if ~strcmpi(this.options.Method, 'fastconfig')
-                        stat.Cost = stat.Cost + ...
-                            dot(this.vnf_reconfig_cost, diff_v_norm>tol_vec);
-                    end
+                        + dot(this.z_reconfig_cost, diff_z_norm>tol_vec)...
+                        + dot(this.vnf_reconfig_cost, diff_v_norm>tol_vec);
                 end
                 if contains(stat_names{i},{'All', 'LinearCost'},'IgnoreCase',true)
                     stat.LinearCost = dot(diff_x, this.x_reconfig_cost) + ...
-                        dot(diff_z, this.z_reconfig_cost);
-                    if ~strcmpi(this.options.Method, 'fastconfig')
-                        stat.LinearCost = stat.LinearCost + ...
-                            dot(diff_v, this.vnf_reconfig_cost);
-                    end
+                        dot(diff_z, this.z_reconfig_cost) + ...
+                        dot(diff_v, this.vnf_reconfig_cost);
                     stat.LinearCost = stat.LinearCost * this.options.ReconfigScaler;
                 end
                 %% Number of Variables
                 if contains(stat_names{i},{'All', 'NumberVariables'},'IgnoreCase',true)
                     stat.NumberVariables = ...
                         nnz(tI_edge_path)+nnz(tI_node_path)*this.NumberVNFs;
-                    if ~strcmpi(this.options.Method, 'fastconfig')
-                        stat.NumberVariables = stat.NumberVariables + nnz(mid_v);
-                    end
+                    stat.NumberVariables = stat.NumberVariables + nnz(mid_v);
                 end            
                 %% Number of reconfigurations between current and previous solution
                 % NOTE: resource allocation and release will not take place at the same
                 % time. 
                 %   Number of edge variables, VNF assignment variables
+                %   the reconfiguration of VNF instances.
                 if contains(stat_names{i},{'All', 'NumberReconfigVariables'},'IgnoreCase',true)
                     paths_length = sum(tI_edge_path,1);
-                    stat.NumberReconfigVariables = ...
-                        nnz(diff_z_norm>tol_vec) + dot(paths_length,diff_x_norm>tol_vec);
-                    if ~strcmpi(this.options.Method, 'fastconfig')
-                        % include the reconfiguration of VNF instances.
-                        stat.NumberReconfigVariables = ...
-                            stat.NumberReconfigVariables + nnz(diff_v_norm>tol_vec);
-                    end
+                    stat.NumberReconfigVariables = nnz(diff_z_norm>tol_vec) ...
+                        + dot(paths_length,diff_x_norm>tol_vec)...
+                        + nnz(diff_v_norm>tol_vec);
                 end
                 %% Number of Flows
                 if contains(stat_names{i},{'All', 'NumberFlows'},'IgnoreCase',true)
-                    stat.NumberFlows = this.NumberFlows;
+                    % For convenience of comparison, we store the number of flows including the
+                    % removed one.
+                    stat.NumberFlows = max(this.NumberFlows, height(this.old_state.flow_table));
+                end
+                %% Time
+                if contains(stat_names{i},{'All', 'Time'},'IgnoreCase',true)
+                    stat.Time = this.time.Current;
                 end
                 %% Number of Reconfigured Flows
                 if contains(stat_names{i},{'All', 'NumberReconfigFlows'},'IgnoreCase',true)
                     np = numel(diff_x_norm);
                     nv = this.NumberVNFs;
                     nn = numel(diff_z_norm)/(nv*np);
-                    diff_path = (diff_x_norm)' + ...
-                        sum(sum(reshape(diff_z_norm,nn,np,nv),3),1);
+                    diff_path = (diff_x_norm>tol_vec)' + ...
+                        sum(sum(reshape(diff_z_norm>tol_vec,nn,np,nv),3),1);
                     if length(this.path_owner) <= length(this.old_state.path_owner)
                         stat.NumberReconfigFlows = ...
                             numel(unique(this.old_state.path_owner(diff_path~=0)));
@@ -460,9 +453,7 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             this.old_state.variables = this.Variables;
             this.old_state.x_reconfig_cost = this.x_reconfig_cost;
             this.old_state.z_reconfig_cost = this.z_reconfig_cost;
-            if ~strcmpi(this.options.Method, 'fastconfig')
-                this.old_state.vnf_reconfig_cost = this.vnf_reconfig_cost;
-            end
+            this.old_state.vnf_reconfig_cost = this.vnf_reconfig_cost;
             this.old_state.As_res = this.As_res;
             if nargout >= 1
                 s = this.old_state;
@@ -485,9 +476,7 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             this.Variables = this.old_state.variables;
             this.x_reconfig_cost = this.old_state.x_reconfig_cost;
             this.z_reconfig_cost = this.old_state.z_reconfig_cost;
-            if ~strcmpi(this.options.Method, 'fastconfig')
-                this.vnf_reconfig_cost = this.old_state.vnf_reconfig_cost;
-            end
+            this.vnf_reconfig_cost = this.old_state.vnf_reconfig_cost;
             this.As_res = this.old_state.As_res;
         end
         function convert(this, x, ~)
@@ -515,25 +504,41 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
         %%
         % |new_opts|:
         % * *Model*: |fixcost|.
-        function profit = optimalFlowRate( this, new_opts )
+        function [profit, cost] = optimalFlowRate( this, new_opts )
             if nargin <= 1
                 new_opts = struct;
+            end
+            [profit,cost] = optimalFlowRate@Slice( this, new_opts );
+            if isfield(new_opts, 'CostModel') && strcmpi(new_opts.CostModel, 'fixcost')
+                profit = profit - cost;
             end
             if nargout >= 1
                 % When output argument specified, we finalize the VNF capacity.
                 % After reconfiguration VNF instance capcity has changed.
-                profit = optimalFlowRate@Slice( this, new_opts );
                 this.VNFCapacity = this.getVNFCapacity;
-            else
-                optimalFlowRate@Slice( this, new_opts );
-            end
+            end            
         end
     end
     methods (Access = protected)
-        profit = fastReconfigure2(this, action, options);
-        profit = fastReconfigure(this, action, options);
+        [profit,cost] = fastReconfigure2(this, action, options);
+        [profit,cost] = fastReconfigure(this, action, options);
         [exitflag,fidx] = executeMethod(this, action);
                 
+        %% Deep Copy
+        function this = copyElement(ds)
+            this = copyElement@Slice(ds);
+            %%
+            % The copyed version may not have the same targets as the copy source. We can
+            % mannually update the target/listener list using AddListener/RemoveListener.
+            %{
+              temp = copyElement@EventSender(ds);
+              this.targets = temp.targets;
+              this.listeners = temp.listeners;
+            %}
+            this.listeners = ListArray('event.listener');
+            this.targets = ListArray('EventReceiver');
+        end
+        
         %% fast slice reconfiguration when flow arriving and depaturing
         % * *flow*: flow table entries.
         %
@@ -687,10 +692,10 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
         % |parameters|: include fields x0, As, bs, Aeq, beq, lbs, ub, lb;
         % |options|: include fields fmincon_opt, CostModel, PricingPolicy (if
         %       CostModel='fixcost'); 
-        function [x, fval, exitflag] = optimize(this, params, options)
+        function [x, fval] = optimize(this, params, options)
             if isfield(options, 'CostModel') && strcmpi(options.CostModel, 'fixcost')
                 if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
-                    [x_compact, fval, exitflag] = ...
+                    [x_compact, fval, exitflag, output] = ...
                         fmincon(@(x)DynamicSlice.fcnSocialWelfareCompact(x, this, ...
                         getstructfields(options, {'CostModel', 'num_orig_vars'})), ...
                         params.x0, params.As, params.bs, params.Aeq, params.beq, ...
@@ -698,17 +703,20 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
                     x = zeros(this.num_vars, 1);
                     x(this.I_active_variables) = x_compact;
                 else
-                    [x, fval, exitflag] = ...
+                    [x, fval, exitflag, output] = ...
                         fmincon(@(x)DynamicSlice.fcnSocialWelfare(x, this, ...
                         getstructfields(options, 'CostModel')), ...
                         params.x0, params.As, params.bs, params.Aeq, params.beq, ...
                         params.lb, params.ub, [], options.fmincon_opt);
                 end
+                this.interpretExitflag(exitflag, output.message);
+                assert(this.checkFeasible(x, ...
+                    struct('ConstraintTolerance', options.fmincon_opt.ConstraintTolerance)), ...
+                    'error: infeasible solution.');
                 % add the fixed resource cost
                 this.getSliceCost(options.PricingPolicy);
             else
-                [x, fval, exitflag] = optimize@Slice(this, params, ...
-                    rmstructfields(options, 'CostModel'));     
+                [x, fval] = optimize@Slice(this, params, rmstructfields(options, 'CostModel'));     
             end
         end
         
@@ -815,13 +823,15 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             else
                 [b, vars] = postProcessing@Slice(this);
             end
-        end
+        end        
     end
     
     methods(Static)
         %%%
         % Emulation of a static property.
         function th = THETA(t)
+            %% Reconfiguration Cost Coefficient
+            % 
             persistent var_theta;
             if nargin >= 1
                 var_theta = t;
@@ -1019,6 +1029,8 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
                 end
             end
         end
+        
+        
         [profit, grad] = fcnSocialWelfare(x_vars, S, options);
         function [profit, grad] = fcnSocialWelfareCompact(act_vars, slice, options)
             vars = zeros(options.num_orig_vars,1);
@@ -1028,8 +1040,8 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
                 options = struct;
             end
             %% 
-            % Here, we do not wish the subclasses dynamically override this static method, so we
-            % MUST use class name to access the method.
+            % Here, we do not wish the subclasses dynamically override this static method,
+            % so we MUST use class name to access the method.
             if nargout <= 1
                 profit = DynamicSlice.fcnSocialWelfare(vars,slice,options);
             else
@@ -1039,4 +1051,3 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
         end
     end
 end
-
