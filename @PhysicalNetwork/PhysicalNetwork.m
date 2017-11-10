@@ -111,19 +111,27 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
             this.AggregateLinkUsage = zeros(this.NumberLinks,1);
             this.AggregateNodeUsage = zeros(this.NumberNodes,1);
         end
+        
+        function delete(this)
+            delete(this.graph);
+            for i = 1:length(this.slices)
+                delete(this.slices{i});
+            end
+        end
     end
     
     methods (Access = protected)
         % Child classes can overload these functions, which can be called from the
         % superclass, without consideration the specific class of the object. 
-        %% Deep Copy
         function this = copyElement(pn)
             % Make a shallow copy of all properties
             this = copyElement@matlab.mixin.Copyable(pn);
-            % Make a deep copy of the DeepCp object
+            %% Deep Copy Issue
+            % *slice.Parent*: update this link to the copyed network object.
             this.graph = pn.graph.copy;
             for i = 1:pn.NumberSlices
                 this.slices{i} = pn.slices{i}.copy;
+                this.slices{i}.Parent = this;
             end
         end        
     end
