@@ -1,14 +1,14 @@
 %% Process a sequence of network slice requests
 
-if (~exist('output_results', 'var') || ~isstruct(output_results))
-    if exist('output_file_name', 'file')
-        load('output_file_name', 'output_results');
-    else
-        output_results = struct;
-    end
-end
-
 %% Set progress bar
+if isfield(arrival, 'StopTime')
+    num_events = arrival.StopTime;
+else
+    num_events = arrival.Number*2;
+end
+experiment_length = num_events * ...
+    (b_single_optimal + b_price_adjust + b_static_slice+...
+    b_dual_decomp + b_price_adjust2 + b_resource_part + b_part_price);
 current_length = 0;
 if exist('progress_bar', 'var') && isvalid(progress_bar)
     close(progress_bar);
@@ -18,33 +18,27 @@ progress_bar = waitbar(current_length/experiment_length, ...
 progress_bar.Name = 'Computing Progress';
 pause(0.01);
 
-
 %% Construct Network
 % Initialize substrate network
 % if b_single_optimal || b_price_adjust1 || b_price_adjust2 || b_dual_decomp || ...
 %         b_resource_part || b_part_price
+net_opt.Method = 'single-normal';
 PN = instantiateclass(net_opt.ClassName, node_opt, link_opt, VNF_opt, net_opt);
 PN.slice_template = Slice.loadSliceTemplate(type.Index);
 
 if b_static_slice
+    net_opt.Method = 'static-price';
     PN_static = instantiateclass(net_opt.ClassName, node_opt, link_opt, VNF_opt, net_opt);
     PN_static.slice_template = Slice.loadSliceTemplate(type.Index);
-    link_price = PN_static.getLinkCost * (1 + options.PricingFactor);
-    node_price = PN_static.getNodeCost * (1 + options.PricingFactor);
+    link_price = PN_static.getLinkCost * (1 + net_opt.PricingFactor);
+    node_price = PN_static.getNodeCost * (1 + net_opt.PricingFactor);
     PN_static.setLinkField('Price', link_price);
     PN_static.setDataCenterField('Price', node_price);
-    static_opts = options;
-    static_opts.Method = 'slice-price';
     clear link_uc node_uc link_price node_price;
 end
 
 %% Network Slice as a Poisson Arrival Process
 % Two types of network slice as a compound Poisson process.
-if isfield(arrival, 'StopTime')
-    num_events = arrival.StopTime;
-else
-    num_events = arrival.Number*2;
-end
 num_type = length(type.Index);
 num_fix_type = length(type.Fixed);
 event_set = struct;
@@ -59,8 +53,8 @@ clear e i event_set;
 
 seed_static = seed_dynamic;
 for t = 1:num_fix_type
+    slice_opt = PN.slice_template(type.Fixed(t));
     for s = 1:type.FixedCount(t)
-        slice_opt = PN.slice_template(type.Fixed(t));
         slice_opt.RandomSeed = seed_dynamic;
         seed_dynamic = seed_dynamic + 1;
         PN.AddSlice(slice_opt);
@@ -72,16 +66,13 @@ clear s slice_opt;
 if b_single_optimal
     [stat_optimal, slice_stat_optimal] = ...
         CloudNetwork.createStatTable(num_events, num_type, 'optimal-spp');
-    if ~isfield(net_opt, 'AdmitPolicy')
-        net_opt.AdmitPolicy = 'reject-flow';
-    end
 end
 if b_dual_decomp
     [stat_dual, slice_stat_dual] = ...
         CloudNetwork.createStatTable(num_events, num_type, 'dynamic-price');
 end
-if b_price_adjust1
-    [stat_price1, slice_stat_price1] = ...
+if b_price_adjust
+    [stat_price, slice_stat_price] = ...
         CloudNetwork.createStatTable(num_events, num_type, 'dynamic-price');
 end
 if b_price_adjust2
@@ -105,11 +96,9 @@ if b_static_slice
             slice_opt = PN_static.slice_template(type.Fixed(t));
             slice_opt.RandomSeed = seed_static;
             seed_static = seed_static + 1;
-            slice_opt.method = 'static-slicing';
-            slice_opt.admit_ploicy = net_opt.AdmitPolicy;
             sl = PN_static.AddSlice(slice_opt);
             if ~isempty(sl)
-                PN_static.staticSlicing(sl, static_opts);
+                PN_static.staticSlicing(sl);
             end
         end
     end
@@ -149,8 +138,6 @@ for i = 1:num_events
             slice_opt.RandomSeed = seed_static;
             seed_static = seed_static + 1;
             slice_opt.Identifier = e.Identifier;
-            slice_opt.method = 'static-slicing';
-            slice_opt.admit_ploicy = net_opt.AdmitPolicy;
             sl = PN_static.AddSlice(slice_opt);
         end
     else
@@ -187,10 +174,9 @@ for i = 1:num_events
             end
             
             tic;
-            [output_static] = PN_static.staticSlicing(sl, static_opts);
+            [output_static] = PN_static.staticSlicing(sl);
             rt = toc;
-            [tb, stbs] = saveStatTable(PN_static, output_static, rt, type.Index, ...
-                'static');
+            [tb, stbs] = PN_static.saveStatTable(output_static, rt, type.Index, 'static');
             stat_static(i, tb.Properties.VariableNames) = tb;
             for j = 1:num_type
                 slice_stat_static{j}(i, stbs.Properties.VariableNames) = stbs(j,:);
@@ -209,7 +195,7 @@ for i = 1:num_events
             else
                 % When a slice is removed, staticSlicing update the network state.
                 tic;
-                [output_static] = PN_static.staticSlicing([], static_opts);
+                [output_static] = PN_static.staticSlicing();
                 rt = toc;
                 %%%
                 % It is determined that i > 1.
@@ -227,10 +213,9 @@ for i = 1:num_events
     end
     
     if b_single_optimal
-        options.Method = 'normal';
-        [output_optimal, rt] = PN.singleSliceOptimization(options);
-        [tb, stbs] = saveStatTable(PN, output_optimal, rt, type.Index, ...
-            'optimal-spp');
+        PN.setOptions('Method', 'single-normal');
+        [output_optimal, rt] = PN.singleSliceOptimization(struct('bCompact', true));
+        [tb, stbs] = PN.saveStatTable(output_optimal, rt, type.Index, 'optimal-spp');
         stat_optimal(i, tb.Properties.VariableNames) = tb;
         for j = 1:num_type
             slice_stat_optimal{j}(i, stbs.Properties.VariableNames) = stbs(j,:);
@@ -242,26 +227,27 @@ for i = 1:num_events
     
     if b_dual_decomp
         tic;
+        PN.setOptions('Method', 'dual');
         output_dual = PN.optimizeNetSocialWelfare1(options);
         rt = toc;
         [tb, stbs] = saveStatTable(PN, output_dual, rt, type.Index, ...
             'dynamic-price');
-        stat_price1(i, tb.Properties.VariableNames) = tb;
+        stat_dual(i, tb.Properties.VariableNames) = tb;
         for j = 1:num_type
-            slice_stat_price1{j}(i, stbs.Properties.VariableNames) = stbs(j,:);
+            slice_stat_dual{j}(i, stbs.Properties.VariableNames) = stbs(j,:);
         end
         current_length = current_length + 1;
         waitbar(current_length/experiment_length, progress_bar, ...
             sprintf('%d/%d',current_length, experiment_length));
     end
     
-    if b_price_adjust1
-        [output_price, rt] = PN.optimizeResourcePrice([], options);
-        [tb, stbs] = saveStatTable(PN, output_price, rt, type.Index, ...
-            'dynamic-price');
-        stat_price1(i, tb.Properties.VariableNames) = tb;
+    if b_price_adjust
+        PN.setOptions('Method', 'price-adjust');
+        [output_price, rt] = PN.optimizeResourcePriceNew();
+        [tb, stbs] = PN.saveStatTable(output_price, rt, type.Index, 'dynamic-price');
+        stat_price(i, tb.Properties.VariableNames) = tb;
         for j = 1:num_type
-            slice_stat_price1{j}(i, stbs.Properties.VariableNames) = stbs(j,:);
+            slice_stat_price{j}(i, stbs.Properties.VariableNames) = stbs(j,:);
         end
         current_length = current_length + 1;
         waitbar(current_length/experiment_length, progress_bar, ...
@@ -269,9 +255,9 @@ for i = 1:num_events
     end
     
     if b_price_adjust2
-        [output_price, rt] = PN.optimizeResourcePriceNew([], options);
-        [tb, stbs] = saveStatTable(PN, output_price, rt, type.Index, ...
-            'dynamic-price');
+        PN.setOptions('Method', 'price-adjust');
+        [output_price, rt] = PN.optimizeResourcePrice();
+        [tb, stbs] = PN.saveStatTable(output_price, rt, type.Index, 'dynamic-price');
         stat_price2(i, tb.Properties.VariableNames) = tb;
         for j = 1:num_type
             slice_stat_price2{j}(i, stbs.Properties.VariableNames) = stbs(j,:);
@@ -282,11 +268,11 @@ for i = 1:num_events
     end
     
     if b_resource_part
+        PN.setOptions('Method', 'resource-part');
         tic;
-        [output_part] = PN.resourcePartitionOptimization([], options);
+        [output_part] = PN.resourcePartitionOptimization();
         rt = toc;
-        [tb, stbs] = saveStatTable(PN, output_price, rt, type.Index, ...
-            'dynamic-price');
+        [tb, stbs] = PN.saveStatTable(output_price, rt, type.Index, 'dynamic-price');
         stat_part(i, tb.Properties.VariableNames) = tb;
         for j = 1:num_type
             slice_stat_part{j}(i, stbs.Properties.VariableNames) = stbs(j,:);
@@ -297,11 +283,11 @@ for i = 1:num_events
     end
     
     if b_part_price
+        PN.setOptions('Method', 'partition-price');
         tic;
-        [output_partprice] = PN.partitionResourcePricing([], options);
+        [output_partprice] = PN.partitionResourcePricing();
         rt = toc;
-        [tb, stbs] = saveStatTable(PN, output_price, rt, type.Index, ...
-            'dynamic-price');
+        [tb, stbs] = PN.saveStatTable(output_price, rt, type.Index, 'dynamic-price');
         stat_partprice(i, tb.Properties.VariableNames) = tb;
         for j = 1:num_type
             slice_stat_partprice{j}(i, stbs.Properties.VariableNames) = stbs(j,:);
