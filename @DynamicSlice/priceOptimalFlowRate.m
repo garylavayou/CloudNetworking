@@ -128,7 +128,7 @@ if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
     options.num_orig_vars = this.num_vars+this.num_varv;
     fmincon_opt.HessianFcn = ...
         @(x,lambda)DynamicSlice.fcnHessianCompact(x, lambda, this, options);
-    [x_compact, fval, exitflag] = ...
+    [x_compact, fval, exitflag, output] = ...
         fmincon(@(x)DynamicSlice.fcnProfitCompact(x,this, options), ...
         var0_compact, As_compact, bs, [], [], lbs, [], [], fmincon_opt);
     x = zeros(num_vars, 1);
@@ -137,22 +137,12 @@ if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
 else
     lbs = sparse(num_vars,1);
     fmincon_opt.HessianFcn = @(x,lambda)DynamicSlice.fcnHessian(x, lambda, this, options);
-    [x, fval, exitflag] = fmincon(@(x)DynamicSlice.fcnProfit(x, this, options), ...
+    [x, fval, exitflag, output] = fmincon(@(x)DynamicSlice.fcnProfit(x, this, options), ...
         var0, As, bs, [], [], lbs, [], [], fmincon_opt);
 end
-if InfoLevel.UserModelDebug == DisplayLevel.Iteration
+this.interpretExitflag(exitflag, output.message);
+if InfoLevel.UserModelDebug >= DisplayLevel.Iteration
     fprintf('\tThe optimal net profit of the slice: %G.\n', -fval);
-end
-if exitflag == 0
-    if InfoLevel.UserModelDebug == DisplayLevel.Notify
-        warning('reaching maximum number of iterations.');
-    end
-elseif exitflag < 0
-    error('abnormal exit with flag %d.',exitflag);
-elseif exitflag ~= 1
-    if InfoLevel.UserModelDebug == DisplayLevel.Notify
-        warning('local optimal solution found.');
-    end
 end
 
 %% Output solution

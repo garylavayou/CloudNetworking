@@ -2,7 +2,7 @@
 % Comparing with <_fastReconfigure_>, this method also considers VNF instance re-scaling,
 % i.e., the capacity of VNF instances could change during reconfiguration.
 % See also <fastReconfigure>.
-function profit = fastReconfigure2(this, action, options)
+function [profit,cost] = fastReconfigure2(this, action, options)
 global InfoLevel;
 NL = this.NumberVirtualLinks;
 NN = this.NumberDataCenters;
@@ -103,7 +103,7 @@ if nargin >= 2 && strcmpi(options.Form, 'compact')
     lbs = sparse(length(var0_compact),1);
     fmincon_opt.HessianFcn = ...
         @(x,lambda)DynamicSlice.fcnHessianCompact(x,lambda,this,fcn_opts);
-    [x_compact, fval, exitflag] = ...
+    [x_compact, fval, exitflag, output] = ...
         fmincon(@(x)DynamicSlice.fcnFastConfigProfitCompact(x,this,fcn_opts), ...
         var0_compact, As_compact, bs, [], [], lbs, [], [], fmincon_opt);
     x = zeros(num_vars, 1);
@@ -111,7 +111,7 @@ if nargin >= 2 && strcmpi(options.Form, 'compact')
 else
     lbs = sparse(2*this.num_vars,1);
     fmincon_opt.HessianFcn = @(x,lambda)Slice.fcnHessian(x,lambda,this);
-    [x, fval, exitflag] = ...
+    [x, fval, exitflag, output] = ...
         fmincon(@(x)DynamicSlice.fcnFastConfigProfit(x,this), ...
         var0, As, bs, [], [], lbs, [], [], fmincon_opt);
 end
@@ -122,13 +122,7 @@ end
 % it accordingly, and set aside the variables of new arriving/departing flow.
 
 % x is a local solution to the problem when exitflag is positive.
-if exitflag == 0
-    warning('reaching maximum number of iterations.');
-elseif exitflag < 0
-    error('abnormal exit with flag %d.',exitflag);
-elseif exitflag ~= 1
-    warning('(exitflag = %d) local optimal solution found.', exitflag);
-end
+this.interpretExitflag(exitflag, output.message);
 options.Action = action;    % This might be used when check feasible solution.
 options.ConstraintTolerance = fmincon_opt.ConstraintTolerance;
 assert(this.checkFeasible(x,options), 'error: infeasible solution.');
@@ -143,5 +137,6 @@ this.setPathBandwidth;
 this.FlowTable.Rate = this.getFlowRate;
 this.VirtualLinks.Load = this.getLinkLoad;
 this.VirtualDataCenters.Load = this.getNodeLoad;
-profit = -fval - this.getSliceCost(options.PricingPolicy);
+cost = this.getSliceCost(options.PricingPolicy);
+profit = -fval - cost;
 end
