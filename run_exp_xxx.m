@@ -15,7 +15,8 @@ node_opt.model = NetworkModel.Sample1;
 node_opt.capacity = NodeCapacityOption.BandwidthProportion;
 node_opt.cost = NodeCostOption.CapacityInverse;
 node_opt.CostUnit = 500;
-node_opt.capacity_factor = 1.5;     % [0.3; 0.5; 0.8; 1]
+node_opt.CapacityFactor = 1.5;     % [0.3; 0.5; 0.8; 1]
+net_opt.ClassName = 'CloudNetwork';
 
 %% Specification of VNFs and Network Slices
 % |StaticCostOption| is not set, the default value is |None|;
@@ -29,7 +30,7 @@ VNF_opt.RandomSeed = [20161101 0];
 % Assume that the arrival interval is fixed, *only adjust the service lifetime and the
 % arrival probability* of each type of slices to control the number of slices in the
 % network. See also <RequestEvent>.
-type.Index = [51; 52; 53];
+type.Index = [11; 21; 31];
 type.Fixed = [1; 2; 3];
 type.FixedCount = [3; 4; 8];      % Number of persistent slices: {1|2|3...}
 seed_dynamic = 20161231;
@@ -42,7 +43,7 @@ options.ProfitType = {'ApproximatePrice','AccuratePrice'};
 options.WelfareType = {'Accurate', 'Approximate'};
 
 %% Control Variables
-options.Display = 'off';
+declare_info_level('Global', DisplayLevel.Off);
 b_single_optimal = true;
 b_price_adjust = true;
 b_static_slice = true;
@@ -52,7 +53,8 @@ b_static_slice = true;
 % b_part_price = false;
 
 %%
-PN = PhysicalNetwork(node_opt, link_opt, VNF_opt, net_opt);
+PN = instantiateclass(net_opt.ClassName, ...
+    node_opt, link_opt, VNF_opt, net_opt);
 PN.slice_template = Slice.loadSliceTemplate(type.Index);
 for t = 1:num_fix_type
     for s = 1:type.FixedCount(t)
