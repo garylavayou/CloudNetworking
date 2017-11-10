@@ -3,14 +3,15 @@
 classdef VirtualNetwork < matlab.mixin.Copyable 
     % Specify the properties that can only be modified by Physcial Network directly
     properties (SetAccess = {?VirtualNetwork,?PhysicalNetwork,?SliceFlowEventDispatcher})
-        Identifier;     %
         Parent;
-        Type;           % Type from slice template
         Topology;       % topology information of the slice <DirectedGraph>
+        FlowTable;      % flow information in the slice
+
+        Identifier;     %
+        Type;           % Type from slice template
         VirtualLinks;   % information of virtual links in the slice
         VirtualNodes;   % information of virtual nodes
         VirtualDataCenters; % data centers in the slice 
-        FlowTable;      % flow information in the slice
         VNFList;        % List of virtual network functions in the slice
         options;
         
@@ -122,7 +123,34 @@ classdef VirtualNetwork < matlab.mixin.Copyable
                 warning('NumberPaths option is not provided.');
             end    
         end
-        
+        function delete(this)
+            delete(this.Topology);
+            for f = 1:height(this.FlowTable)
+                delete(this.FlowTable{f,'Paths'});
+            end
+        end
+    end
+    
+    methods (Access = protected)
+        function this = copyElement(sl)
+            % Make a shallow copy of all properties
+            this = copyElement@matlab.mixin.Copyable(sl);
+            %% Deep Copy Issue
+            % *Topology*
+            % *FlowTable.Paths*
+            % *Parent*: exterior link should be updated by caller of _copy_.
+            this.Topology = sl.Topology.copy;
+            for f = 1:height(sl.FlowTable)
+                % path_list is handle object, is should be copyed to the new table.
+                this.FlowTable{f,'Paths'} = sl.FlowTable{f,'Paths'}.copy;
+            end
+            if ~isempty(sl.Parent)
+                this.Parent = sl.Parent.empty();
+            end
+        end
+    end
+    
+    methods
         function n = get.NumberVirtualNodes(this)
             n = this.Topology.NumberNodes;
         end
@@ -207,6 +235,10 @@ classdef VirtualNetwork < matlab.mixin.Copyable
             v = v.(field);
         end
         
+        function setOption(this, field, value)
+            this.options.(field) = value;
+        end
+        
         function initializeState(this)
             NC = this.NumberDataCenters;
             NP = this.NumberPaths;
@@ -241,20 +273,6 @@ classdef VirtualNetwork < matlab.mixin.Copyable
                         this.I_node_path(dc_index, pid) = 1;
                     end
                 end
-            end
-        end
-    end
-        
-    methods (Access = protected)
-        %% Deep Copy
-        function this = copyElement(sl)
-            % Make a shallow copy of all properties
-            this = copyElement@matlab.mixin.Copyable(sl);
-            % Make a deep copy of the DeepCp object
-            this.Topology = sl.Topology.copy;
-            for f = 1:height(sl.FlowTable)
-                % path_list is handle object, is should be copyed to the new table.
-                this.FlowTable{f,'Paths'} = sl.FlowTable{f,'Paths'}.copy;
             end
         end
     end
