@@ -6,8 +6,10 @@ classdef SliceEntity < Entity
         SliceIdentifier;
     end
     properties (Access = protected)
-        Child;          % see also <FlowEntity>.
         seed;
+    end
+    properties (SetAccess = {?SliceEntity,?RandomEventDispatcher})
+        Child;          % see also <FlowEntity>.
     end
     properties(Dependent)
         Options;
@@ -32,5 +34,18 @@ classdef SliceEntity < Entity
         end
     end
     
+    methods (Access = protected)
+        function this = copyElement(et)
+            this = copyElement@Entity(et);
+            %% Deep Copy Issue
+            % *Child* is an exterior link. When performing copy, we should not make a copy of this
+            % object. Instead, the link should be updated by the caller of the _copy_ function. To
+            % secure the original data, we detach the link in the new copy from the original data.
+            % See also <Entity>.
+            if ~isempty(et.Child)
+                this.Child = et.Child.empty();
+            end
+        end
+    end
 end
 

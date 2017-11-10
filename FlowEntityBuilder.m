@@ -6,7 +6,7 @@ classdef FlowEntityBuilder < EntityBuilder
     properties (Access = private)
         local_flow_identifier = SerialNumber(1, [], true);
     end
-    properties (SetAccess = private)
+    properties (SetAccess = {?FlowEntityBuilder,?RandomEventDispatcher})
         Parent;
     end
     properties (Dependent)
@@ -59,6 +59,18 @@ classdef FlowEntityBuilder < EntityBuilder
             if nargin >= 4
                 % might be unset when construct the entity.
                 entity.GlobalIdentifier = flow_id;
+            end
+        end
+        
+        function this = copyElement(febdr)
+            this = copyElement@EntityBuilder(febdr);
+            %% Deep Copy Issue
+            % *Parent* is an exterior link. When performing copy, we should not make a copy of this
+            % object. Instead, the link should be updated by the caller of the _copy_ function. To
+            % secure the original data, we detach the link in the new copy from the original data.
+            % See also <Entity>.
+            if ~isempty(febdr.Parent)
+                this.Parent = febdr.Parent.empty();
             end
         end
     end

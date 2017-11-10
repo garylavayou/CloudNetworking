@@ -191,7 +191,21 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
         tf = onAddingSlice(this, sl);
         tf = onRemovingSlice(this);
     end
-    methods (Access =protected)
+    methods (Access = protected)
+        %% Deep Copy
+        function this = copyElement(pn)
+            this = copyElement@PhysicalNetwork(pn);
+            %%
+            % The copyed version may not have the same targets as the copy source. We can
+            % mannually update the target/listener list using AddListener/RemoveListener.
+            %{
+              temp = copyElement@EventSender(pn);
+              this.targets = temp.targets;
+              this.listeners = temp.listeners;
+            %}
+            this.listeners = ListArray('event.listener');
+            this.targets = ListArray('EventReceiver');
+        end
         function sl = createslice(this, slice_opt)
             % examine flow arrival parameters.
             % usage of <Slice>: if a slice without |ArrivalRate| or |ServiceInterval| or
@@ -216,7 +230,7 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
         % |ft|: return flow table entries.
         function ft = createflow(this, slice, numflow)
             % map virtual network to physical network
-            global DEBUG;    %#ok<NUSED>
+            global DEBUG InfoLevel;    %#ok<NUSED>
             A = spalloc(this.NumberNodes, this.NumberNodes, this.NumberLinks);
             C = spalloc(this.NumberNodes, this.NumberNodes, this.NumberLinks);
             for i = 1:slice.NumberVirtualLinks
@@ -250,7 +264,9 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                     b_vailid_flow = true;
                     ft = this.generateFlowTable(graph, slice_opt);
                 catch ME
-                    disp(ME)
+                    if InfoLevel.UserModel >= DisplayLevel.Iter
+                        disp(ME)
+                    end
                     if strcmp(ME.identifier, 'PhysicalNetwork:Disconnected')
                         b_vailid_flow = false;
                     else

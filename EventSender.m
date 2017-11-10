@@ -1,4 +1,4 @@
-classdef (Abstract) EventSender < handle
+classdef (Abstract) EventSender < matlab.mixin.Copyable
     % <EventSender> and <EventReceiver> are interfaces for inter-class communication.
     
     properties (Access = protected)
@@ -17,6 +17,10 @@ classdef (Abstract) EventSender < handle
         function this = EventSender()
             this.listeners = ListArray('event.listener');
             this.targets = ListArray('EventReceiver');
+        end
+        
+        function delete(this)
+            delete(this.listeners);
         end
         
         %%%
@@ -64,6 +68,25 @@ classdef (Abstract) EventSender < handle
                 end
             end
             t = this.targets(b_targets);
+        end
+    end
+    
+    methods (Access = protected)
+        %% Deep Copy
+        function this = copyElement(es)
+            % Make a shallow copy of all properties
+            this = copyElement@matlab.mixin.Copyable(es);
+            % Make a deep copy of the DeepCp object
+            this.listeners = ListArray('event.listener');
+            %% ISSUE
+            % After copy, the new instance still send message to the old targets, since
+            % we do not know whether the targets will be changed or not, inside the copy
+            % method. 
+            warning('Targets are not deep copyed.');
+            for i=1:this.targets.Length
+                this.listeners.Add(addlistener(this, ...
+                    es.listeners(i).EventName, es.listeners(i).callback));
+            end
         end
     end
 end

@@ -1,7 +1,6 @@
 classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventReceiver
     %UNTITLED Summary of this class goes here
-    %   Detailed explanation goes here
-    
+    %   Detailed explanation goes here   
     properties (Constant)
         flow_depart_option = 'NaturalDepart';    % MandatoryDepart
     end
@@ -173,6 +172,21 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
     end
     
     methods (Access = protected)
+         function this = copyElement(ed)
+            this = copyElement@RandomEventDispatcher(ed);
+            %%
+            % The copyed version may not have the same targets as the copy source. We can
+            % mannually update the target/listener list using AddListener/RemoveListener.
+            %{
+              temp = copyElement@EventSender(ed);
+              this.targets = temp.targets;
+              this.listeners = temp.listeners;
+            %}
+            % To make the new object not influence the original one, we detach the link of targets
+            % and listeners.
+            this.listeners = ListArray('event.listener');
+            this.targets = ListArray('EventReceiver');
+         end
         function removeFlowEntityBuilder(this, parent)
             for i = 1:this.entity_builder.Length
                 eb = this.entity_builder(i);
