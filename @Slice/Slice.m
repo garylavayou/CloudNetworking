@@ -351,6 +351,32 @@ classdef Slice < VirtualNetwork
             hess = hess(slice.I_active_variables, slice.I_active_variables);
         end
         
+        function interpretExitflag(exitflag, message)
+            global InfoLevel;
+            if nargin <= 1
+                message = '';
+            else
+                message = strtok(message, [char(10) char(13)]);
+            end
+            switch exitflag
+                case 0
+                    if InfoLevel.UserModel >= DisplayLevel.Notify
+                        warning(message);    % max-iteration number exceed.
+                    end
+                case 1
+                    if InfoLevel.UserModel >= DisplayLevel.Iteration
+                        fprintf('(%d) %s\n', exitflag, message);
+                    end
+                case 2
+                    if InfoLevel.UserModelDebug >= DisplayLevel.Notify      % converge
+                        cprintf('Comment', '(%d) %s\n', exitflag, message);
+                    end
+                case -3
+                    error('error: Objective function unbounded below (%d). %s', exitflag, message);
+                otherwise
+                    error('error: Abnormal exit (%d). %s', exitflag, message);
+            end
+        end
     end
     
     methods (Access = private)
@@ -487,32 +513,36 @@ classdef Slice < VirtualNetwork
     methods (Access = protected)
         % Called by _optimalFlowRate_, if 'Form=compact', options should be speicifed with
         % 'num_orig_vars'.
-        function [x, fval, exitflag] = optimize(this, params, options)
+        function [x, fval] = optimize(this, params, options)
             if contains(options.Method, 'price') % 'price', 'slice-price'
                 if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
-                    [x_compact, fval, exitflag] = ...
+                    [x_compact, fval, exitflag, output] = ...
                         fmincon(@(x)Slice.fcnProfitCompact(x, this, options), ...
                         params.x0, params.As, params.bs, params.Aeq, params.beq, ...
                         params.lb, params.ub, [], options.fmincon_opt);
                 else
-                    [x, fval, exitflag] = ...
+                    [x, fval, exitflag, output] = ...
                         fmincon(@(x)Slice.fcnProfit(x, this, options), ...
                         params.x0, params.As, params.bs, params.Aeq, params.beq, ...
                         params.lb, params.ub, [], options.fmincon_opt);
                 end
             else  % 'normal', 'single-function', ...
                 if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
-                    [x_compact, fval, exitflag] = ...
+                    [x_compact, fval, exitflag, output] = ...
                         fmincon(@(x)Slice.fcnSocialWelfareCompact(x,this), ...
                         params.x0, params.As, params.bs, params.Aeq, params.beq, ...
                         params.lb, params.ub, [], options.fmincon_opt);
                 else
-                    [x, fval, exitflag] = ...
+                    [x, fval, exitflag, output] = ...
                         fmincon(@(x)Slice.fcnSocialWelfare(x,this), ...
                         params.x0, params.As, params.bs, params.Aeq, params.beq, ...
                         params.lb, params.ub, [], options.fmincon_opt);
                 end
             end
+            this.interpretExitflag(exitflag, output.message);
+            assert(this.checkFeasible(x, ...
+                struct('ConstraintTolerance', options.fmincon_opt.ConstraintTolerance)), ...
+                'error: infeasible solution.');
             
             if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
                 x = spalloc(this.num_vars, 1, nnz(x_compact));
@@ -643,7 +673,7 @@ classdef Slice < VirtualNetwork
         [utility, node_load, link_load] = priceOptimalFlowRate(this, x0, new_opts);
     end
     methods (Access = {?Slice, ?CloudNetwork})
-        profit = optimalFlowRate( this, new_opts );
+        [profit,cost] = optimalFlowRate( this, new_opts );
     end
 end
 
