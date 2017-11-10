@@ -19,7 +19,7 @@
 %% Output
 % If output argument is provided, _optimalFlowRate_ will calculate the final results.
 % Otherwise, the results is stored in temporary variables.
-function profit = optimalFlowRate( this, new_opts )
+function [profit, cost] = optimalFlowRate( this, new_opts )
 global InfoLevel;
 if nargin < 2
     new_opts = struct;
@@ -124,25 +124,7 @@ else
     end
     parameters.lb = sparse(this.num_vars,1);
 end
-[x, fval, exitflag] = this.optimize(parameters, options);
-% x is a local solution to the problem when exitflag is positive.
-if exitflag == 0
-    if InfoLevel.UserModel >= DisplayLevel.Notify
-        warning('optimalFlowRate: reaching maximum number of iterations.');
-    end
-elseif exitflag < 0
-    error('optimalFlowRate: abnormal exit with flag %d.',exitflag);
-elseif exitflag ~= 1
-%     disp('residual link capacity:');
-%     disp(this.getLinkLoad(this.temp_vars.x) - this.VirtualLinks.Capacity);
-%     disp('residual node capacity:');
-%     disp(this.getNodeLoad(this.temp_vars.z) - this.VirtualNodes.Capacity);
-    if InfoLevel.UserModel >= DisplayLevel.Notify
-        warning('optimalFlowRate: (exitflag = %d) local optimal solution found.', exitflag);
-    end
-end
-assert(this.checkFeasible(x, struct('ConstraintTolerance', options.fmincon_opt.ConstraintTolerance)), ...
-    'error: infeasible solution.');
+[x, fval] = this.optimize(parameters, options);
 
 %% Additional Process
 % Under the problem formulation, if node |n| is not used by path |p|($h_{np} = 0$) or path
@@ -189,5 +171,8 @@ if nargout >= 1    % final results
     this.FlowTable.Rate = this.getFlowRate;
     this.VirtualLinks.Load = this.getLinkLoad;
     this.VirtualDataCenters.Load = this.getNodeLoad;
+end
+if nargout >= 2
+    cost = this.getSliceCost(new_opts.PricingPolicy);   % method is overrided by subclasses.
 end
 end
