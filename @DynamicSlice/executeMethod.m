@@ -19,8 +19,7 @@ if ~strcmpi(this.options.Method, 'fastconfig')
     % centers, |this.old_variables.v| will be modified to match the size of the new
     % vector (See <DimensioningReconfigure>).
     this.old_variables.v = this.VNFCapacity(:);
-    if ~strcmpi(this.options.Method, 'fastconfig')
-    end
+end
 switch this.options.Method
     case 'reconfig'
         % provide 'method' and 'model' to customize the <optimalFlowRate>
@@ -54,19 +53,19 @@ switch this.options.Method
     case 'reconfig'
         stat.Profit = profit - stat.Cost;
     case {'fastconfig','fastconfig2'}
-        stat.Profit = profit + stat.LinearCost - stat.Cost;        
+        stat.Profit = profit + stat.LinearCost - stat.Cost;
     case{'dimconfig', 'dimconfig1', 'dimconfig2'}
         stat.Profit = profit + stat.LinearCost - stat.Cost;
         if this.b_dim && this.getOption('Adhoc')
             % If the slice do not support Adhoc flows, then we do not release resource
             % decriptors for the slice.
-            this.release_resource_description(); 
+            this.release_resource_description();
         end
     case {'dimconfig0'}
         if this.b_dim
             stat.Profit = profit + stat.LinearCost - stat.Cost;
             if this.getOption('Adhoc')
-                this.release_resource_description(); 
+                this.release_resource_description();
             end
         else
             stat.Profit = profit - stat.Cost;

@@ -220,7 +220,7 @@ for i = 1:length(type_index)
             slice_template(i).Trigger = 'EventBased';
             switch mod(type_index(i),100)
                 case 44
-                    slice_template(i).EventInterval = 20;       % {50}
+                    slice_template(i).EventInterval = 30;       % {50}
                 case 54
                     slice_template(i).EventInterval = 10;
                 case 64
