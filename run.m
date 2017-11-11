@@ -3,7 +3,7 @@
 
 node_opt.model = NetworkModel.Sample1;
 node_opt.capacity = NodeCapacityOption.BandwidthProportion;
-node_opt.CapacityFactor = 1.5;     % [0.3; 0.5; 0.8; 1.5]
+node_opt.capacity_factor = 1.5;     % [0.3; 0.5; 0.8; 1.5]
 node_opt.cost = NodeCostOption.CapacityInverse;
 node_opt.alpha = 1; % [1; 3]
                     % the ratio of unit node cost to unit link cost.
@@ -21,9 +21,9 @@ VNF_opt.static_cost_range = [0.1 0.3];
 VNF_opt.RandomSeed = [20161101 20161031];       % the first seed is for random static cost, 
                                                 % the second is for process efficiency
 if node_opt.model == NetworkModel.Sample1
-    type.index = [11 21 31];
+    type.index = [1 2 3];
 else
-    type.index = [12 22 32];
+    type.index = [4 5 6];
 end
 type.count = [1 7 9];           % [1 7 9]
 type.partition_weight = [1 1 1];    % [1 2 4]
@@ -35,7 +35,7 @@ options.PercentFactor = 0.8;
                                                 
 %% Construct Network
 % Initialize substrate network and add network slices.
-PN = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
+PN = PhysicalNetwork(node_opt, link_opt, VNF_opt, net_opt);
 PN.slice_template = Slice.loadSliceTemplate(type.index);
 link_capacity = PN.getLinkField('Capacity');
 node_capacity = PN.getNodeField('Capacity');
@@ -65,7 +65,7 @@ end
 %% Optimize
 % * *Global optimization*
 disp('--------- Single Slice Optimization ----------')
-declare_info_level('Global', DisplayLevel.Off);
+options.Display = 'off';
 % options.Method = 'single-function';
 tic;
 [output_optimal, ss] = PN.singleSliceOptimization(options);
@@ -107,7 +107,7 @@ display(output_price.profit(end,:));
 fprintf('\tNetwork utilization ratio %f.\n\n',PN.utilizationRatio);
 %% 
 disp('--------- Optimization with Adjusting Resource Price (2) ----------')
-declare_info_level('Global', DisplayLevel.Off);
+options.Display = 'off';
 tic
 [output_price2] = PN.optimizeResourcePrice2([], options);
 toc
@@ -120,7 +120,7 @@ display(output_price2.profit(end,:));
 fprintf('\tNetwork utilization ratio %f.\n\n',PN.utilizationRatio);
 %% 
 disp('--------- Optimization with Adjusting Resource Price (3) ----------')
-declare_info_level('Global', DisplayLevel.Off);
+options.Display = 'off';
 tic
 [output_price3] = PN.optimizeResourcePrice3([], options);
 toc
@@ -135,7 +135,7 @@ fprintf('\tNetwork utilization ratio %f.\n\n',PN.utilizationRatio);
 %% 
 % * *Resource Partition*
 disp('--------- Optimization with Resource Partition ----------')
-declare_info_level('Global', DisplayLevel.Off);
+options.Display = 'off';
 tic
 [output_part] = PN.resourcePartitionOptimization(partition_weight, options);
 % [output_part] = PN.resourcePartitionOptimization([], options);
@@ -151,7 +151,7 @@ fprintf('\tNetwork utilization ratio %f.\n\n',PN.utilizationRatio);
 %%
 % * *Price Adjustment Based on Resource Partition*
 disp('--------- Price Adjustment Based on Resource Partition ----------')
-declare_info_level('Global', DisplayLevel.Off);
+options.Display = 'off';
 tic
 [output_partprice] = PN.partitionResourcePricing([], options);
 toc
