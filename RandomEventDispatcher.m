@@ -27,6 +27,8 @@ classdef RandomEventDispatcher < matlab.mixin.Copyable
         entity_builder;
         entities;
         event_queue;
+        
+        b_pending_arrive = false;
     end
     
     properties (Access = private)
@@ -183,13 +185,20 @@ classdef RandomEventDispatcher < matlab.mixin.Copyable
             end
             
             if this.event_queue(1).Type == EventType.Depart
-                % We do not know if there is events before the depart event, since it
-                % might not have been generated. So we first generate a new entity, and
-                % see if the new event is befroe the depart event. 
-                %   (1) if true, then the new event will be first processed;
-                %   (2) otherwise, the depart event will be processed, since it is now
+                % When there is another 'Arrive' event in the event queue, we know there
+                % is no other 'Arrive' event before this event. So we will process the
+                % 'Depart' event.
+                % On the other hand, if there is no 'Arrive' event in the queue, we do not
+                % know if there is events before the 'Depart' event, since it might not
+                % have been generated. So we first generate a new entity, and
+                % see if the new 'Arrive' event is before the 'Depart' event. 
+                %   (1) if true, then the new 'Arrive' event will be first processed;
+                %   (2) otherwise, the 'Depart' event will be processed, since it is now
                 %       determined that no more event before it.
-                this.addnewentity;
+                if ~this.b_pending_arrive
+                    this.addnewentity;
+                    this.b_pending_arrive = true;
+                end
             end
             ev = this.event_queue.PopFront;
             this.current_time = ev.Time;
@@ -206,6 +215,9 @@ classdef RandomEventDispatcher < matlab.mixin.Copyable
                 %                 end
             else
                 ev.userdata = ev.Entity;
+                if this.b_pending_arrive
+                    this.b_pending_arrive = false;
+                end
             end
             this.rand_state = rng;
         end
