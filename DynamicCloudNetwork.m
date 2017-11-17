@@ -3,7 +3,7 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
     properties
         %%
         % for *DeferDimensioning*;
-        pending_slices = ListArray('DynamicSlice');    
+        pending_slices;    
     end
     
     events
@@ -60,6 +60,7 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             % <DynamicNetwork> has the same field with <PhysicalNetwork> is treated as an
             % interface (without data member). Thus, through <CloudAccessNetwork> the
             % initilization has finished.
+            this.pending_slices = ListArray('Slice');
         end
         function sl = AddSlice(this, slice_opt, varargin)
             slice_opt = this.preAddingSlice(slice_opt);
@@ -73,6 +74,105 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             this.optimizeResourcePriceNew();
         end
         
+        function [output, runtime] = optimizeResourcePriceNew(this, init_price, slices)
+            if nargin <= 2
+                slices = this.slices;       % all slices are involved in slice dimensioning
+            end
+            if nargout == 2
+                runtime.Serial = 0;
+                runtime.Parallel = 0;
+            end
+            output = struct([]);
+            
+            b_idle_slices = false(length(slices),1);
+            for i = 1:length(slices)
+                if slices{i}.NumberFlows == 0 
+                    b_idle_slices(i) = true;
+                end
+            end
+            idle_slices = slices(b_idle_slices);
+            normal_slices = slices(~b_idle_slices);
+            num_slices = length(normal_slices);
+            if num_slices > 0
+                if isempty(init_price)
+                    % set the initial prices for the slices that need to be re-dimensioned.
+                    link_prices = zeros(this.NumberLinks, num_slices);
+                    node_prices = zeros(this.NumberDataCenters, num_slices);
+                    for i = 1:num_slices
+                        link_id = normal_slices{i}.VirtualLinks.PhysicalLink;
+                        link_prices(link_id, i) = normal_slices{i}.VirtualLinks.Price;
+                        node_id = normal_slices{i}.getDCPI;
+                        node_prices(node_id, i) = normal_slices{i}.VirtualDataCenters.Price;
+                    end
+                    init_price.Link = zeros(this.NumberLinks,1);
+                    init_price.Node = zeros(this.NumberDataCenters,1);
+                    for i = 1:this.NumberLinks
+                        lp = link_prices(i, link_prices(i,:)~=0);
+                        if isempty(lp)
+                            init_price.Link(i) = 0;
+                        else
+                            init_price.Link(i) = min(lp);
+                        end
+                    end
+                    init_price.Link = (1/2)*init_price.Link;
+                    for i = 1:this.NumberDataCenters
+                        np = node_prices(i, node_prices(i,:)~=0);
+                        if isempty(np)
+                            init_price.Node(i) = 0;
+                        else
+                            init_price.Node(i) = min(np);
+                        end
+                    end
+                    init_price.Node = (1/2)*init_price.Node;
+                end
+                if nargout >= 2
+                    [output, runtime] = optimizeResourcePriceNew@CloudNetwork...
+                        (this, init_price, normal_slices);
+                else
+                    output = optimizeResourcePriceNew@CloudNetwork...
+                        (this, init_price, normal_slices);
+                end
+                %% Reconfiguration Cost Model (optional)
+                % profit of Slice Customer: utility - resource consumption payment - reconfiguration cost;
+                % profit of Slice Provider: resource consumption payment - resource consumption cost =
+                %       (resource consumption payment + reconfiguration cost - resource consumption cost
+                %       - reconfiguration cost);
+                % net social welfare: utility - resource consumption cost - reconfiguration cost.
+                %
+                % NOTE: the model should be refined to dexcribe the reconfiguration cost.
+                % 
+                % In <CloudNetwork.optimizeResourcePriceNew> we did not calculate the
+                % reconfiguration cost for slices and the net social welfare
+                % (see <CloudNetwork.calculateOutput> and <Slice.getProfit>). So we need
+                % to append this part of cost. 
+                % Reconfiguration cost for slices is additionally calculate in
+                % <executeMethod>.
+                for i = 1:num_slices
+                    if isa(normal_slices{i}, 'DynamicSlice')
+                        reconfig_cost = normal_slices{i}.get_reconfig_cost();
+                        output.Welfare = output.Welfare - reconfig_cost;
+                    end
+                end
+            end
+            if ~isempty(idle_slices)
+                % recycle all resources
+                link_price = this.getLinkField('Price');
+                node_price = this.getDataCenterField('Price');
+                for i = 1:length(idle_slices)
+                    idle_slices{i}.finalize(node_price,link_price);
+                end
+                % since all resources are released, the profit (reconfiguration cost not
+                % included) and cost is zero.
+                profit_table = zeros(length(slices), 1);
+                if ~isempty(output)
+                    profit_table(~b_idle_slices) = output.Profit(1:(end-1));
+                    output.Profit = [profit_table; output.Profit(end)];
+                else
+                    % both slice and network have no profit.
+                    output = struct('Profit', [profit_table; 0]);
+                end
+            end
+        end
     end
     
     methods(Access=protected)
@@ -116,27 +216,22 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
         %         end
         
         function sl = onAddingSlice(this, sl)          
-            if isempty(sl)
-                this.RemoveSlice(sl);
-                sl = sl.empty;
-            else
-                this.pending_slices.Add(sl);
-                if ~isa(sl, 'DynamicSlice')
-                    % We may add static slices to the network. In that case, we will allocate
-                    % resource resource mannually (e.g, calling _optimizeResourcePriceNew_) or wait
-                    % until a dynamic slice is added and resource allocation is triggered.
-                    return;
-                end
-                output = this.optimizeResourcePriceNew([], this.pending_slices{:});
-                this.pending_slices.Clear();
-                global g_results; %#ok<TLEV>
-                % At the beginning, the slice is added, without consideration of
-                % reconfiguration cost.
-                stat = sl.get_reconfig_stat();
-                stat.Profit = output.Profit(1);
-                stat.ResourceCost = sl.getSliceCost('quadratic-price');   % _optimizeResourcePriceNew_ use 'quadratic-price'
-                g_results = stat;       % The first event.
+            this.pending_slices.Add(sl);
+            if ~isa(sl, 'DynamicSlice')
+                % We may add static slices to the network. In that case, we will allocate
+                % resource resource mannually (e.g, calling _optimizeResourcePriceNew_) or wait
+                % until a dynamic slice is added and resource allocation is triggered.
+                return;
             end
+            output = this.optimizeResourcePriceNew([], this.pending_slices{:});
+            this.pending_slices.Clear();
+            % At the beginning, the slice is added, without consideration of
+            % reconfiguration cost.
+            stat = sl.get_reconfig_stat();
+            stat.Profit = output.Profit(end-1);
+            stat.ResourceCost = sl.getSliceCost('quadratic-price');   % _optimizeResourcePriceNew_ use 'quadratic-price'
+            global g_results; 
+            g_results = stat;       % The first event.
         end
         %%
         % |finalize| should only be called when dimensiong network slices.
