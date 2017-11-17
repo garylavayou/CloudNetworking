@@ -3,6 +3,11 @@
 % i.e., the capacity of VNF instances could change during reconfiguration.
 % See also <fastReconfigure>.
 function [profit,cost] = fastReconfigure2(this, action, options)
+if this.NumberFlows == 0
+    [profit, cost] = this.handle_zero_flow(options);
+    return;
+end
+
 global InfoLevel;
 NL = this.NumberVirtualLinks;
 NN = this.NumberDataCenters;

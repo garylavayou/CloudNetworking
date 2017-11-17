@@ -15,10 +15,19 @@ if isempty(fieldnames(this.net_changes))
         case 'ProfitBased'
         otherwise
     end
+    if this.NumberFlows > 0 && sum(this.VirtualLinks.Capacity) == 0
+        % If the slice has no resource but new flows arrive, perform dimensioning at once.
+        this.b_dim = true;
+    end
+    if this.NumberFlows == 0
+        this.b_dim = true;
+    end
     if this.b_dim
         %% Period re-dimensioing
-        % The number of virtual nodes/links is not change in the slice, as well as the number of VNF
-        % instances.
+        % The number of virtual nodes/links is not change in the slice, as well as the
+        % number of VNF instances.
+        % When performing re-dimensioning, the reconfiguration cost is larger than that of
+        % fast reconfiguration, so we need to update the reconfiguration cost.
         this.Parent.updateRedimensionCost(this);
         if strcmpi(action, 'add')
             this.x_reconfig_cost = (this.I_edge_path)' * this.VirtualLinks.ReconfigCost;

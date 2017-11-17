@@ -1,4 +1,9 @@
 function [profit, cost] = fastReconfigure(this, action, options)
+if this.NumberFlows == 0
+    [profit, cost] = this.handle_zero_flow(options);
+    return;
+end
+
 NL = this.NumberVirtualLinks;
 NN = this.NumberDataCenters;
 NV = this.NumberVNFs;
