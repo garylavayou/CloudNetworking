@@ -16,7 +16,9 @@ aggr_link_usage = this.Parent.AggregateLinkUsage;
 %
 % $$ p(0) = b, p(\frac{V}{\mathit{S}}) = a\frac{V}{\mathit{S}}+b $$
 %
-% 
+% NOTE: we may compute prices for only a part of slices, while we do not use the residual
+% capacity and the involved slices, since this might lead to very low prices (when
+% residual resource is plentful, and involved slices is few). 
 a = (theta-1)*b.*aggr_link_usage(link_id)./this.Parent.getLinkField('Capacity', link_id);
 
 %%%
@@ -38,12 +40,13 @@ end
 
 end
 
-%% Deprecated
-% If a flow is served by multiple paths, the cost of the shortest path is usually much
-% less than the cost of other alternative paths, since the alternative path has more hops,
-% and its link cost is larger than that of the shortest path. Instead, the node cost of
-% two path is similar since it is proportional to the data rate. To encourage using the
-% alternative paths, the unit link cost should increase more slowly than unit node cost.
-% Besides, the cost difference between two nodes is ususally small, so it is more flexible
-% to migrate the processing demand to alternative nodes.
+%% Un-determined
+% If a flow is served by multiple paths, the link cost of the shortest path is usually
+% notably less than that of the alternative paths, since the alternative path has more
+% hops (links). Instead, the node cost of two path is similar since the pricessing demand
+% is proportional to the data rate. 
+%
+% To encourage using the alternative paths, the link prices should increase faster than
+% node prices. Besides, the cost difference between two nodes is ususally small, so it is
+% more easily to migrate the processing demand to alternative nodes.
 
