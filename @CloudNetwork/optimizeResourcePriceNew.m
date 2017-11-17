@@ -1,14 +1,6 @@
 % Optimize resource price
 % * Resource Cost Model: linear, convex (quatratic)
 % DATE: 2017-04-23
-%% Reconfiguration Cost Model (optional)
-% profit of Slice Customer: utility - resource payment - reconfiguration payment;
-% profit of Slice Customer: resource payment - resource cost
-%       (resource payment + reconfiguration payment - resource cost - reconfiguration
-%       payment);
-% net social welfare: utility - resource cost - reconfiguration payment.
-% 
-% NOTE: the model should be refined to dexcribe the reconfiguration cost.
 function [output, runtime] = optimizeResourcePriceNew(this, init_price, slices)
 global InfoLevel;
 options = getstructfields(this.options, {'Threshold','Form'}, 'default', '');
@@ -62,41 +54,63 @@ node_uc = this.getNodeCost;
 % Initial Price
 t1 = 1;           % {0.1|0.8|1}
 if nargin >=2 && ~isempty(init_price)
-    link_price = t1 * init_price.Link;
-    node_price = t1 * init_price.Node;
+    link_usage = false(this.NumberLinks,1);
+    node_usage = false(this.NumberDataCenters,1);
+    for i = 1:NS
+        link_usage(slices{i}.VirtualLinks.PhysicalLink) = true;
+        node_usage(slices{i}.getDCPI) = true;
+    end
+    if find([init_price.Link(link_usage)==0;init_price.Node(node_usage)==0],1)
+        link_price = t1*link_uc;
+        node_price = t1*node_uc;
+        %         init_price.Link = link_price
+        %         init_price.Node = node_price;
+    else
+        link_price = init_price.Link;
+        node_price = init_price.Node;
+    end
 else
-    init_price.Link = t1* link_uc;
-    link_price = init_price.Link;
-    init_price.Node = t1* node_uc;
-    node_price = init_price.Node;
+    link_price = t1* link_uc;
+    node_price = t1* node_uc;
+end
+for i = 1:NS
+    slices{i}.VirtualLinks{:,'Price'} = 0;
+    slices{i}.VirtualDataCenters{:,'Price'} = 0;
 end
 t0 = 10^-1;     % {1|0.1|0.01}
 delta_link_price = t0 * link_uc;  % init_price.link
 delta_node_price = t0 * node_uc;
 
 number_iter = 1;
-sp_profit = -inf;
-link_price_prev = [link_price, link_price];
-node_price_prev = [node_price, node_price];
+%% Initial Price
+% If we specify the initial price and after the first iteration, we find that the profit
+% of SP is decreased, we guess that the optimal price is between the |t1* link_uc| and
+% |init_link_price| for link. 
+% If we do not specify the initial price, then we start from a relatively small prices
+% (link_uc), usually the SP's profit will increase with the increase of the price.
+% However, if the profit is decreasing, then the initial guess of price (link_uc) is still
+% to large, and we set the initial price to zero.
+% guess_init_link_price = t1*link_uc;
+% guess_init_node_price = t1*node_uc;
+% if find(guess_init_link_price>link_price,1)
+%     guess_init_link_price = link_price;
+% end
+% if find(guess_init_node_price>node_price,1)
+%     guess_init_node_price = node_price;
+% end
+% link_price_prev = [guess_init_link_price, link_price];
+% node_price_prev = [guess_init_node_price, node_price];
+link_price_prev = [zeros(this.NumberLinks,1), link_price];
+node_price_prev = [zeros(this.NumberDataCenters,1), node_price];
 if b_profit_ratio
     b_forced_break = false;
 end
+new_net_welfare = SolveSCP(node_price, link_price);
+sp_profit = this.getSliceProviderProfit(node_price, link_price, options);
+
+b_initial_trial = true;
 while true
-    new_net_welfare = SolveSCP(node_price, link_price);
-    sp_profit_new = this.getSliceProviderProfit(node_price, link_price, options);
-    %% Stop condtion 
-    % if the profit of SP is non-increasing, or the profit ratio reaches the predefined
-    % threshold, then no need to further increase the resource prices.
-    if sp_profit >= sp_profit_new
-        break;
-    else
-        sp_profit = sp_profit_new;
-    end
-    if b_profit_ratio && this.checkProfitRatio(node_price, link_price, options)
-        b_forced_break = true;
-        break;
-    end
-    [node_load, link_load] = this.getNetworkLoad(slices, 'sum');
+    number_iter = number_iter + 1;
     %%%
     % Adjust the step according to how much the capacity constraints have been violated.
     % If the resource is over provisioned, the multiplier is larger than 2.
@@ -106,28 +120,63 @@ while true
     %
     % If the capacity tends to infinity, |delta_link_price| and |delta_node_price| stay
     % the same, while |link_price| and |node_price| still increases in a constant rate.
-    delta_link_price = delta_link_price.*(1+min(1,link_load./link_capacity));
-    delta_node_price = delta_node_price.*(1+min(1,node_load./node_capacity));
-    %%%
+    %
     % we only increase the price of those resources that are utilized (resource
     % utilization ¦È>0), since increasing the price of idle resources will not increase the
     % profit of SP.   
+    [node_load, link_load] = this.getNetworkLoad(slices, 'sum');
+    delta_link_price = delta_link_price.*(1+min(1,link_load./link_capacity));
+    delta_node_price = delta_node_price.*(1+min(1,node_load./node_capacity));
     node_id = node_load>0;
     link_id = link_load>0;
     link_price(link_id) = link_price(link_id) + delta_link_price(link_id);
     node_price(node_id) = node_price(node_id) + delta_node_price(node_id);
+    
+    new_net_welfare = SolveSCP(node_price, link_price);
+    sp_profit_new = this.getSliceProviderProfit(node_price, link_price, options);
+    %% Stop condtion 
+    % if the profit of SP is non-increasing, or the profit ratio reaches the predefined
+    % threshold, then no need to further increase the resource prices.
+    if sp_profit >= sp_profit_new
+        %         if ~isempty(find(link_price_prev(:,1),1)) || ...
+        %                 ~isempty(find(node_price_prev(:,1),1))
+        if b_initial_trial
+            % initial price is too high
+            link_price_prev(:,2) = link_price_prev(:,2)/2;
+            node_price_prev(:,2) = node_price_prev(:,2)/2;
+            link_price = link_price_prev(:,2);
+            node_price = node_price_prev(:,2);
+            t0 = t0/2;
+            delta_link_price = t0 * link_uc;  % init_price.link
+            delta_node_price = t0 * node_uc;
+            new_net_welfare = SolveSCP(node_price, link_price);
+            sp_profit = this.getSliceProviderProfit(node_price, link_price, options);
+            continue;
+        else
+            link_price_prev(:,1) = link_price_prev(:,2);
+            link_price_prev(:,2) = link_price;
+            node_price_prev(:,1) = node_price_prev(:,2);
+            node_price_prev(:,2) = node_price;
+            break;
+        end
+    end
+    if b_initial_trial
+        b_initial_trial = false;
+    end
+    sp_profit = sp_profit_new;
     link_price_prev(:,1) = link_price_prev(:,2);
     link_price_prev(:,2) = link_price;
     node_price_prev(:,1) = node_price_prev(:,2);
     node_price_prev(:,2) = node_price;
-    number_iter = number_iter + 1;
+    if b_profit_ratio && this.checkProfitRatio(node_price, link_price, options)
+        b_forced_break = true;
+        break;
+    end
 end
 %%
 % If the last step is not stopped by the profit ratio, we need to further search the
 % optimal price.
 if ~b_profit_ratio || ~b_forced_break
-    link_price_prev(:,2) = link_price;
-    node_price_prev(:,2) = node_price;
     sp_profit_new = [1 0];
     epsilon = 10^-3;
     while true  %|| (h-l) > 0.05
