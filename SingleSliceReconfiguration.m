@@ -44,6 +44,30 @@ PN.AddListener(SFED, {'AddSliceSucceed', 'AddSliceFailed', 'RemoveSliceSucceed',
     'RemoveSliceFailed', 'AddFlowSucceed', 'AddFlowFailed', 'RemoveFlowSucceed', ...
     'RemoveFlowFailed'}, @SFED.eventhandler);
 
+%% Add Static Slices
+if isfield(type, 'Static')
+    for t = 1:length(type.Static)
+        slice_opt = PN.slice_template(type.Static(t));
+        slice_opt.DuplicateFlow = true;
+        if ischar(type.StaticClass)
+            slice_opt.ClassName = type.StaticClass;         % specify the type of static slices.
+        else
+            if length(type.StaticClass) == 1
+                slice_opt.ClassName = type.StaticClass{1};
+            else
+                slice_opt.ClassName = type.StaticClass{t};
+            end
+        end
+        for s = 1:type.StaticCount(t)
+            slice_opt.RandomSeed = seed_dynamic;        % |seed_dynamic| is provided in the configuration script.
+            seed_dynamic = seed_dynamic + 1;
+            % static slice is created and added, but resource allocation is defered until the first
+            % dynamic slice is added. 
+            PN.AddSlice(slice_opt);     
+        end
+    end
+end
+
 %% Add Permanent Slices
 % Permanent Slice Entity Builder
 num_perm_type = length(type.Permanent);
@@ -55,22 +79,6 @@ for t = 1:num_perm_type
     PSEB = SliceEntityBuilder(slice_opt);
     for s = 1:type.PermanentCount(t)
         SFED.AddEntity(PSEB.Build(SFED.CurrentTime, []));
-    end
-end
-
-%% Add Static Slices
-if isfield(type, 'Static')
-    for t = 1:length(type.Static)
-        slice_opt = PN.slice_template(type.Static(t));
-        slice_opt.DuplicateFlow = true;
-        slice_opt.ClassName = type.StaticClass;         % specify the type of static slices.
-        for s = 1:type.StaticCount(t)
-            slice_opt.RandomSeed = seed_dynamic;        % |seed_dynamic| is provided in the configuration script.
-            seed_dynamic = seed_dynamic + 1;
-            % static slice is created and added, but resource allocation is defered until the first
-            % dynamic slice is added. 
-            PN.AddSlice(slice_opt);     
-        end
     end
 end
 
