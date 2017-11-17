@@ -1,4 +1,4 @@
-classdef DynamicSlice < Slice & EventSender & EventReceiver
+classdef DynamicSlice < Slice & EventSender 
     %DynamicSlice Event-driven to dynamic configure slice.
     properties
         FlowArrivalRate;
@@ -150,11 +150,13 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             finalize@Slice(this, node_price, link_price);
             if ~this.b_derive_vnf ...
                     && isfield(this.temp_vars,'v') && ~isempty(this.temp_vars.v)
-                this.Variables.v = this.temp_vars.v;
-                this.postProcessing(struct('VNFCapacity', true, 'OnlyVNFCapacity', true))
-                % Override the capacity setting in the super class.
-                this.VirtualDataCenters.Capacity = sum(reshape(this.VNFCapacity, ...
-                    this.NumberDataCenters,this.NumberVNFs),2);
+                if this.NumberFlows > 0
+                    this.Variables.v = this.temp_vars.v;
+                    this.postProcessing(struct('VNFCapacity', true, 'OnlyVNFCapacity', true))
+                    % Override the capacity setting in the super class.
+                    this.VirtualDataCenters.Capacity = sum(reshape(this.VNFCapacity, ...
+                        this.NumberDataCenters,this.NumberVNFs),2);
+                end
             end
             %                 if strcmp(this.options.PricingPolicy, 'quadratic-price')
             %% Reconfiguration Cost
@@ -163,15 +165,17 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             % consummption in the slice;
             % inter-slice reoncfiguration: the VNF node resource allocation cost is
             % dependent on the total load of the substrat network.
-            [~, this.VirtualLinks.ReconfigCost] = this.fcnLinkPricing(...
-                this.VirtualLinks.Price, this.VirtualLinks.Capacity);
-            this.VirtualLinks.ReconfigCost = ...
-                DynamicSlice.THETA * this.VirtualLinks.ReconfigCost;
-            % here the |node_price| is the price of all data centers.
-            [~, this.VirtualDataCenters.ReconfigCost] = this.fcnNodePricing(...
-                this.VirtualDataCenters.Price, this.VirtualDataCenters.Capacity);
-            this.VirtualDataCenters.ReconfigCost = ...
-                DynamicSlice.THETA * this.VirtualDataCenters.ReconfigCost;
+            if this.NumberFlows > 0
+                [~, this.VirtualLinks.ReconfigCost] = this.fcnLinkPricing(...
+                    this.VirtualLinks.Price, this.VirtualLinks.Capacity);
+                this.VirtualLinks.ReconfigCost = ...
+                    DynamicSlice.THETA * this.VirtualLinks.ReconfigCost;
+                % here the |node_price| is the price of all data centers.
+                [~, this.VirtualDataCenters.ReconfigCost] = this.fcnNodePricing(...
+                    this.VirtualDataCenters.Price, this.VirtualDataCenters.Capacity);
+                this.VirtualDataCenters.ReconfigCost = ...
+                    DynamicSlice.THETA * this.VirtualDataCenters.ReconfigCost;
+            end
             %                 else
             %                 end
             if this.b_derive_vnf
@@ -179,8 +183,8 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
                 % added. The coefficients is required to compute the cost after the
                 % optimizaton at <DynamicCloudNetwork.onAddingSlice>.
                 % After redimensioning, the former cost coefficients are still needed to
-                % calculate the reconfiguration cost. So we update it before next
-                % reconfigure/redimensioning.
+                % calculate the reconfiguration cost. So in that case, we update it before
+                % performing reconfigure/redimensioning.
                 this.b_derive_vnf = false;
                 this.x_reconfig_cost = (this.I_edge_path)' * this.VirtualLinks.ReconfigCost;
                 this.z_reconfig_cost = repmat(this.VirtualDataCenters.ReconfigCost, ...
@@ -226,7 +230,11 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             c = this.Variables.v;
         end
         function set.VNFCapacity(this, value)
-            this.Variables.v = value(:);
+            if ~isfield(this.Variables, 'v') || isempty(this.Variables.v)
+                this.Variables.v = value(:);    % transform to column vector
+            else
+                this.Variables.v(:) = value;    % automate reshape
+            end
         end
         
         function n = get.num_varv(this)
@@ -316,13 +324,13 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
                     case 'linear'
                         stat_names{i} = 'LinearCost';
                     otherwise
-                        error('[DynamicSlice]: invalid cost model.');
+                        error('[DynamicSlice]: invalid cost model <%s>.', model{i});
                 end
             end
-            stat = this.get_reconfig_cost(stat_names);
+            stat = this.get_reconfig_stat(stat_names);
             c = zeros(length(stat_names),1);
             for i = 1:length(stat_names)
-                c(i) = stat.(stat_names);
+                c(i) = stat.(stat_names{i});
             end
         end
         
@@ -494,6 +502,21 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
                 this.Variables.v = this.temp_vars.v;
             end
         end
+        function [profit, cost] = handle_zero_flow(this, new_opts)
+            cost = this.getSliceCost(new_opts.PricingPolicy);
+            profit = -cost;
+            this.Variables.x = [];
+            this.Variables.z = [];
+            this.VirtualLinks{:,'Load'} = 0;
+            this.VirtualDataCenters{:,'Load'} = 0;
+            % When the number of flows reduced to 0, we do not change the VNF instance
+            % capcity, so that the reconfiguration cost is reduced. However, at the
+            % next time when a flow arrive, the reconfiguration cost might be larger.
+            % Another method is to set the VNF instance capacity to 0.
+            %                 if nargout >= 1
+            %                     this.VNFCapacity = 0;
+            %                 end
+        end
     end
  
     
@@ -508,15 +531,19 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             if nargin <= 1
                 new_opts = struct;
             end
-            [profit,cost] = optimalFlowRate@Slice( this, new_opts );
-            if isfield(new_opts, 'CostModel') && strcmpi(new_opts.CostModel, 'fixcost')
-                profit = profit - cost;
+            if this.NumberFlows == 0
+                [profit, cost] = this.handle_zero_flow(new_opts);
+            else
+                [profit,cost] = optimalFlowRate@Slice( this, new_opts );
+                if isfield(new_opts, 'CostModel') && strcmpi(new_opts.CostModel, 'fixcost')
+                    profit = profit - cost;
+                end
+                if nargout >= 1
+                    % When output argument specified, we finalize the VNF capacity.
+                    % After reconfiguration VNF instance capcity has changed.
+                    this.VNFCapacity = this.getVNFCapacity;
+                end
             end
-            if nargout >= 1
-                % When output argument specified, we finalize the VNF capacity.
-                % After reconfiguration VNF instance capcity has changed.
-                this.VNFCapacity = this.getVNFCapacity;
-            end            
         end
     end
     methods (Access = protected)
@@ -553,7 +580,11 @@ classdef DynamicSlice < Slice & EventSender & EventReceiver
             num_new_flows = height(flows);
             num_exist_paths = this.NumberPaths;
             fidx = (1:num_new_flows) + num_exist_flows;
-            flows.Identifier = (1:num_new_flows) + this.FlowTable{end,'Identifier'}; % temporary identifier
+            if num_exist_flows == 0
+                flows{:,'Identifier'} = 1:num_new_flows;
+            else
+                flows{:,'Identifier'} = (1:num_new_flows) + this.FlowTable{end,'Identifier'}; % temporary identifier
+            end
             if num_exist_flows == 0
                 pid = 0;
             else
