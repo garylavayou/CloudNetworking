@@ -55,15 +55,18 @@ switch this.options.Method
     case {'fastconfig','fastconfig2'}
         stat.Profit = profit + stat.LinearCost - stat.Cost;
     case{'dimconfig', 'dimconfig1', 'dimconfig2'}
-        stat.Profit = profit + stat.LinearCost - stat.Cost;
-        if this.b_dim && this.getOption('Adhoc')
+        %% ISSUE: LinearCost does not include in the profit
+        stat.Profit = profit - stat.Cost;      %  + stat.LinearCost 
+        if ~this.b_dim
+            stat.Profit = stat.Profit + stat.LinearCost;
+        elseif this.getOption('Adhoc')
             % If the slice do not support Adhoc flows, then we do not release resource
             % decriptors for the slice.
             this.release_resource_description();
         end
     case {'dimconfig0'}
         if this.b_dim
-            stat.Profit = profit + stat.LinearCost - stat.Cost;
+            stat.Profit = profit - stat.Cost;   % + stat.LinearCost 
             if this.getOption('Adhoc')
                 this.release_resource_description();
             end
