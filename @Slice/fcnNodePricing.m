@@ -1,4 +1,5 @@
 %% Node Pricing Function
+% See <fcnLinkPricing>. 
 %%
 function [ payment, grad, pseudo_hess ] = fcnNodePricing(this, node_price, node_load)
 %% Quadratic pricing

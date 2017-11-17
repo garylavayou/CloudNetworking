@@ -30,7 +30,7 @@ argout.NodeLoad = this.getNodeField('Load');
 argout.FlowRate = [];
 argout.Welfare = 0;
 
-profit_table = zeros(this.NumberSlices+1, 1);
+profit_table = zeros(length(options.Slices)+1, 1);
 
 for s = 1:length(options.Slices)
     sl = options.Slices{s};

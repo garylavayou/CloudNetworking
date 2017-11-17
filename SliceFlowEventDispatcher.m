@@ -144,7 +144,9 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
                 % network decide if this slice can be successfully admitted.
                 global event_num; %#ok<TLEV>
                 event_num = event_num + 1;
-                this.sendoutevent(ev);
+                if this.targets.Length > 0
+                    this.sendoutevent(ev);
+                end
                 % After that, the network will notify the EventDispatcher the results.
                 % Then, the EventDispatcher will dicide if more events will be added
                 % to the queue.
@@ -157,7 +159,6 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
                 % However, remove elements is not supported by event queue, it is not
                 % recommended to use this method. If we use this option, we should
                 % implement the event queue as a List/Vector.
-                
                 switch ev.Name
                     case 'SliceDepart'
                         % A slice entity has been removed (a slice departed).
@@ -166,7 +167,6 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
                         this.removeFlowEntityBuilder(et);
                     otherwise
                 end
-                
             end
         end
     end
