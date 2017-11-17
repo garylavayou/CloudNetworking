@@ -21,6 +21,8 @@ classdef CloudNetwork < PhysicalNetwork
         function this = CloudNetwork(varargin)
             global InfoLevel;
             this@PhysicalNetwork(varargin{:});
+            this.Topology.Edges{:,'Price'} = 0;
+            this.DataCenters{:,'Price'} = 0;
             if length(varargin)>=4
                 this.options = structmerge(this.options, ...
                     getstructfields(varargin{4}, ...
@@ -285,8 +287,17 @@ classdef CloudNetwork < PhysicalNetwork
                 sl = this.slices{s};
                 revenue = sl.getRevenue;        % get utility
                 % Prices announced to each slice.
-                sl.prices.Link = link_price(sl.VirtualLinks.PhysicalLink);
-                sl.prices.Node = node_price(sl.getDCPI);
+                options.bFinal = false;
+                if sl.VirtualLinks.Price==0
+                    sl.prices.Link = link_price(sl.VirtualLinks.PhysicalLink);
+                else
+                    options.bFinal = true;
+                end
+                if sl.VirtualDataCenters.Price == 0
+                    sl.prices.Node = node_price(sl.getDCPI);
+                else
+                    options.bFinal = true;
+                end
                 slice_profit_ratio(s) = sl.getProfit(options)/revenue;
             end
             clear revenue;
@@ -394,7 +405,11 @@ classdef CloudNetwork < PhysicalNetwork
             this.setLinkField('Load', link_load);
             this.setDataCenterField('Load', node_load);
             if nargin >= 3
+                pre_link_idx = link_price==0;
+                link_price(pre_link_idx) = this.getLinkField('Price', pre_link_idx);
                 this.setLinkField('Price', link_price);
+                pre_node_idx = node_price==0;
+                node_price(pre_node_idx) = this.getDataCenterField('Price', pre_node_idx);
                 this.setDataCenterField('Price', node_price);
             end
         end
