@@ -4,7 +4,7 @@
 classdef FlowEntityBuilder < EntityBuilder
     
     properties (Access = private)
-        local_flow_identifier = SerialNumber(1, [], true);
+        local_flow_identifier;
     end
     properties (SetAccess = {?FlowEntityBuilder,?RandomEventDispatcher})
         Parent;
@@ -45,6 +45,7 @@ classdef FlowEntityBuilder < EntityBuilder
             end
             this@EntityBuilder(arrive_rate, service_interval, flow_opt);
             this.Parent = parent;
+            this.local_flow_identifier = SerialNumber(1, [], true);
         end
         function t = get.Type(~)
             t = EntityType.Flow;

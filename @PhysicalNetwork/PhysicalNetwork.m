@@ -36,7 +36,7 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
         DataCenters;         % the forwarding node mapping of data center.
                              % data_center(dc_id) returns the physical node id;
         VNFTable = table;    % Meta data of virtual network function
-        slices;              % a list of Slice objects        
+        slices;              % a list of <Slice> objects        
     end
     
     properties
@@ -45,8 +45,8 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
     
 
     properties (Access = protected)
-        path_identifier_generator = SerialNumber(1, [], true);
-        flow_identifier_generator = SerialNumber(1, [], true);
+        path_identifier_generator;
+        flow_identifier_generator;
     end
     properties (Access = {?PhysicalNetwork,?VirtualNetwork})
         AggregateLinkUsage;
@@ -107,6 +107,9 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
             
             % Initialize VNF Specification
             this.initializeVNF(VNF_opt);   
+            
+            this.flow_identifier_generator = SerialNumber(1, [], true);
+            this.path_identifier_generator = SerialNumber(1, [], true);
             
             this.AggregateLinkUsage = zeros(this.NumberLinks,1);
             this.AggregateNodeUsage = zeros(this.NumberNodes,1);

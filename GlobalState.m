@@ -7,10 +7,13 @@ classdef GlobalState < matlab.mixin.Copyable
         entity_id = 0;
         slice_id = 0;
         event_id = 0;
-        rand_state = rng;
+        rand_state;
     end
     
     methods
+        function this = GlobalState()
+            this.rand_state = rng;
+        end
         function Save(this)
             global builder_id entity_id slice_id eid;
             if ~isempty(builder_id)
