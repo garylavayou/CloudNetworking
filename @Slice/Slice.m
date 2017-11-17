@@ -1,7 +1,7 @@
 %%  Network Slice
 % Support network resource allocation scheme.
 %%
-classdef Slice < VirtualNetwork
+classdef Slice < VirtualNetwork & EventReceiver
     % Specify the properties that can only be modified by Physcial Network directly
     properties (SetAccess = {?Slice,?CloudNetwork,?SliceFlowEventDispatcher})
         temp_vars;      % [x,z]: temporary variables that will not be rounded.
@@ -71,18 +71,27 @@ classdef Slice < VirtualNetwork
         end
         
         function finalize(this, node_price, link_price)
-            this.Variables.x = this.temp_vars.x;
-            this.Variables.z = this.temp_vars.z;
-            % subclass inctance may have different implementation of _postProcessing_, it
-            % is recommended, that the subclass maintains the default behavior of this
-            % function.
-            this.postProcessing();  
-            this.VirtualDataCenters.Load = this.getNodeLoad;
-            this.VirtualLinks.Load = this.getLinkLoad;
-            this.VirtualDataCenters.Capacity = this.VirtualDataCenters.Load;
-            this.VirtualLinks.Capacity = this.VirtualLinks.Load;
-            this.FlowTable.Rate = this.getFlowRate;
-            this.setPathBandwidth;
+            if this.NumberFlows == 0
+                this.Variables.x = [];
+                this.Variables.z = [];
+                this.VirtualDataCenters{:,'Load'} = 0;
+                this.VirtualLinks{:,'Load'} = 0;
+                this.VirtualDataCenters{:,'Capacity'} = 0;
+                this.VirtualLinks{:,'Capacity'} = 0;
+            else
+                this.Variables.x = this.temp_vars.x;
+                this.Variables.z = this.temp_vars.z;
+                % subclass inctance may have different implementation of _postProcessing_, it
+                % is recommended, that the subclass maintains the default behavior of this
+                % function.
+                this.postProcessing();
+                this.VirtualDataCenters.Load = this.getNodeLoad;
+                this.VirtualLinks.Load = this.getLinkLoad;
+                this.VirtualDataCenters.Capacity = this.VirtualDataCenters.Load;
+                this.VirtualLinks.Capacity = this.VirtualLinks.Load;
+                this.FlowTable.Rate = this.getFlowRate;
+                this.setPathBandwidth;
+            end
             if nargin >= 2 && ~isempty(node_price)
                 this.VirtualDataCenters.Price = node_price(this.getDCPI);
             end
@@ -289,7 +298,10 @@ classdef Slice < VirtualNetwork
         end
                 
         [payment, grad, pseudo_hess] = fcnLinkPricing(this, link_price, link_load);
-        [payment, grad, pseudo_hess] = fcnNodePricing(this, node_price, node_load);        
+        [payment, grad, pseudo_hess] = fcnNodePricing(this, node_price, node_load);    
+        
+        function eventhandler(~, ~, ~)
+        end
     end
 
     methods(Static)
@@ -356,7 +368,7 @@ classdef Slice < VirtualNetwork
             if nargin <= 1
                 message = '';
             else
-                message = strtok(message, [char(10) char(13)]);
+                message = strtok(message, newline);
             end
             switch exitflag
                 case 0
