@@ -37,6 +37,7 @@ switch this.options.Method
     case 'fastconfig2'
         [profit,cost] = this.fastReconfigure2(action, options);
     case {'dimconfig', 'dimconfig1', 'dimconfig2', 'dimconfig0'}
+        options.bReserve = true;  % resource reservation
         [profit,cost] = this.DimensioningReconfigure(action, options);
     otherwise
         error('NetworkSlicing:UnsupportedMethod', ...
@@ -47,17 +48,53 @@ if contains(this.options.Method, {'dimconfig', 'dimconfig2'}) && isempty(profit)
     exitflag = -1;
     return;
 end
+% Check resource utilization
+%{
+idx = this.VirtualLinks.Capacity~=0;
+link_util = this.VirtualLinks.Load(idx)./this.VirtualLinks.Capacity(idx);
+sum_link_util = sum(this.VirtualLinks.Load(idx))./sum(this.VirtualLinks.Capacity(idx));
+mean_link_util = mean(link_util);
+%}
+fidx = find(this.FlowTable.Rate<=0.1*median(this.FlowTable.Rate));
+if isempty(fidx)
+    exitflag = 1;
+    if nargout >= 2
+        fidx = [];
+    end
+else
+    exitflag = 0;
+    fidx0 = this.FlowTable.Rate<=0;
+    if InfoLevel.UserModel>=DisplayLevel.Notify ||...
+            InfoLevel.UserModelDebug>=DisplayLevel.Final
+        if ~isempty(setdiff(this.FlowTable.Identifier(fidx0), this.reject_index))
+            cprintf('SystemCommands', '[%s]: reject flows due to zero rate.\n', this.options.Method);
+        end
+    end
+    % due to reconfiguration cost, some arriving flows might be directly rejected. In this
+    % case we need to perform slice redimensioning.
+    if contains(this.options.Method, {'dimconfig'}) && ...
+            ~isempty(setdiff(this.FlowTable.Identifier(fidx), this.reject_index))
+        options.b_dim = true;
+        [profit,cost] = this.DimensioningReconfigure(action, options);
+    end
+end
+this.reject_index = this.FlowTable.Identifier(fidx);
+
 % stat.Solution = this.Variables;
 stat = this.get_reconfig_stat();
 switch this.options.Method
     case 'reconfig'
         stat.Profit = profit - stat.Cost;
+        stat.ReconfigType = ReconfigType.Reconfigure;
     case {'fastconfig','fastconfig2'}
         stat.Profit = profit + stat.LinearCost - stat.Cost;
+        stat.ReconfigType = ReconfigType.FastReconfigure;
     case{'dimconfig', 'dimconfig1', 'dimconfig2'}
         %% ISSUE: LinearCost does not include in the profit
         stat.Profit = profit - stat.Cost;      %  + stat.LinearCost 
+        stat.ReconfigType = ReconfigType.Dimensioning;
         if ~this.b_dim
+            stat.ReconfigType = ReconfigType.FastReconfigure;
             stat.Profit = stat.Profit + stat.LinearCost;
         elseif this.getOption('Adhoc')
             % If the slice do not support Adhoc flows, then we do not release resource
@@ -70,8 +107,10 @@ switch this.options.Method
             if this.getOption('Adhoc')
                 this.release_resource_description();
             end
+            stat.ReconfigType = ReconfigType.Dimensioning;
         else
             stat.Profit = profit - stat.Cost;
+            stat.ReconfigType = ReconfigType.Reconfigure;
         end
 end
 stat.ResourceCost = cost;
@@ -87,20 +126,4 @@ this.topts = struct();
 this.changed_index = struct();
 this.net_changes = struct();
 
-fidx = find(this.FlowTable.Rate<=0);
-if isempty(fidx)
-    exitflag = 1;
-    if nargout >= 2
-        fidx = [];
-    end
-else
-    exitflag = 0;
-    if InfoLevel.UserModel>=DisplayLevel.Notify ||...
-            InfoLevel.UserModelDebug>=DisplayLevel.Final
-        if ~isempty(setdiff(this.FlowTable.Identifier(fidx), this.reject_index))
-            cprintf('SystemCommands', '[%s]: reject flows due to zero rate.\n', this.options.Method);
-        end
-    end
-end
-this.reject_index = this.FlowTable.Identifier(fidx);
 end
