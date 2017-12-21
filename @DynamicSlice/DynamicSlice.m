@@ -43,6 +43,7 @@ classdef DynamicSlice < Slice & EventSender
         changed_index;
         topts;              % used in optimization, avoid passing extra arguments.
         reject_index;
+        lower_bounds;
     end
     properties(Dependent, Access=protected)
         num_varv;
@@ -148,6 +149,9 @@ classdef DynamicSlice < Slice & EventSender
         
         function finalize(this, node_price, link_price)
             finalize@Slice(this, node_price, link_price);
+            if ~isempty(this.lower_bounds)
+                this.VirtualLinks.Capacity = this.temp_vars.c;
+            end
             if ~this.b_derive_vnf ...
                     && isfield(this.temp_vars,'v') && ~isempty(this.temp_vars.v)
                 if this.NumberFlows > 0
@@ -466,6 +470,12 @@ classdef DynamicSlice < Slice & EventSender
             if nargout >= 1
                 s = this.old_state;
             end
+            this.old_state.link_load = this.VirtualLinks.Load;
+            this.old_state.link_capacity = this.VirtualLinks.Capacity;
+            this.old_state.node_load = this.VirtualDataCenters.Load;
+            this.old_state.node_capacity = this.VirtualDataCenters.Capacity;
+            this.old_state.vnf_load = this.getVNFCapacity;
+            this.old_state.vnf_capacity = this.VNFCapacity;
         end
         function set_state(this)
             this.FlowTable = this.old_state.flow_table;
@@ -488,18 +498,22 @@ classdef DynamicSlice < Slice & EventSender
             this.As_res = this.old_state.As_res;
         end
         function convert(this, x, ~)
-            num_vars = length(x);
             NP = this.NumberPaths;
             this.temp_vars.x = x(1:NP);
             this.temp_vars.z = x((NP+1):this.num_vars);
-            this.temp_vars.v = x((this.num_vars+1):num_vars/2);
-            this.temp_vars.tx = x(num_vars/2+(1:NP));
-            this.temp_vars.tz = x(num_vars/2+((NP+1):this.num_vars));
-            this.temp_vars.tv = x(num_vars/2+((this.num_vars+1):num_vars/2));
+            offset = this.num_vars;
+            this.temp_vars.v = x(offset+(1:this.num_varv));
+            offset = offset + this.num_varv;
+            this.temp_vars.tx = x(offset+(1:NP));
+            this.temp_vars.tz = x(offset+((NP+1):this.num_vars));
+            offset = offset + this.num_vars;
+            this.temp_vars.tv = x(offset+(1:this.num_varv));
+            if ~isempty(this.lower_bounds)
+                offset = offset + this.num_varv;
+                this.temp_vars.c = x(offset+(1:this.NumberVirtualLinks));
+            end
             if nargin >= 3
-                this.Variables.x = this.temp_vars.x;
-                this.Variables.z = this.temp_vars.z;
-                this.Variables.v = this.temp_vars.v;
+                this.Variables = getstructfields(this.temp_vars, {'x','z','v','c'}, 'ignore');
             end
         end
         function [profit, cost] = handle_zero_flow(this, new_opts)
@@ -744,8 +758,6 @@ classdef DynamicSlice < Slice & EventSender
                 assert(this.checkFeasible(x, ...
                     struct('ConstraintTolerance', options.fmincon_opt.ConstraintTolerance)), ...
                     'error: infeasible solution.');
-                % add the fixed resource cost
-                this.getSliceCost(options.PricingPolicy);
             else
                 [x, fval] = optimize@Slice(this, params, rmstructfields(options, 'CostModel'));     
             end
@@ -870,59 +882,9 @@ classdef DynamicSlice < Slice & EventSender
             th = var_theta;
         end
     end
-    methods(Static, Access = protected)
-        %%
-        % Derived from <Slice.fcnProfit>
-        function [profit, grad] = fcnProfit(vars, slice, options)
-            %             if isempty(vars)
-            %                 % |S.temp_vars| is set by <DynamicSlice.priceOptimalFlowRate>.
-            %                 vars = s.get_temp_vars(true);
-            %             end
-            %             if nargin <= 2
-            %                 options = struct;
-            %             end
-            var_xz = vars(1:slice.num_vars);
-            if nargout <= 1
-                profit = fcnProfit@Slice(var_xz, slice, options);
-            else
-                [profit, sub_grad] = fcnProfit@Slice(var_xz, slice, options);
-            end
-            %%
-            % calculate reconfiguration cost and the gradient components on VNF instance
-            % variables and auxiliary variables.
-            num_basic_vars = slice.num_vars;
-            num_vars = length(vars);
-            NP = slice.NumberPaths;
-            % var_node = vars((S.NumberPaths+1):S.num_vars);
-            % |var_tx| and |var_tz| are auxilliary variables to transform L1 norm to
-            % linear constraints and objective part.
-            if isfield(options, 'num_varv')  % for _fastReconfigure2_, including |v|, and |tv|
-                num_basic_vars = num_basic_vars + options.num_varv;
-                var_tv = vars((num_vars-options.num_varv+1):end);
-            end
-            var_tx = vars(num_basic_vars+(1:NP));
-            var_tz = vars(num_basic_vars+NP+(1:slice.num_varz));
-            
-            profit = profit + dot(var_tx, slice.topts.x_reconfig_cost) + ...
-                dot(var_tz, slice.topts.z_reconfig_cost);
-            if isfield(options, 'num_varv') % for _fastConfigure2_
-                profit = profit + dot(var_tv, slice.topts.vnf_reconfig_cost);
-            end
-            
-            % If there is only one output argument, return the real profit (positive)
-            if nargout <= 1
-                profit = -profit;
-            else
-                grad = spalloc(num_vars, 1, NP+num_vars/2);
-                grad(1:slice.num_vars) = sub_grad;
-                grad(num_basic_vars+(1:NP)) = slice.topts.x_reconfig_cost;
-                grad(num_basic_vars+NP+(1:slice.num_varz)) = slice.topts.z_reconfig_cost;
-                if isfield(options, 'num_varv')
-                    grad((num_vars-slice.num_varv+1):end) = slice.topts.vnf_reconfig_cost;
-                end
-            end
-        end
-        
+    methods(Static, Access = protected)    
+        [profit, grad]= fcnProfit(vars, slice, options);
+        hess = fcnHessian(var_x, ~, slice, options);
         % Inherit <Slice.fcnProfit>, dynamically calling <fcnProfit> of <Slice> or the
         % subclasses. 
         % Note: options must provide the 'num_orig_vars' field.        
@@ -988,7 +950,7 @@ classdef DynamicSlice < Slice & EventSender
             if isfield(options, 'Method') && contains(options.Method, 'dimconfig')
                 vars = zeros(options.num_orig_vars,1);
                 vars(S.I_active_variables) = act_vars;
-                hess = Slice.fcnHessian(vars, lambda, S, options);
+                hess = DynamicSlice.fcnHessian(vars, lambda, S, options);
                 hess = hess(S.I_active_variables, S.I_active_variables);
             else
                 var_x = act_vars(1:options.num_varx);
