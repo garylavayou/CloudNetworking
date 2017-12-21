@@ -11,17 +11,24 @@ NP = this.NumberPaths;
 
 %%% Formulate input for convex optimization (fmincon).
 % The problem has multiple inequalities, and the lowerbounds for variables.
+%%
+% List of constaints:
+%   (1) flow processing requirement: NP*NV (this.num_lcon_res);
+%   (2) VNF instance capacity constraint: NV*NN (this.num_varv);
+%   (3) Link capacity constraint: NL;
+%   (4) link reconfiguration cost constraint: 2*NP;
+%   (5) node reconfiguration cost constraint: 2*NN*NP*NV (2*this.num_varz);
 global DEBUG InfoLevel; %#ok<NUSED>
-H = this.Hdiag;
+Hd = this.Hdiag;
 As_res = this.As_res;        % update As_res
-nnz_As = nnz(As_res) + nnz(H) + nnz(this.I_edge_path) + ...
+nnz_As = nnz(As_res) + nnz(Hd) + nnz(this.I_edge_path) + ...
     + 4*NP + 4*this.num_varz; % 2 I_x, 2 I_tx, 2 I_z, 2 I_tz
 num_lcon = this.num_lcon_res + NN*NV + NL + 2*NP + 2*this.num_varz;
 num_vars = 2*this.num_vars;     % including axuilary variables.
 As = spalloc(num_lcon, num_vars, nnz_As);
 As(1:this.num_lcon_res,1:this.num_vars) = As_res;
 row_offset = this.num_lcon_res;
-As(row_offset+(1:NN*NV), (1:this.num_varz)+NP) = H;
+As(row_offset+(1:NN*NV), (1:this.num_varz)+NP) = Hd;
 row_offset = row_offset + NN*NV;
 As(row_offset+(1:NL), 1:NP) = this.I_edge_path;
 row_offset = row_offset + NL;
@@ -38,7 +45,7 @@ As(row_offset+(1:this.num_varz), (NP+1):this.num_vars) = -eye(this.num_varz);
 As(row_offset+(1:this.num_varz), (this.num_vars+NP+1):end) = -eye(this.num_varz);
 
 bs = [sparse(this.num_lcon_res,1);
-    this.VNFCapacity(:);
+    this.VNFCapacity(:);              % VNFCapacity not change under 'fastconfig'
     this.VirtualLinks.Capacity;
     this.topts.old_variables_x;       % which have been pre-processed, so it can be
     -this.topts.old_variables_x;      % compared with the current states.

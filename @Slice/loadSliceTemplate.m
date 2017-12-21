@@ -151,10 +151,10 @@ for i = 1:length(type_index)
             % so that the average number of users stays at 75.
             %
             % The L1 approximation of reconfiguration cost should be normalized, so it
-            % will have the same magnitude as the original formulation. 'ReconfigScaler' is an
-            % absolute value to serve as the normalizer. We can set this value by first optimizing
-            % without normalization, and then computing the ratio between the original
-            % reconfiguration cost and the L1 Approximation.
+            % will have the same magnitude as the original formulation. 'ReconfigScaler'
+            % is an absolute value to serve as the normalizer. We can set this value by
+            % first optimizing without normalization, and then computing the ratio between
+            % the original reconfiguration cost and the L1 Approximation.
             slice_template(i).Weight = 25;
             slice_template(i).NumberPaths = 1;
             slice_template(i).VNFList = [1,2,3];
@@ -164,7 +164,7 @@ for i = 1:length(type_index)
             slice_template(i).Flow.ArrivalRate = 900/3600; 
             slice_template(i).Flow.ServiceInterval = 300; 
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
-            slice_template(i).ReconfigScaler = 1;
+            slice_template(i).ReconfigScaler = 2;       % beta
         case 54
             %% Type-2 for experiment 4-2: DynamicNetwork
             % Type-2 is a middle term service, e.g. inter-data centers communications (1
@@ -186,7 +186,7 @@ for i = 1:length(type_index)
             slice_template(i).Flow.ArrivalRate = 60/3600;  % 60 arrivals/hour  
             slice_template(i).Flow.ServiceInterval = 1080; 
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
-            slice_template(i).ReconfigScaler = 0.4;
+            slice_template(i).ReconfigScaler = 2.4;
         case 64 
             %% Type-3 for experiment 4-2: DynamicNetwork
             % Type-3 is a middle term service with high QoS-demand (10 arrivals/hour, 1
@@ -209,7 +209,7 @@ for i = 1:length(type_index)
             slice_template(i).Flow.ArrivalRate = 8/3600; % 8 arrivals/hour  
             slice_template(i).Flow.ServiceInterval = 1800; 
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
-            slice_template(i).ReconfigScaler = 0.2;
+            slice_template(i).ReconfigScaler = 0.5;
         otherwise
             error('error: unrecognized slice type (%d).', type_index(i));
     end
@@ -220,7 +220,7 @@ for i = 1:length(type_index)
             slice_template(i).Trigger = 'EventBased';
             switch mod(type_index(i),100)
                 case 44
-                    slice_template(i).EventInterval = 30;       % {50}
+                    slice_template(i).EventInterval = 10;       % {50}
                 case 54
                     slice_template(i).EventInterval = 10;
                 case 64

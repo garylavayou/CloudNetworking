@@ -2,7 +2,7 @@
 % single slice reconfiguration
 NUM_TEST = length(thetas);
 TOTAL_NUM= NUM_EVENT*(NUM_TEST*(...
-    b_fastconfig+b_fastconfig2+b_dimconfig+b_dimconfig2)+b_reconfig);
+    b_fastconfig+b_fastconfig2+b_dimconfig+b_dimconfig2+b_dimconfig0)+b_reconfig);
 global total_iter_num;
 total_iter_num = 0;
 if exist('progress_bar', 'var') && isvalid(progress_bar)
@@ -98,6 +98,24 @@ if b_dimconfig2
             results.Dimconfig2 = {g_results};
         else
             results.Dimconfig2{i,1} = g_results;
+        end
+    end
+end
+
+%%
+if b_dimconfig0
+    options.Method = 'dimconfig0';
+    progress_bar.Name = horzcat(EXPNAME, ' - ', 'Hybrid Slicing Scheme 0');
+    pause(0.01);
+    for i = 1:length(thetas)
+        GlobalState.Initialize();
+        seed_dynamic = SEED;
+        DynamicSlice.THETA(thetas(i));
+        SingleSliceReconfiguration;
+        if i == 1
+            results.Dimconfig0 = {g_results};
+        else
+            results.Dimconfig0{i,1} = g_results;
         end
     end
 end

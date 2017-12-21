@@ -9,6 +9,7 @@ classdef Color
    
     enumeration
         Black       (0,0,0);
+        Gray        (0.5,0.5,0.5);
         Blue        (0,0,1);
         Green       (0,1,0);
         Red         (1,0,0);

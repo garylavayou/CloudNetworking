@@ -57,4 +57,5 @@ b_fastconfig = true;
 b_fastconfig2 = true;
 b_dimconfig = true;
 b_dimconfig2 = true;
+b_dimconfig0 = false;
 SEED = 20170410;            % 20161231

@@ -102,6 +102,9 @@ classdef Slice < VirtualNetwork & EventReceiver
     end
     
     methods
+        % equation:
+        %    $\sum_{p,f}{b_{np}z_{npf}} \le V_{n}$
+        %
         % For the node capacity constraint, the coefficient matrix is filled row-by-row.
         % On row i, the non-zero elements located at (i-1)+(1:NC:((NP-1)*NC+1)) for the
         % first |NC*NP| columns, and then the first |NC*NP| columns are duplicated for
@@ -127,6 +130,9 @@ classdef Slice < VirtualNetwork & EventReceiver
             this.Hrep = H;
         end
 
+        % equation:
+        %    $\sum_{p}{b_{np}z_{npf}} \le v_{nf}$
+        %
         % For the node capacity constraint for VNF |f|, the coeffiect matrix Hs is
         % filled block-by-block. In the |k|th block (NC*NC), we put the |k|th column
         % of H_np to the diagnal of the block. Then |H_np| is duplicated into a larger

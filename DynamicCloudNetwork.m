@@ -18,8 +18,10 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                     this.pending_slices.Add(sl);
                     output = ...
                         this.optimizeResourcePriceNew([], this.pending_slices{:});
-                    source.Results.Profit = output.Profit(1);
-                    source.Results.Value = 0;   % if there are other return values.
+                    for i = 1:this.pending_slices.Length
+                        source.Results.Profit = output.Profit(i);
+                        source.Results.Value = 0;   % TODO: if there are other return values.
+                    end
                     this.pending_slices.Clear();
                 case 'DeferDimensioning'
                     sl = source;
@@ -229,6 +231,7 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             % reconfiguration cost.
             stat = sl.get_reconfig_stat();
             stat.Profit = output.Profit(end-1);
+            stat.ReconfigType = ReconfigType.Dimensioning;
             stat.ResourceCost = sl.getSliceCost('quadratic-price');   % _optimizeResourcePriceNew_ use 'quadratic-price'
             global g_results; 
             g_results = stat;       % The first event.
@@ -441,11 +444,11 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             [~, slice.VirtualLinks.ReconfigCost] = ...
                 slice.fcnLinkPricing(link_price, link_load);
             slice.VirtualLinks.ReconfigCost = ...
-                DynamicSlice.THETA * slice.VirtualLinks.ReconfigCost;
+                (DynamicSlice.THETA/slice.options.EventInterval) * slice.VirtualLinks.ReconfigCost;
             [~, slice.VirtualDataCenters.ReconfigCost] = ...
                 slice.fcnNodePricing(node_price, node_load);
             slice.VirtualDataCenters.ReconfigCost = ...
-                DynamicSlice.THETA * slice.VirtualDataCenters.ReconfigCost;
+                (DynamicSlice.THETA/slice.options.EventInterval) * slice.VirtualDataCenters.ReconfigCost;
         end
         %         function [link_reconfig_cost, node_reconfig_cost] = ...
         %                 updateRedimensionCost(this, slice, link_id, node_id)
