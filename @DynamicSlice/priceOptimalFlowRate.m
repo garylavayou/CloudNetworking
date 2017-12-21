@@ -38,14 +38,31 @@ As_res = this.As_res;        % update As_res
 %   (3) link reconfiguration cost constraint: 2*NP;
 %   (4) node reconfiguration cost constraint: 2*NN*NP*NV (2*this.num_varz);
 %   (5) VNF instance reconfiguration cost constraint: 2*NV*NN;
+%   (6) virtual link capacity constraint: NL (optional);
+%   (7) lower bound of virtual link capacity (optional);
+%   (8) lower bound of virtual node capacity (dimconfig2);
+%   (9) lower bound of VNF instance capacity (dimconfig1).
+%
 % Number of Variables
 %   x: path; z: VNF instances assignment; v: VNF instances capacity;
 %   tx;      tx;                          tv;     
+%   c: link capacity (optional)
 num_lcon = this.num_lcon_res + this.num_varv + ...
     2*NP + 2*this.num_varz + 2*this.num_varv;
 nnz_As = nnz(As_res) + (nnz(Hd)+this.num_varv) + ...
     + 4*NP + 4*this.num_varz+ 4*this.num_varv;
-num_vars = 2*this.num_vars + 2*this.num_varv;
+num_base_vars = this.num_vars + this.num_varv;
+num_vars = 2*num_base_vars;
+if ~isempty(this.lower_bounds)
+    NL = this.NumberVirtualLinks;
+    num_lcon0 = num_lcon;
+    num_lcon = num_lcon + NL;
+    num_vars = num_vars + NL;
+    if isfield(this.lower_bounds, 'node')
+        NC = this.NumberDataCenters;
+        num_lcon = num_lcon + NC;
+    end
+end
 As = spalloc(num_lcon, num_vars, nnz_As);
 As(1:this.num_lcon_res,1:this.num_vars) = As_res;
 row_offset = this.num_lcon_res;
@@ -53,22 +70,31 @@ As(row_offset+(1:this.num_varv), NP+(1:this.num_varz)) = Hd;
 As(row_offset+(1:this.num_varv), this.num_vars+(1:this.num_varv)) = -eye(this.num_varv);
 row_offset = row_offset + this.num_varv;
 As(row_offset+(1:NP), 1:NP) = eye(NP);
-As(row_offset+(1:NP), num_vars/2+(1:NP)) = -eye(NP);
+As(row_offset+(1:NP), num_base_vars+(1:NP)) = -eye(NP);
 row_offset = row_offset + NP;
 As(row_offset+(1:NP), 1:NP) = -eye(NP);
-As(row_offset+(1:NP), num_vars/2+(1:NP)) = -eye(NP);
+As(row_offset+(1:NP), num_base_vars+(1:NP)) = -eye(NP);
 row_offset = row_offset + NP;
 As(row_offset+(1:this.num_varz), (NP+1):this.num_vars) = eye(this.num_varz);
-As(row_offset+(1:this.num_varz), (num_vars/2+NP)+(1:this.num_varz)) = -eye(this.num_varz);
+As(row_offset+(1:this.num_varz), (num_base_vars+NP)+(1:this.num_varz)) = -eye(this.num_varz);
 row_offset = row_offset + this.num_varz;
 As(row_offset+(1:this.num_varz), (NP+1):this.num_vars) = -eye(this.num_varz);
-As(row_offset+(1:this.num_varz), (num_vars/2+NP)+(1:this.num_varz)) = -eye(this.num_varz);
+As(row_offset+(1:this.num_varz), (num_base_vars+NP)+(1:this.num_varz)) = -eye(this.num_varz);
 row_offset = row_offset + this.num_varz;
-As(row_offset+(1:this.num_varv), (this.num_vars+1):num_vars/2) = eye(this.num_varv);
-As(row_offset+(1:this.num_varv), (num_vars/2+this.num_vars+1):end) = -eye(this.num_varv);
+As(row_offset+(1:this.num_varv), (this.num_vars+1):num_base_vars) = eye(this.num_varv);
+As(row_offset+(1:this.num_varv), (num_base_vars+this.num_vars+1):num_base_vars*2) = -eye(this.num_varv);
 row_offset = row_offset + this.num_varv;
-As(row_offset+(1:this.num_varv), (this.num_vars+1):num_vars/2) = -eye(this.num_varv);
-As(row_offset+(1:this.num_varv), (num_vars/2+this.num_vars+1):end) = -eye(this.num_varv);
+As(row_offset+(1:this.num_varv), (this.num_vars+1):num_base_vars) = -eye(this.num_varv);
+As(row_offset+(1:this.num_varv), (num_base_vars+this.num_vars+1):num_base_vars*2) = -eye(this.num_varv);
+row_offset = row_offset + this.num_varv;
+if ~isempty(this.lower_bounds)
+    As(row_offset+(1:NL), 1:NP) = this.I_edge_path;
+    As(row_offset+(1:NL), 2*num_base_vars+(1:NL)) = -eye(NL);
+    row_offset = row_offset + NL;
+    if isfield(this.lower_bounds, 'node')
+        As(row_offset+(1:NC), this.num_vars+(1:this.num_varv)) = -repmat(eye(NC),1,NV);
+    end    
+end
 
 bs = [sparse(this.num_lcon_res+this.num_varv,1);
     this.topts.old_variables_x;       % which have been pre-processed, so it can be
@@ -77,6 +103,20 @@ bs = [sparse(this.num_lcon_res+this.num_varv,1);
     -this.topts.old_variables_z;
     this.old_variables.v;
     -this.old_variables.v];
+if ~isempty(this.lower_bounds)
+    bs = [bs; zeros(NL,1)];
+    if isfield(this.lower_bounds, 'node')
+        bs = [bs; -this.lower_bounds.node];
+    end
+end
+
+lbs = sparse(num_vars, 1);
+if ~isempty(this.lower_bounds)
+    lbs(2*num_base_vars+(1:NL)) = this.lower_bounds.link;
+    if isfield(this.lower_bounds, 'VNF')
+        lbs(this.num_vars+(1:this.num_varv)) = this.lower_bounds.VNF;
+    end
+end
 
 var0 = [this.topts.old_variables_x;
     this.topts.old_variables_z;
@@ -84,6 +124,9 @@ var0 = [this.topts.old_variables_x;
     this.topts.old_variables_x;
     this.topts.old_variables_z;
     this.old_variables.v];
+if ~isempty(this.lower_bounds)
+    var0 = [var0; this.old_state.link_capacity];
+end
 assert(this.checkFeasible(var0), 'error: infeasible start point.');
 
 %% Set the optimization options
@@ -117,12 +160,21 @@ if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
         true(NP,1); z_filter; true(this.num_varv,1)];
     row_offset = this.num_lcon_res + this.num_varv + 2*NP;
     active_rows = [(1:row_offset)'; row_offset+find(z_filter); ...
-        row_offset+this.num_varz+find(z_filter); ...
-        ((num_lcon-2*this.num_varv+1):num_lcon)'];
+        row_offset+this.num_varz+find(z_filter)];
+    if ~isempty(this.lower_bounds)
+        this.I_active_variables = [this.I_active_variables; true(NL,1)];
+        active_rows = [active_rows; ((num_lcon0-2*this.num_varv+1):num_lcon0)';...
+            num_lcon0+(1:NL)'];
+        if isfield(this.lower_bounds, 'node')
+            active_rows = [active_rows; num_lcon0+NL+(1:NC)'];
+        end
+    else
+        active_rows = [active_rows; ((num_lcon-2*this.num_varv+1):num_lcon)'];
+    end
     As_compact = As(active_rows, this.I_active_variables);
     var0_compact = var0(this.I_active_variables);
+    lbs = lbs(this.I_active_variables);
     bs = bs(active_rows);
-    lbs = sparse(length(var0_compact),1);
 %     old_z_reconfig_cost = this.z_reconfig_cost;
 %     this.z_reconfig_cost = this.z_reconfig_cost(z_filter);
     options.num_orig_vars = this.num_vars+this.num_varv;

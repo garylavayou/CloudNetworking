@@ -22,6 +22,9 @@ if isempty(fieldnames(this.net_changes))
     if this.NumberFlows == 0
         this.b_dim = true;
     end
+    if isfield(new_opts, 'b_dim') && new_opts.b_dim == true
+        this.b_dim = true;
+    end
     if this.b_dim
         %% Period re-dimensioing
         % The number of virtual nodes/links is not change in the slice, as well as the
@@ -65,11 +68,11 @@ if ~this.b_dim
         case {'dimconfig2'}
             [profit,cost] = this.fastReconfigure2(action, new_opts);
         case {'dimconfig0'}
-            options.CostModel = 'fixcost';
-            options.Method = 'slice-price';
+            new_opts.CostModel = 'fixcost';
+            new_opts.Method = 'slice-price';
             this.prices.Link = this.VirtualLinks.Price;
             this.prices.Node = this.VirtualDataCenters.Price;
-            [profit,cost] = this.optimalFlowRate(options);
+            [profit,cost] = this.optimalFlowRate(new_opts);
         otherwise
     end
     return;
@@ -103,9 +106,40 @@ if isfield(this.changed_index, 'v')
 else
     this.old_variables.v = this.Variables.v;
 end
-
+%% Resource Reservation
+% [optional function]: when we perform slice dimensioning, the slice will try to release
+%   all idle resources to lower the operational cost. However, certain amount of redundant
+%   resources can accomodate the traffic dynamics and reduce the reconfiguration cost.
+%   Therefore, we should not release all idle resources at dimensioning, unless the
+%   utilization of a resource is lower than the specified threshold.
+%
+% We will calculate the lower bound of resource reservation, given the threshold 'th'.
+%   1. If a resource's utilization ratio 'u=0': the low-bound as c/2;
+%   2. Else if a resource's utilization ratio 'u' is low than 'th': 
+%       we set the lower-bound as 'uc/[(1+th)/2]';
+%   3. Otherwise, the lower-bound is 'c'.
+%
+% * Computing Resource Reservation *
+% With 'dimconfig', we cannot reconfigure the VNF instance capacity after dimensioning.
+% Therefore, we need to reserve resource for VNF instances. On the other hand, with
+% 'dimconfig2' and 'dimconfig0', we only need reserved resources for the nodes.
+if isfield(new_opts, 'bReserve') && new_opts.bReserve
+    this.lower_bounds = struct;
+    this.lower_bounds.link = setlowerbounds(...
+        this.old_state.link_load, this.old_state.link_capacity, 0.7);
+    switch this.options.Method
+        case {'dimconfig', 'dimconfig1'}
+            this.lower_bounds.VNF = setlowerbounds(...
+                this.old_state.vnf_load, this.old_state.vnf_capacity, 0.7);       % getVNFCapacity should be renamed as this.getVNFLoad.
+        case {'dimconfig0', 'dimconfig2'}
+            this.lower_bounds.node = setlowerbounds(...
+                this.old_state.node_load, this.old_state.node_capacity, 0.7);
+    end
+else
+    this.lower_bounds = struct([]);
+end
 % dimensioning will be perform by <DynamicCloudNetwork>
-this.b_derive_vnf = false;      
+this.b_derive_vnf = false;      % VNF capapcity is derived from variables v, instead of z.
 notify(this, 'RequestDimensioning', EventData());
 
 if this.Results.Value == 0
@@ -123,4 +157,17 @@ end
 %% Reset statistics
 this.time.LastDimensioning = this.time.Current;
 this.event.RecentCount = 0;
+this.lower_bounds = struct([]);
+end
+
+function lbs = setlowerbounds(load, capacity, threshold)
+    lbs = zeros(size(load));
+    idx = find(capacity~=0);
+    util = load(idx)./capacity(idx);
+    idx1 = idx(util<=threshold/2);
+    idx2 = idx((util>threshold/2) & (util<=threshold));
+    idx3 = idx(util>threshold);
+    lbs(idx1) = capacity(idx1)/2;
+    lbs(idx2) = load(idx2)/(threshold);
+    lbs(idx3) = capacity(idx3);
 end
