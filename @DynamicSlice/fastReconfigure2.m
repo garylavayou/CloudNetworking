@@ -21,10 +21,15 @@ Hd = this.Hdiag;
 Hr = this.Hrep;
 As_res = this.As_res;        % update As_res
 %%
-% List of constaints:
+% List of constraints:
 %   (1) flow processing requirement: NP*NV (this.num_lcon_res);
-%   (2) VNF instance capacity constraint: NV*NN (this.num_varv);
-%   (3) Node capacity constraint: NN;
+%   (2) VNF instance capacity constraint: NV*NN (this.num_varv); VNF load
+%       (y_nf) is no more than VNF instance capacity (v_nf);
+%   (3) Node capacity constraint: NN; VNF instance capacity is no more than
+%       node capacity. Since there is reconfiguration cost, we cannot use
+%       VNF load to express the constraint (Hrep*z). Instead we directly
+%       use VNF instance capacity as variables to express it
+%       (sum(v_nf)<=v_n). See also <Slice.getHrep>. 
 %   (4) Link capacity constraint: NL;
 %   (5) link reconfiguration cost constraint: 2*NP;
 %   (6) node reconfiguration cost constraint: 2*NN*NP*NV (2*this.num_varz);
@@ -40,7 +45,7 @@ row_offset = this.num_lcon_res;
 As(row_offset+(1:this.num_varv), NP+(1:this.num_varz)) = Hd;
 As(row_offset+(1:this.num_varv), this.num_vars+(1:this.num_varv)) = -eye(this.num_varv);
 row_offset = row_offset + this.num_varv;
-As(row_offset+(1:NN), NP+(1:this.num_varz)) = Hr;
+As(row_offset+(1:NN), this.num_vars+(1:this.num_varv)) = repmat(eye(NN),1,NV);
 row_offset = row_offset + NN;
 As(row_offset+(1:NL), 1:NP) = this.I_edge_path;
 row_offset = row_offset + NL;
