@@ -50,10 +50,7 @@ classdef FlowEntityBuilder < EntityBuilder
         function t = get.Type(~)
             t = EntityType.Flow;
         end
-    end
-    
-    methods(Access=protected)
-        function entity = buildentity(this, time_arrive, time_serve, flow_id)
+        function entity = Build(this, time_arrive, time_serve, flow_id)
             % build the entity
             entity = FlowEntity(time_arrive, time_serve, this);
             entity.LocalIdentifier = this.local_flow_identifier.next;
@@ -62,7 +59,9 @@ classdef FlowEntityBuilder < EntityBuilder
                 entity.GlobalIdentifier = flow_id;
             end
         end
-        
+    end
+    
+    methods(Access=protected)        
         function this = copyElement(febdr)
             this = copyElement@EntityBuilder(febdr);
             %% Deep Copy Issue

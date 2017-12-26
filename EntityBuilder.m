@@ -26,7 +26,9 @@ classdef EntityBuilder < matlab.mixin.Copyable & matlab.mixin.Heterogeneous
         function this = EntityBuilder(arrival_rate, service_interval, options)
             this.ArrivalRate = arrival_rate;
             this.ServiceInterval = service_interval;
-            this.Options = options;
+            if nargin >= 3
+                this.Options = options;
+            end
             global builder_id;       % global entity ID;
             if isempty(builder_id)
                 builder_id = int64(0);
@@ -41,14 +43,8 @@ classdef EntityBuilder < matlab.mixin.Copyable & matlab.mixin.Heterogeneous
         end
     end
     
-    methods (Sealed)  % This method should have been abstract
-        function entity = Build(this, time_arrive, time_serve, varargin)
-            entity = this.buildentity(time_arrive, time_serve, varargin{:});
-        end
-    end
-    
-    methods (Access=protected, Abstract)
-        entity = buildentity(this, time_arrive, time_serve, varargin);
+    methods (Abstract)
+        entity = Build(this, time_arrive, time_serve, varargin);
     end
 end
 

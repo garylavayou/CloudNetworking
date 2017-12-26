@@ -47,8 +47,8 @@ classdef SliceEntityBuilder < EntityBuilder
         end
     end
     
-    methods(Access=protected)
-        function entity = buildentity(this, time_arrive, time_serve)
+    methods
+        function entity = Build(this, time_arrive, time_serve)
             global slice_id;    % Global slice ID;
             if isempty(slice_id)
                 slice_id = int64(0);
@@ -64,8 +64,7 @@ classdef SliceEntityBuilder < EntityBuilder
             entity = SliceEntity(time_arrive, time_serve, this, this.seed);
             this.seed = this.seed + 1;
             entity.SliceIdentifier = slice_id;
-        end
-        
+        end        
     end
     
 end
