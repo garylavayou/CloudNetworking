@@ -1,6 +1,6 @@
 %% Run script
 % single slice reconfiguration: a warm-up phase is reused.
-NUM_TEST = length(thetas);
+NUM_TEST = length(etas);
 TOTAL_NUM= options.NumberEventWarmUp*NUM_TEST + ...
     NUM_EVENT*(NUM_TEST*(b_fastconfig+b_fastconfig2+b_dimconfig+b_dimconfig2)+b_reconfig);
 global total_iter_num;
@@ -17,16 +17,16 @@ jframe.setAlwaysOnTop(1);
 %% Start phase
 progress_bar.Name = horzcat(EXPNAME, ' - ', 'Warm-up Phase');
 pause(0.01);
-PNs = creatempty(options.NetworkType, length(thetas), 0);
-Dispachers = creatempty('SliceFlowEventDispatcher', length(thetas), 0);
-global_state(length(thetas),1) = GlobalState;
+PNs = creatempty(options.NetworkType, length(etas), 0);
+Dispachers = creatempty('SliceFlowEventDispatcher', length(etas), 0);
+global_state(length(etas),1) = GlobalState;
 old_num_event = NUM_EVENT;
 NUM_EVENT = options.NumberEventWarmUp; %#ok<NASGU>
 options.Method = 'dimconfig';
-for i = 1:length(thetas)
+for i = 1:length(etas)
     GlobalState.Initialize();
     seed_dynamic = SEED;
-    DynamicSlice.THETA(thetas(i));
+    DynamicSlice.ETA(etas(i));
     SingleSliceReconfiguration;
     %% Create Network
     PNs(i) = PN;
@@ -40,9 +40,9 @@ for i = 1:length(thetas)
 end
 NUM_EVENT = old_num_event;
 
-PNsnew = creatempty(options.NetworkType, length(thetas), 0);
-Dispachersnew = creatempty('SliceFlowEventDispatcher', length(thetas), 0);
-for i = 1:length(thetas)
+PNsnew = creatempty(options.NetworkType, length(etas), 0);
+Dispachersnew = creatempty('SliceFlowEventDispatcher', length(etas), 0);
+for i = 1:length(etas)
     PNsnew(i) = PNs(i).copy;
     Dispachersnew(i) = Dispachers(i).copy;
 end
@@ -55,11 +55,11 @@ if b_fastconfig
     options.Method = 'fastconfig';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Fast Reconfiguration');
     pause(0.01);
-    for i = 1:length(thetas)
+    for i = 1:length(etas)
         global_state(i).Restore();
         PN = PNs(i).copy;
         SFED = Dispachers(i).copy;
-        DynamicSlice.THETA(thetas(i));  % should be reset each iteration.
+        DynamicSlice.ETA(etas(i));  % should be reset each iteration.
         RepeatSliceReconfiguration;
         if i == 1
             results.Fastconfig = {g_results};
@@ -74,11 +74,11 @@ if b_fastconfig2
     options.Method = 'fastconfig2';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Fast Reconfiguration 2');
     pause(0.01);
-    for i = 1:length(thetas)
+    for i = 1:length(etas)
         global_state(i).Restore();
         PN = PNs(i).copy;
         SFED = Dispachers(i).copy;
-        DynamicSlice.THETA(thetas(i));
+        DynamicSlice.ETA(etas(i));
         RepeatSliceReconfiguration;
         if i == 1
             results.Fastconfig2 = {g_results};
@@ -100,7 +100,7 @@ if b_reconfig
     global_state(1).Restore();
     PN = PNs(1).copy;
     SFED = Dispachers(1).copy;
-    DynamicSlice.THETA(1);
+    DynamicSlice.ETA(1);
     RepeatSliceReconfiguration;
     results.Reconfig = g_results;
 end
@@ -110,11 +110,11 @@ if b_dimconfig
     options.Method = 'dimconfig';
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Hybrid Slicing Scheme');
     pause(0.01);
-    for i = 1:length(thetas)
+    for i = 1:length(etas)
         global_state(i).Restore();
         PN = PNs(i).copy;
         SFED = Dispachers(i).copy;
-        DynamicSlice.THETA(thetas(i));
+        DynamicSlice.ETA(etas(i));
         RepeatSliceReconfiguration;
         if i == 1
             results.Dimconfig = {g_results};
@@ -129,11 +129,11 @@ if b_dimconfig2
     options.Method = 'dimconfig2';
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Hybrid Slicing Scheme 2');
     pause(0.01);
-    for i = 1:length(thetas)
+    for i = 1:length(etas)
         global_state(i).Restore();
         PN = PNs(i).copy;
         SFED = Dispachers(i).copy;
-        DynamicSlice.THETA(thetas(i));
+        DynamicSlice.ETA(etas(i));
         RepeatSliceReconfiguration;
         if i == 1
             results.Dimconfig2 = {g_results};

@@ -31,7 +31,7 @@ hr(1).Color = Color.Red.RGB;
 hr(1).LineWidth = 1;
 ylabel('Number of Variables');
 hr.Parent.YColor = Color.Red.RGB;
-% title(sprintf('\\eta=%.2f', thetas(i)));
+% title(sprintf('\\eta=%.2f', etas(i)));
 legend([legend_label, {'Variable#'}], 'Location', 'northwest');
 ylimmax = max(ylimmax, hr.Parent.YLim(2));
 yyaxis left;
@@ -79,7 +79,7 @@ xlabel('Experiment Time');
 %     'Location', 'northwest');
 ylim([0,1]);
 legend(legend_label, 'Location', 'best', 'Orientation', 'vertical');
-% title(sprintf('\\eta=%.2f', thetas(i)));
+% title(sprintf('\\eta=%.2f', etas(i)));
 
 %% Cost of Reconfiguration
 if exist('fig_cost_reconfig', 'var') && fig_cost_reconfig.isvalid
@@ -87,7 +87,7 @@ if exist('fig_cost_reconfig', 'var') && fig_cost_reconfig.isvalid
 else
     fig_cost_reconfig = figure('Name', 'Cost of Reconfiguration');
 end
-hl = plot(tx, results.Reconfig{tx,'Cost'}*thetas(i), '-.', ...
+hl = plot(tx, results.Reconfig{tx,'Cost'}*etas(i), '-.', ...
     tx, results.Fastconfig{i}{tx,'Cost'}, ':', ...
     tx, results.Fastconfig2{i}{tx,'Cost'}, '.', ...
     tx, results.Dimconfig{i}{tx,'Cost'}, '-', ...
@@ -104,7 +104,7 @@ xlabel('Experiment Time');
 % hr.Color = Color.Orange.RGB;
 % hr.Parent.YColor = Color.Orange.RGB;
 legend(legend_label, 'Location', 'northwest');
-% title(sprintf('\\eta=%.2f', thetas(i)));
+% title(sprintf('\\eta=%.2f', etas(i)));
 
 %% Number of Reconfigured Flows
 if exist('fig_flow_reconfig', 'var') && fig_flow_reconfig.isvalid
@@ -135,7 +135,7 @@ yyaxis left;
 ylim([0, max(ylimmax)+2]);
 xlabel('Experiment Time');
 legend([legend_label,{'Flows #'}], 'Location', 'northwest');
-% title(sprintf('\\eta=%.2f', thetas(i)));
+% title(sprintf('\\eta=%.2f', etas(i)));
 
 %% Profit
 if exist('fig_profit_reconfig', 'var') && fig_profit_reconfig.isvalid
@@ -146,7 +146,7 @@ end
 % fig_profit_reconfig.OuterPosition = [100 400 400 380];
 xlabel('Experiment Time');
 yyaxis left;
-profit = results.Reconfig{tx,'Profit'} + (1-thetas(i))*results.Reconfig{tx,'Cost'};
+profit = results.Reconfig{tx,'Profit'} + (1-etas(i))*results.Reconfig{tx,'Cost'};
 hl = plot(tx, profit, '-.', ...
     tx, results.Fastconfig{i}{tx,'Profit'}, ':',...
     tx, results.Fastconfig2{i}{tx,'Profit'}, '.',...
@@ -165,4 +165,4 @@ hr.Parent.YLim(1) = 0;
 hr.Parent.YLim(2) = hr.Parent.YLim(2)+2;
 ylabel('Number of Flows');
 legend([legend_label, {'Flow #'}], 'Location', 'northwest');
-% title(sprintf('\\eta=%.2f', thetas(i)));
+% title(sprintf('\\eta=%.2f', etas(i)));

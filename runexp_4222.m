@@ -12,8 +12,8 @@ preconfig_42xx;
 EXPNAME = 'EXP4222';
 type.Index = [10144; 10154; 10164];
 type.Permanent = 2;
-thetas = linspace(0.1, 5, 50);  %thetas = thetas([11 12]);
-% thetas = 1;
+etas = linspace(0.1, 5, 50);  %etas = etas([11 12]);
+% etas = 1;
 NUM_EVENT = 100;            % {40|100|600};
 idx = 51:NUM_EVENT;
 % b_reconfig = true;
@@ -37,6 +37,6 @@ description = sprintf('%s\n%s\n%s\n%s',...
     'Topology=Sample-2.',...
     'Start with warm-up phase.',...
     'Slice Type 10154 (disable ad-hoc mode, enable dimension-trigger).');
-save('Results\EXP4_OUTPUT222.mat', 'description', 'results', 'NUM_EVENT', 'thetas', ...
+save('Results\EXP4_OUTPUT222.mat', 'description', 'results', 'NUM_EVENT', 'etas', ...
     'options', 'node_opt', 'link_opt', 'VNF_opt', 'slice_opt', 'type', 'idx', 'EXPNAME');
 %}

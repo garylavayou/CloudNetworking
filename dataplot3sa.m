@@ -40,8 +40,8 @@ hr(1).LineWidth = 1;
 hr(1).MarkerIndices = marker_index;
 ylabel('Number of Variables');
 hr.Parent.YColor = Color.Gray.RGB;
-% title(sprintf('\\eta=%.2f', thetas(i)));
-legend(legend_label, 'Location', 'northwest');
+% title(sprintf('\\eta=%.2f', etas(i)));
+legend(legend_label(1:5), 'Location', 'northwest');
 ylimmax = max(ylimmax, hr.Parent.YLim(2));
 yyaxis left;
 ylim(hl(1).Parent, [0, ylimmax]);
@@ -79,7 +79,7 @@ else
 end
 cost = [results.Fastconfig{i}{tx,'Cost'}, results.Fastconfig2{i}{tx,'Cost'},...
     results.Dimconfig{i}{tx,'Cost'}, results.Dimconfig2{i}{tx,'Cost'},...
-    results.Reconfig{tx,'Cost'}*thetas(i)];
+    results.Reconfig{tx,'Cost'}*etas(i)];
 reconfig_type = [results.Fastconfig{i}{tx,'ReconfigType'}, results.Fastconfig2{i}{tx,'ReconfigType'},...
     results.Dimconfig{i}{tx,'ReconfigType'}, results.Dimconfig2{i}{tx,'ReconfigType'},...
     results.Reconfig{tx,'ReconfigType'}];
@@ -137,7 +137,7 @@ end
 % fig_profit_reconfig.OuterPosition = [100 400 400 380];
 cost = [results.Fastconfig{i}{tx,'Cost'}, results.Fastconfig2{i}{tx,'Cost'},...
     results.Dimconfig{i}{tx,'Cost'}, results.Dimconfig2{i}{tx,'Cost'},...
-    results.Reconfig{tx,'Cost'}*thetas(i),results.Dimconfig0{i}{tx,'Cost'}];
+    results.Reconfig{tx,'Cost'}*etas(i),results.Dimconfig0{i}{tx,'Cost'}];
 reconfig_type = [results.Fastconfig{i}{tx,'ReconfigType'}, results.Fastconfig2{i}{tx,'ReconfigType'},...
     results.Dimconfig{i}{tx,'ReconfigType'}, results.Dimconfig2{i}{tx,'ReconfigType'},...
     results.Reconfig{tx,'ReconfigType'}, results.Dimconfig0{i}{tx,'ReconfigType'}];

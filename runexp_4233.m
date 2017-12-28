@@ -15,7 +15,7 @@ type.Permanent = 3;
 type.Static = [1; 2; 3];
 type.StaticCount = [1; 2; 2];
 type.StaticClass = {'CloudNetwork','CloudNetwork','CloudNetwork'};
-thetas = linspace(0.1, 5, 50);  %thetas = thetas([1 13]); %thetas = logspace(log10(0.01),log10(10), 50); 
+etas = linspace(0.1, 5, 50);  %etas = etas([1 13]); %etas = logspace(log10(0.01),log10(10), 50); 
 NUM_EVENT = 100;            % {40|100|600};
 idx = 1:NUM_EVENT;
 runexp_4xxx;
@@ -33,6 +33,6 @@ description = sprintf('%s\n%s\n%s\n%s',...
     'Topology=Sample-2.',...
     'Slice Type 10164 (disable ad-hoc mode, enable dimension-trigger).',...
     'Start with warm-up phase.');
-save('Results\EXP4_OUTPUT232.mat', 'description', 'results', 'NUM_EVENT', 'thetas', ...
+save('Results\EXP4_OUTPUT232.mat', 'description', 'results', 'NUM_EVENT', 'etas', ...
     'options', 'node_opt', 'link_opt', 'VNF_opt', 'slice_opt', 'type', 'idx');
 %}

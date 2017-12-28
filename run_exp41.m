@@ -43,7 +43,7 @@ options.ConstraintTolerance = 10^-3;
 
 %% Experiment Control
 declare_info_level({'Global', 'ClassDebug'}, [DisplayLevel.Notify, DisplayLevel.Notify]);
-thetas = linspace(0.5, 3, 10);
+etas = linspace(0.5, 3, 10);
 b_reconfig = true;
 b_fastconfig = true;
 b_fastconfig2 = true;
@@ -52,7 +52,7 @@ NUM_EVENT = 100;             %600;
 
 %% Run script
 % single slice reconfiguration
-NUM_TEST = length(thetas);
+NUM_TEST = length(etas);
 TOTAL_NUM= NUM_EVENT*(NUM_TEST*(b_fastconfig+b_fastconfig2)+b_reconfig);
 global total_iter_num;
 total_iter_num = 0;
@@ -67,10 +67,10 @@ if b_fastconfig
     options.Method = 'fastconfig';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
     progress_bar.Name = 'Fast Reconfiguration';
     pause(0.01);
-    for i = 1:length(thetas)
+    for i = 1:length(etas)
         clear functions; %#ok<CLFUNC>
         seed_dynamic = SEED;  %#ok<NASGU>
-        DynamicSlice.THETA(thetas(i));
+        DynamicSlice.ETA(etas(i));
         SingleSliceReconfiguration;
         if i == 1
             results.Fastconfig = g_results;
@@ -85,10 +85,10 @@ if b_fastconfig2
     options.Method = 'fastconfig2';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
     progress_bar.Name = 'Fast Reconfiguration 2';
     pause(0.01);
-    for i = 1:length(thetas)
+    for i = 1:length(etas)
         clear functions; %#ok<CLFUNC>
         seed_dynamic = SEED;  %#ok<NASGU>
-        DynamicSlice.THETA(thetas(i));
+        DynamicSlice.ETA(etas(i));
         SingleSliceReconfiguration;
         if i == 1
             results.Fastconfig2 = g_results;
@@ -109,7 +109,7 @@ if b_reconfig
     pause(0.01);
     clear functions; %#ok<CLFUNC>
     seed_dynamic = SEED;
-    DynamicSlice.THETA(1);
+    DynamicSlice.ETA(1);
     SingleSliceReconfiguration;
     results.Reconfig = g_results;
 end
@@ -119,4 +119,4 @@ close(progress_bar);
 %data_plot3;
 %data_plot31;
 description = 'Experiment 4-1: topology = SD-RAN.';
-save('Results\EXP4_OUTPUT01.mat', 'results', 'NUM_EVENT', 'thetas', 'description');
+save('Results\EXP4_OUTPUT01.mat', 'results', 'NUM_EVENT', 'etas', 'description');

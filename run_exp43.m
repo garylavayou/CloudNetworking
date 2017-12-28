@@ -70,7 +70,7 @@ if b_fastconfig
     pause(0.01);
     clear functions; %#ok<CLFUNC>
     seed_dynamic = SEED; %#ok<NASGU>
-    DynamicSlice.THETA(options.theta);
+    DynamicSlice.ETA(options.theta);
     SingleSliceReconfiguration;
     results.fastconfig = g_results;
 end
@@ -84,7 +84,7 @@ if b_reconfig
     pause(0.01);
     clear functions; %#ok<CLFUNC>
     seed_dynamic = SEED;
-    DynamicSlice.THETA(options.theta);
+    DynamicSlice.ETA(options.theta);
     SingleSliceReconfiguration;
     results.reconfig = g_results;
 end

@@ -14,17 +14,23 @@ ND = slice.NumberDataCenters;
 NV = slice.NumberVNFs;
 NL = slice.NumberVirtualLinks;
 var_path = vars(1:NP);
-if isempty(slice.lower_bounds)
+if num_vars == num_basic_vars
+    % no reconfiguration cost constraint, node capacity equals to load.
     var_node = vars((NP+1):num_basic_vars);
-    link_load = slice.getLinkLoad(var_path);
     node_load = slice.getNodeLoad(var_node);
 else
-    % when the link capacity lower-bound is specified, we have the link capacity variable;
-    % when the VNF/node capacity lower-bound is specified, we have the node capacity by
-    % computing the sum VNF capacity.
+    % with reconfiguration cost constraint, node capacity equals to sum of VNF capacity.
+    % VNF/node capacity lower-bound might be specified or not.
     var_offset = slice.num_vars;
     var_vnf = reshape(vars(var_offset+(1:options.num_varv)), ND, NV);
     node_load = sum(var_vnf,2);
+end
+if isempty(slice.lower_bounds)
+    % without lower-bound, link capacity equals to sum of path variables.
+    % there might be reconfiguration cost constraint on path variables.
+    link_load = slice.getLinkLoad(var_path);
+else
+    % when the link capacity lower-bound is specified, we have the link capacity variable;
     var_offset = options.num_orig_vars*2;
     link_load = vars(var_offset+(1:NL));
 end

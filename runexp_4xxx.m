@@ -1,6 +1,6 @@
 %% Run script
 % single slice reconfiguration
-NUM_TEST = length(thetas);
+NUM_TEST = length(etas);
 TOTAL_NUM= NUM_EVENT*(NUM_TEST*(...
     b_fastconfig+b_fastconfig2+b_dimconfig+b_dimconfig2+b_dimconfig0)+b_reconfig);
 global total_iter_num;
@@ -25,7 +25,7 @@ if b_reconfig
     pause(0.01);
     GlobalState.Initialize();
     seed_dynamic = SEED;
-    DynamicSlice.THETA(1);
+    DynamicSlice.ETA(1);
     SingleSliceReconfiguration;
     results.Reconfig = g_results;
 end
@@ -35,10 +35,10 @@ if b_fastconfig
     options.Method = 'fastconfig';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Fast Reconfiguration');
     pause(0.01);
-    for i = 1:length(thetas)
+    for i = 1:length(etas)
         GlobalState.Initialize();
         seed_dynamic = SEED;
-        DynamicSlice.THETA(thetas(i));
+        DynamicSlice.ETA(etas(i));
         SingleSliceReconfiguration;
         if i == 1
             results.Fastconfig = {g_results};
@@ -53,10 +53,10 @@ if b_fastconfig2
     options.Method = 'fastconfig2';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Fast Reconfiguration 2');
     pause(0.01);
-    for i = 1:length(thetas)
+    for i = 1:length(etas)
         GlobalState.Initialize();
         seed_dynamic = SEED;
-        DynamicSlice.THETA(thetas(i));
+        DynamicSlice.ETA(etas(i));
         SingleSliceReconfiguration;
         if i == 1
             results.Fastconfig2 = {g_results};
@@ -71,10 +71,10 @@ if b_dimconfig
     options.Method = 'dimconfig';
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Hybrid Slicing Scheme');
     pause(0.01);
-    for i = 1:length(thetas)
+    for i = 1:length(etas)
         GlobalState.Initialize();
         seed_dynamic = SEED;
-        DynamicSlice.THETA(thetas(i));
+        DynamicSlice.ETA(etas(i));
         SingleSliceReconfiguration;
         if i == 1
             results.Dimconfig = {g_results};
@@ -89,10 +89,10 @@ if b_dimconfig2
     options.Method = 'dimconfig2';
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Hybrid Slicing Scheme 2');
     pause(0.01);
-    for i = 1:length(thetas)
+    for i = 1:length(etas)
         GlobalState.Initialize();
         seed_dynamic = SEED;
-        DynamicSlice.THETA(thetas(i));
+        DynamicSlice.ETA(etas(i));
         SingleSliceReconfiguration;
         if i == 1
             results.Dimconfig2 = {g_results};
@@ -107,10 +107,10 @@ if b_dimconfig0
     options.Method = 'dimconfig0';
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Hybrid Slicing Scheme 0');
     pause(0.01);
-    for i = 1:length(thetas)
+    for i = 1:length(etas)
         GlobalState.Initialize();
         seed_dynamic = SEED;
-        DynamicSlice.THETA(thetas(i));
+        DynamicSlice.ETA(etas(i));
         SingleSliceReconfiguration;
         if i == 1
             results.Dimconfig0 = {g_results};

@@ -11,7 +11,7 @@ else
 end
 xlabel('Experiment Time');
 % fig_num_reconfig.OuterPosition = [100 400 400 380];
-for i = 1:length(thetas)
+for i = 1:length(etas)
     yyaxis('left');
     hl = plot(idx, results.Reconfig{idx,'NumberReconfigVariables'}, '-.', ...
         idx, results.Fastconfig{i}{idx,'NumberReconfigVariables'}, ':',...
@@ -36,7 +36,7 @@ for i = 1:length(thetas)
     hr(1).LineWidth = 1;
     ylabel('Number of Variables');
     hr.Parent.YColor = Color.Orange.RGB;
-    title(sprintf('\\eta=%.2f', thetas(i)));
+    title(sprintf('\\eta=%.2f', etas(i)));
     legend([legend_label, {'Variable#'}], 'Location', 'northwest');
     ylimmax = max(ylimmax, hr.Parent.YLim(2));
     yyaxis left;
@@ -54,7 +54,7 @@ else
 end
 % fig_num_reconfig.OuterPosition = [100 400 400 380];
 % yyaxis left;
-for i = 1:length(thetas)
+for i = 1:length(etas)
     ratio_reconfig = results.Reconfig{idx,'NumberReconfigVariables'}./...
         results.Reconfig{idx,'NumberVariables'};
     ratio_fastconfig = results.Fastconfig{i}{idx,'NumberReconfigVariables'}./...
@@ -93,7 +93,7 @@ for i = 1:length(thetas)
     %     'Location', 'northwest');
     ylim([0,1]);
     legend(legend_label, 'Location', 'best', 'Orientation', 'vertical');
-    title(sprintf('\\eta=%.2f', thetas(i)));
+    title(sprintf('\\eta=%.2f', etas(i)));
     pause(0.1);
 end
 %% Cost of Reconfiguration
@@ -102,8 +102,8 @@ if exist('fig_cost_reconfig', 'var') && fig_cost_reconfig.isvalid
 else
     fig_cost_reconfig = figure('Name', 'Cost of Reconfiguration');
 end
-for i = 1:length(thetas)
-    hl = plot(idx, results.Reconfig{idx,'Cost'}*thetas(i), '-.', ...
+for i = 1:length(etas)
+    hl = plot(idx, results.Reconfig{idx,'Cost'}*etas(i), '-.', ...
         idx, results.Fastconfig{i}{idx,'Cost'}, ':', ...
         idx, results.Fastconfig2{i}{idx,'Cost'}, '.');
     if ~exist('b_disable_dimconfig', 'var') || b_disable_dimconfig == false
@@ -121,7 +121,7 @@ for i = 1:length(thetas)
     ylabel('Cost');
     xlabel('Experiment Time');
     legend(legend_label, 'Location', 'northwest');
-    title(sprintf('\\eta=%.2f', thetas(i)));
+    title(sprintf('\\eta=%.2f', etas(i)));
     pause(0.1);
 end
 
@@ -131,7 +131,7 @@ if exist('fig_flow_reconfig', 'var') && fig_flow_reconfig.isvalid
 else
     fig_flow_reconfig = figure('Name', 'Number of Reconfigured Flows');
 end
-for i = 1:length(thetas)
+for i = 1:length(etas)
     yyaxis left;
     hl = plot(idx, results.Reconfig{idx,'NumberReconfigFlows'}, '-.', ...
         idx, results.Fastconfig{i}{idx,'NumberReconfigFlows'}, ':', ...
@@ -162,7 +162,7 @@ for i = 1:length(thetas)
     ylim([0, max(ylimmax)+2]);
     xlabel('Experiment Time');
     legend([legend_label,{'Flows #'}], 'Location', 'northwest');
-    title(sprintf('\\eta=%.2f', thetas(i)));
+    title(sprintf('\\eta=%.2f', etas(i)));
     pause(0.1);
 end
 
@@ -174,9 +174,9 @@ else
 end
 % fig_profit_reconfig.OuterPosition = [100 400 400 380];
 xlabel('Experiment Time');
-for i = 1:length(thetas)
+for i = 1:length(etas)
     yyaxis left;
-    profit = results.Reconfig{idx,'Profit'} + (1-thetas(i))*results.Reconfig{idx,'Cost'};
+    profit = results.Reconfig{idx,'Profit'} + (1-etas(i))*results.Reconfig{idx,'Cost'};
     hl = plot(idx, profit, '-.', ...
         idx, results.Fastconfig{i}{idx,'Profit'}, ':',...
         idx, results.Fastconfig2{i}{idx,'Profit'}, '.');
@@ -199,7 +199,7 @@ for i = 1:length(thetas)
     hr.Parent.YLim(1) = 0;
     ylabel('Number of Flows');
     legend([legend_label, {'Flow #'}], 'Location', 'northwest');
-    title(sprintf('\\eta=%.2f', thetas(i)));
+    title(sprintf('\\eta=%.2f', etas(i)));
     pause(0.1);
     % pause;
 end
