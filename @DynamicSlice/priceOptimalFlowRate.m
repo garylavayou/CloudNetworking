@@ -206,6 +206,8 @@ this.convert(x);
 % The post processing like <optimalFlowRate> is not needed, since the
 % objective function (reconfiguration cost) will force those variables to be zero.
 
+% Passing out the load information is not necessary, since the network only reuqire the
+% information of occupied capacity.
 if nargout >= 2
     node_load = zeros(this.Parent.NumberDataCenters,1);
     data_center_id = this.getDCPI;

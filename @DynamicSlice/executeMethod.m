@@ -74,6 +74,7 @@ else
     % case we need to perform slice redimensioning.
     if contains(this.options.Method, {'dimconfig'}) && ...
             ~isempty(setdiff(this.FlowTable.Identifier(fidx), this.reject_index))
+        cprintf('SystemCommands', '[%s]: reconfigure flows due to low rate.\n', this.options.Method);
         options.b_dim = true;
         [profit,cost] = this.DimensioningReconfigure(action, options);
     end

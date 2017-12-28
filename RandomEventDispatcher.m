@@ -162,7 +162,6 @@ classdef RandomEventDispatcher < matlab.mixin.Copyable
             %             this.current_depart_pos = 1;
             %             this.accumulate_arrival = 1;
         end
-        
     end
     
     methods
