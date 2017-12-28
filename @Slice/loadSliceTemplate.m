@@ -172,19 +172,19 @@ for i = 1:length(type_index)
             % 6. 
             %
             % Assuming that the target network <Sample-2> has 6 data centers, so we set
-            % the number of flows to: 18 = 1/2*(6*6);
+            % the approximate number of flows to: 36 = 6*6;
             %
-            % Flow arrival rate is set to 60 sec/arrival, i.e., 60 arrivals/hour, while
-            % the service interval is set to 1080s(18min), so that the average number of
-            % flows stays at 18. 
+            % Flow arrival rate is set to 30 sec/arrival, i.e., 120 arrivals/hour, while
+            % the service interval is set to 900s(10min), so that the average number of
+            % flows stays at 30(¡Ö36). 
             slice_template(i).Weight = 50;
             slice_template(i).NumberPaths = 2;
             slice_template(i).VNFList = [1,2,4,5];
             slice_template(i).ArrivalRate = 1/3600;  % 1 arrival/hour => 3600 sec/arrival
             slice_template(i).ServiceInterval = 3600*6; % 
-            slice_template(i).NumberFlows = 18;
-            slice_template(i).Flow.ArrivalRate = 60/3600;  % 60 arrivals/hour  
-            slice_template(i).Flow.ServiceInterval = 1080; 
+            slice_template(i).NumberFlows = 30;
+            slice_template(i).Flow.ArrivalRate = 60/1800;  % 120 arrivals/hour  
+            slice_template(i).Flow.ServiceInterval = 900; 
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
             slice_template(i).ReconfigScaler = 2.4;
         case 64 
@@ -197,7 +197,7 @@ for i = 1:length(type_index)
             %
             % Those flows always arrive at the creation of the slice and depart when the
             % slice is released. Thus the arrival rate of flow is relatively lower. Flow
-            % arrival rate is set to 450 sec/arrival, i.e., 8 arrivals/hour, while  
+            % arrival rate is set to 225 sec/arrival, i.e., 8 arrivals/hour, while  
             % the service interval is set to 1800s(30min), so that the average number of
             % flows stays at 4. 
             slice_template(i).Weight = 300;
@@ -206,8 +206,8 @@ for i = 1:length(type_index)
             slice_template(i).ArrivalRate = 10/3600;   % 4 arrivals/hour
             slice_template(i).ServiceInterval = 3600;
             slice_template(i).NumberFlows = 4;
-            slice_template(i).Flow.ArrivalRate = 8/3600; % 8 arrivals/hour  
-            slice_template(i).Flow.ServiceInterval = 1800; 
+            slice_template(i).Flow.ArrivalRate = 8/1800; % 8 arrivals/hour  
+            slice_template(i).Flow.ServiceInterval = 900; 
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
             slice_template(i).ReconfigScaler = 0.5;
         otherwise
@@ -222,9 +222,9 @@ for i = 1:length(type_index)
                 case 44
                     slice_template(i).EventInterval = 30;       % {50}
                 case 54
-                    slice_template(i).EventInterval = 10;
+                    slice_template(i).EventInterval = 20;
                 case 64
-                    slice_template(i).EventInterval = 4;
+                    slice_template(i).EventInterval = 6;
                 otherwise
                     error('error: unrecognized slice type (%d).', type_index(i));
             end
@@ -232,7 +232,7 @@ for i = 1:length(type_index)
             slice_template(i).Trigger = 'TimeBased';
             switch mod(type_index(i),100)
                 case 44
-                    slice_template(i).TimeInterval = 100;
+                    slice_template(i).TimeInterval = 60;
                 case 54
                     slice_template(i).TimeInterval = 300;
                 case 64
