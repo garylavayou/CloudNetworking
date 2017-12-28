@@ -17,7 +17,7 @@ function [profit, grad] = fcnProfit(vars, slice, options)
 % determine varriables.
 var_path = vars(1:slice.NumberPaths);
 var_node = vars((slice.NumberPaths+1):end);
-link_load = slice.getLinkLoad(var_path);
+link_load = slice.getLinkLoad(var_path);    % equal to <getLinkCapacity>
 node_load = slice.getNodeLoad(var_node);
 flow_rate = slice.getFlowRate(var_path);
 

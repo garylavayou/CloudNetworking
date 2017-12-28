@@ -369,9 +369,11 @@ classdef CloudNetwork < PhysicalNetwork
                         sl = options.Slices{s};
                         link_id = sl.VirtualLinks.PhysicalLink;
                         dc_id = sl.getDCPI;
+                        % To get the revenue of slice provider, we need to how much
+                        % resource the slices occupy.
                         revenue = revenue + ...
-                            sl.fcnLinkPricing(link_price(link_id), sl.getLinkLoad(sl.temp_vars.x)) + ...
-                            sl.fcnNodePricing(node_price(dc_id), sl.getNodeLoad(sl.temp_vars.z));
+                            sl.fcnLinkPricing(link_price(link_id), sl.getLinkCapacity(sl.temp_vars.x)) + ...
+                            sl.fcnNodePricing(node_price(dc_id), sl.getNodeCapacity(sl.temp_vars.z));
                     end
                 otherwise
                     revenue = dot(node_load, node_price) + dot(link_load, link_price);

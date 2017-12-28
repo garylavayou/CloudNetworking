@@ -3,7 +3,7 @@ function [fval,  grad] = subproblemObjective(var_x, lambda, S)
 %   method. This subproblem is associate with one of the slice.
 var_path = var_x(1:S.NumberPaths);
 var_node = var_x((S.NumberPaths+1):end);
-link_load = S.getLinkLoad(var_path);    % the load of virtual links in the slice
+link_load = S.getLinkLoad(var_path);    % the load of virtual links in the slice, equal to <getLinkCapacity>
 node_load = S.getNodeLoad(var_node);    % the load of virtual nodes in the slice 
 
 %% net profit of a slice

@@ -28,7 +28,7 @@ else                        % for network as multiple slice.
 end
 var_node = vars((slice.NumberPaths+1):end);
 node_load = slice.getNodeLoad(var_node);
-link_load = slice.getLinkLoad(var_path);
+link_load = slice.getLinkLoad(var_path);  % equal to <getLinkCapacity>
 profit = -sum(weight.*fcnUtility(flow_rate)) + slice.getResourceCost(node_load, link_load);
 
 % If there is only one output argument, return the real profit (positive)

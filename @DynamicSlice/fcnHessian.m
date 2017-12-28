@@ -31,37 +31,53 @@ if nargin >= 4
     end
     switch options.PricingPolicy
         case 'quadratic-price'
-            var_node = vars((NP+1):slice.num_vars);
-            [~,~,lph] = slice.fcnLinkPricing(slice.prices.Link, slice.getLinkLoad(var_path));
-            [~,~,nph] = slice.fcnNodePricing(slice.prices.Node, slice.getNodeLoad(var_node));
-            NC = slice.NumberDataCenters;
+            ND = slice.NumberDataCenters;
+            NV = slice.NumberVNFs;
+            NL = slice.NumberVirtualLinks;
+            if length(vars) == slice.num_vars
+                var_node = vars((NP+1):slice.num_vars);
+                node_load = slice.getNodeLoad(var_node);
+            else
+                var_offset = slice.num_vars;
+                var_vnf = reshape(vars(var_offset+(1:options.num_varv)), ND, NV);
+                node_load = sum(var_vnf,2);
+            end
+            if isempty(slice.lower_bounds)
+                link_load = slice.getLinkLoad(var_path);
+            else
+                var_offset = options.num_orig_vars*2;
+                link_load = vars(var_offset+(1:NL));
+            end
+            % Since we pricing the resources, we should know amount of resource occupied,
+            % instead of the actual load.
+            [~,~,lph] = slice.fcnLinkPricing(slice.prices.Link, link_load);
+            [~,~,nph] = slice.fcnNodePricing(slice.prices.Node, node_load);
             if isempty(slice.lower_bounds)
                 h1 = (slice.I_edge_path') * lph * slice.I_edge_path;
                 hess(1:NP, 1:NP) = hess(1:NP, 1:NP) + h1;
-                h2 = spalloc(NP*NC, NP*NC, NP*NP*NC);
-                z_index1 = 1:NC;
+                h2 = spalloc(NP*ND, NP*ND, NP*NP*ND);
+                z_index1 = 1:ND;
                 for p1 = 1:NP
-                    z_index2 = 1:NC;
+                    z_index2 = 1:ND;
                     for p2 = 1:p1
                         % we only calculate the lower triangle, and use the symetric property
                         % to fill the upper triangle.
                         h2(z_index1,z_index2) = ...
                             diag(slice.I_node_path(:,p1) .* nph .* slice.I_node_path(:,p2)); %#ok<SPRIX>
-                        z_index2 = z_index2 + NC;
+                        z_index2 = z_index2 + ND;
                     end
-                    z_index1 = z_index1 + NC;
+                    z_index1 = z_index1 + ND;
                 end
                 h2 = h2 + (tril(h2,-1))';   % fill the upper triangle since the
-                h2 = repmat(h2, slice.NumberVNFs, slice.NumberVNFs);
+                h2 = repmat(h2, NV, NV);
                 hess((NP+1):slice.num_vars, (NP+1):slice.num_vars) = h2;
             else
                 % second derviatives of resource cost on (x,z) = 0;
                 % second derviatives of resource cost on (c,w(v))
-                var_offset = options.num_orig_vars*2;
-                c_index = var_offset+(1:slice.NumberVirtualLinks);
+                c_index = var_offset+(1:NL);
                 hess(c_index,c_index) = lph;
                 v_index = slice.num_vars+(1:slice.num_varv);
-                hess(v_index,v_index) = block_diag(diag(nph), slice.NumberVNFs);
+                hess(v_index,v_index) = block_diag(diag(nph), NV);
             end
         otherwise
     end

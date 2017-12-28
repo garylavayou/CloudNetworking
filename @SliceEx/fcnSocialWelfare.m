@@ -27,7 +27,7 @@ if nargin <= 2
 end
 var_node = var_x((S.NumberPaths+1):end);
 node_load = S.getNodeLoad(var_node);
-link_load = S.getLinkLoad(var_path);
+link_load = S.getLinkLoad(var_path);  % equal to <getLinkCapacity>
 profit = -sum(weight.*fcnUtility(flow_rate)) ...
     + S.getResourceCost(node_load, link_load, model);
 profit = profit - S.constant_profit;

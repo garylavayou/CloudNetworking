@@ -52,7 +52,7 @@ if nargin >= 4
             % Then, for all paths, the hessian matrix component can represented by 
             % $G^T D_e\c G$, where matrix $G(e,p) = g_{e,p}$, $D_e$ is the
             % diagnoal matrix for $\rho_e^{''}$.
-            [~,~,lph] = slice.fcnLinkPricing(slice.prices.Link, slice.getLinkLoad(var_path));
+            [~,~,lph] = slice.fcnLinkPricing(slice.prices.Link, slice.getLinkLoad(var_path)); % equal to <getLinkCapacity>
             h1 = (slice.I_edge_path') * lph * slice.I_edge_path;
             hess(1:NP, 1:NP) = hess(1:NP, 1:NP) + h1;
             var_node = vars((NP+1):slice.num_vars);

@@ -139,8 +139,8 @@ for s = 1:NS
     pid_offset = pid_offset + sl.NumberPaths;
     assert(sl.checkFeasible([sl.temp_vars.x; sl.temp_vars.z], ...
         struct('ConstraintTolerance', fmincon_opt.ConstraintTolerance)), 'error: infeasible solution.');
-    sl.VirtualDataCenters.Capacity = sl.getNodeLoad(sl.temp_vars.z);
-    sl.VirtualLinks.Capacity = sl.getLinkLoad(sl.temp_vars.x);
+    sl.VirtualDataCenters.Capacity = sl.getNodeCapacity(sl.temp_vars.z);
+    sl.VirtualLinks.Capacity = sl.getLinkCapacity(sl.temp_vars.x);
     % DEBUG
 %     eid = sl.VirtualLinks.PhysicalLink;
 %     node_load(nid) = node_load(nid) + sl.VirtualNodes.Capacity;
