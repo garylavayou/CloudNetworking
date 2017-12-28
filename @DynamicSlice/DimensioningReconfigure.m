@@ -155,6 +155,8 @@ if nargout>=2
     end
 end
 %% Reset statistics
+% update the period for performing dimensioning by exponential moving average
+this.time.DimensionInterval = this.time.DimensionInterval * this.a + (this.time.Current-this.time.LastDimensioning)*(1-this.a);
 this.time.LastDimensioning = this.time.Current;
 this.event.RecentCount = 0;
 this.lower_bounds = struct([]);
