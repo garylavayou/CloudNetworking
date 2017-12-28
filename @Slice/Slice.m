@@ -4,8 +4,8 @@
 classdef Slice < VirtualNetwork & EventReceiver
     % Specify the properties that can only be modified by Physcial Network directly
     properties (SetAccess = {?Slice,?CloudNetwork,?SliceFlowEventDispatcher})
-        temp_vars;      % [x,z]: temporary variables that will not be rounded.
-        Variables;      % [x,z]: final results from |temp_vars|, with rounding.
+        temp_vars = struct; % [x,z]: temporary variables that will not be rounded.
+        Variables;          % [x,z]: final results from |temp_vars|, with rounding.
         weight;             % weight for the slice user's utility.
         As_res;             % coefficient matrix of the processing constraints
         prices;
@@ -190,73 +190,29 @@ classdef Slice < VirtualNetwork & EventReceiver
                 r = this.I_flow_path * path_vars;
             end
         end
-        
-        function ye = getLinkLoad(this, path_vars)
-            % retrive the link load of the slice, given the path variables.
+           
+        %% Capacity and Load
+        % Public interface for network to inquire the resource occupation of the slices.
+        % In class <Slice>, <getLinkCapacity> and <getNodeCapacity> are equal to the
+        % protected methods <getLinkLoad> and <getNodeLoad> respectively. But in
+        % subclasses of <Slice>, the slice load might be less than its capacity, so that
+        % the two group of methods return different results.
+        function c = getLinkCapacity(this, path_vars)
             if nargin == 1
-                ye = this.I_edge_path * this.Variables.x;
+                c = this.getLinkLoad;
             else
-                ye = this.I_edge_path * path_vars;
+                c = this.getLinkLoad(path_vars);
             end
         end
         
-        %         function vn = getNodeLoad(this, node_vars)
-        %             if nargin == 1
-        %                 node_vars = this.Variables.z;
-        %             end
-        %             %%
-        %             % |node_vars| is index by |(node,path,function)|.
-        %             % node_load = sum(f, node_vars(:,:,f).*I_node_path).
-        %             NN = this.NumberVirtualNodes;
-        %             NP = this.NumberPaths;
-        %             NV = this.NumberVNFs;
-        %             vn = zeros(NN,1);
-        %             np = NN * NP;
-        %             z_index = 1:np;
-        %             for i = 1:NV
-        %                 node_vars_fi = reshape(node_vars(z_index), NN, NP);
-        %                 vn = vn + sum(this.I_node_path.*node_vars_fi,2);
-        %                 z_index = z_index + np;
-        %             end
-        %%%
-        % retrive the node load of the slice, given the node variables. The node variables
-        % represent the resource allocation of data center nodes.
-        %
-        % |v_n|: data center's resource consumption.
-        function v_n = getNodeLoad(this, node_vars)
+        function c = getNodeCapacity(this, node_vars)
             if nargin == 1
-                node_vars = this.Variables.z;
+                c = this.getNodeLoad;
+            else
+                c = this.getNodeLoad(node_vars);
             end
-            %%
-            % |node_vars| is index by |(node,path,function)|.
-            v_n = this.Hrep*node_vars;
-            % node_load = sum(f, node_vars(:,:,f).*I_node_path).
-            %             NC = this.NumberDataCenters;
-            %             NP = this.NumberPaths;
-            %             v_n = zeros(NC,1);
-            %             np = NC * NP;
-            %             z_index = 1:np;
-            %             for i = 1:this.NumberVNFs
-            %                 node_vars_fi = reshape(node_vars(z_index), NC, NP);
-            %                 v_n = v_n + sum(this.I_node_path.*node_vars_fi,2);
-            %                 z_index = z_index + np;
-            %             end
-            %             assert(isempty(find(abs(this.Hrep*node_vars-v_n)>10^-6,1)), 'error: unequal node load');
-            %% Alternative way to compute the node load.
-            %             col_index = (1:NC:((NP-1)*NC+1))';
-            %             col_index = repmat(col_index, 1, NV);
-            %             for c = 2:NV
-            %                 col_index(:,c) = col_index(:,c-1) + NC*NP;
-            %             end
-            %             col_index = col_index(:);
-            %             As = zeros(NC, NP*NV);
-            %             for row_index = 1:NC
-            %                 As(row_index, col_index) = repmat(this.I_node_path(row_index,:),1, NV);
-            %                 col_index = col_index + 1;
-            %             end
-            %             vn = As*node_vars;
         end
-            
+        
         function vc = getVNFCapacity(this, z)
             %       znpf = reshape(full(this.Variables.z), this.NumberDataCenters, ...
             %       this.NumberPaths, this.NumberVNFs);
@@ -683,6 +639,76 @@ classdef Slice < VirtualNetwork & EventReceiver
         
         function temp_vars = get_temp_variables(this)
             temp_vars = [this.temp_vars.x; this.temp_vars.z];
+        end
+
+        %%
+        % <getLinkLoad> and <getNodeLoad> are only used inside the <Slice> class. The
+        % substrate network cares how much resources are ocuppied by the slice, that is
+        % the capacity of resources. See also <getLinkCapacity> and <getNodeCpacity>.
+        function ye = getLinkLoad(this, path_vars)
+            % retrive the link load of the slice, given the path variables.
+            if nargin == 1
+                ye = this.I_edge_path * this.Variables.x;
+            else
+                ye = this.I_edge_path * path_vars;
+            end
+        end
+        
+        %         function vn = getNodeLoad(this, node_vars)
+        %             if nargin == 1
+        %                 node_vars = this.Variables.z;
+        %             end
+        %             %%
+        %             % |node_vars| is index by |(node,path,function)|.
+        %             % node_load = sum(f, node_vars(:,:,f).*I_node_path).
+        %             NN = this.NumberVirtualNodes;
+        %             NP = this.NumberPaths;
+        %             NV = this.NumberVNFs;
+        %             vn = zeros(NN,1);
+        %             np = NN * NP;
+        %             z_index = 1:np;
+        %             for i = 1:NV
+        %                 node_vars_fi = reshape(node_vars(z_index), NN, NP);
+        %                 vn = vn + sum(this.I_node_path.*node_vars_fi,2);
+        %                 z_index = z_index + np;
+        %             end
+        %%%
+        % retrive the node load of the slice, given the node variables. The node variables
+        % represent the resource allocation of data center nodes.
+        %
+        % |v_n|: data center's resource consumption.
+        function v_n = getNodeLoad(this, node_vars)
+            if nargin == 1
+                node_vars = this.Variables.z;
+            end
+            %%
+            % |node_vars| is index by |(node,path,function)|.
+            v_n = this.Hrep*node_vars;
+            % node_load = sum(f, node_vars(:,:,f).*I_node_path).
+            %             NC = this.NumberDataCenters;
+            %             NP = this.NumberPaths;
+            %             v_n = zeros(NC,1);
+            %             np = NC * NP;
+            %             z_index = 1:np;
+            %             for i = 1:this.NumberVNFs
+            %                 node_vars_fi = reshape(node_vars(z_index), NC, NP);
+            %                 v_n = v_n + sum(this.I_node_path.*node_vars_fi,2);
+            %                 z_index = z_index + np;
+            %             end
+            %             assert(isempty(find(abs(this.Hrep*node_vars-v_n)>10^-6,1)), 'error: unequal node load');
+            %% Alternative way to compute the node load.
+            %             col_index = (1:NC:((NP-1)*NC+1))';
+            %             col_index = repmat(col_index, 1, NV);
+            %             for c = 2:NV
+            %                 col_index(:,c) = col_index(:,c-1) + NC*NP;
+            %             end
+            %             col_index = col_index(:);
+            %             As = zeros(NC, NP*NV);
+            %             for row_index = 1:NC
+            %                 As(row_index, col_index) = repmat(this.I_node_path(row_index,:),1, NV);
+            %                 col_index = col_index + 1;
+            %             end
+            %             vn = As*node_vars;
         end
 
     end
