@@ -34,6 +34,8 @@ classdef DynamicSlice < Slice & EventSender
         % If a resource price is p, we assume that the reconfigruation cost
         % coefficient of this resource is ¦Èp. If we adopt a varying pricing, like
         % p=av+b, then the coeffcient is ¦È(av+b).
+        
+        a = 0.8;        % a for the history, should have a larger weight (EMA)
     end
     properties(Access=private)
         z_reconfig_cost;    % for z_npf, used in optimization, the value updates during each fast reconfiguration
@@ -43,7 +45,7 @@ classdef DynamicSlice < Slice & EventSender
         changed_index;
         topts;              % used in optimization, avoid passing extra arguments.
         reject_index;
-        lower_bounds;
+        lower_bounds = struct([]);
     end
     properties(Dependent, Access=protected)
         num_varv;
@@ -134,12 +136,22 @@ classdef DynamicSlice < Slice & EventSender
                     this.FlowServiceInterval = slice_data.Flow.ServiceInterval;
                 end
             end
-            % Interval should be configurable.
-            this.time = struct('Current', 0, 'LastDimensioning', 0);
+            this.time = struct('Current', 0, 'LastDimensioning', 0, ...
+                'DimensionInterval', 0, 'ConfigureInterval', 0);
+            % Now 'ConfigureInterval' is constant, yet it also can be updated via EMA.
+            this.time.ConfigureInterval = 1/(2*this.FlowArrivalRate);   
             this.event.RecentCount = 0;
+            % Interval for performing dimensioning should be configurable.
             this.options = structmerge(this.options, ...
                 getstructfields(slice_data, ...
                 {'TimeInterval', 'EventInterval', 'Trigger', 'Adhoc'}, 'ignore'));
+            if isfield(this.options, 'EventInterval')
+                this.time.DimensionInterval = this.options.EventInterval/(2*this.FlowArrivalRate); % both arrival and departure events
+            elseif isfield(this.options, 'TimeInterval')
+                this.time.DimensionInterval = this.options.TimeInterval;
+            elseif isfield(this.options, 'Trigger')
+                this.time.DimensionInterval = 10/this.FlowArrivalRate;
+            end
             if ~isfield(slice_data, 'ReconfigScaler')
                 this.options.ReconfigScaler = 1;
             else
@@ -173,12 +185,12 @@ classdef DynamicSlice < Slice & EventSender
                 [~, this.VirtualLinks.ReconfigCost] = this.fcnLinkPricing(...
                     this.VirtualLinks.Price, this.VirtualLinks.Capacity);
                 this.VirtualLinks.ReconfigCost = ...
-                    DynamicSlice.THETA * this.VirtualLinks.ReconfigCost;
+                    (DynamicSlice.ETA/this.time.ConfigureInterval) * this.VirtualLinks.ReconfigCost;
                 % here the |node_price| is the price of all data centers.
                 [~, this.VirtualDataCenters.ReconfigCost] = this.fcnNodePricing(...
                     this.VirtualDataCenters.Price, this.VirtualDataCenters.Capacity);
                 this.VirtualDataCenters.ReconfigCost = ...
-                    DynamicSlice.THETA * this.VirtualDataCenters.ReconfigCost;
+                    (DynamicSlice.ETA/this.time.ConfigureInterval) * this.VirtualDataCenters.ReconfigCost;
             end
             %                 else
             %                 end
@@ -230,6 +242,26 @@ classdef DynamicSlice < Slice & EventSender
     end
     
     methods
+        function c = getLinkCapacity(this, path_vars)
+            if nargin == 1
+                c = this.VirtualLinks.Capacity;
+            elseif ~isempty(this.lower_bounds)
+                c = this.temp_vars.c;
+            else
+                c = getLinkCapacity@Slice(this, path_vars);
+            end
+        end
+        function c = getNodeCapacity(this, node_vars)
+            if nargin == 1
+                c = this.VirtualDataCenters.Capacity;
+            elseif ~isempty(this.lower_bounds)
+                c = sum(reshape(this.temp_vars.v, ...
+                    this.NumberDataCenters,this.NumberVNFs),2);
+            else
+                c = getNodeCapacity@Slice(this, node_vars);
+            end
+        end
+        
         function c = get.VNFCapacity(this)
             c = this.Variables.v;
         end
@@ -872,9 +904,8 @@ classdef DynamicSlice < Slice & EventSender
     methods(Static)
         %%%
         % Emulation of a static property.
-        function th = THETA(t)
+        function th = ETA(t)
             %% Reconfiguration Cost Coefficient
-            % 
             persistent var_theta;
             if nargin >= 1
                 var_theta = t;
