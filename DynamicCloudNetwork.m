@@ -233,6 +233,7 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             stat.Profit = output.Profit(end-1);
             stat.ReconfigType = ReconfigType.Dimensioning;
             stat.ResourceCost = sl.getSliceCost('quadratic-price');   % _optimizeResourcePriceNew_ use 'quadratic-price'
+            stat.FairIndex = (sum(sl.FlowTable.Rate))^2/(sl.NumberFlows*sum(sl.FlowTable.Rate.^2));
             global g_results; 
             g_results = stat;       % The first event.
         end

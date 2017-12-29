@@ -115,6 +115,7 @@ switch this.options.Method
         end
 end
 stat.ResourceCost = cost;
+stat.FairIndex = (sum(this.FlowTable.Rate))^2/(this.NumberFlows*sum(this.FlowTable.Rate.^2));
 g_results(event_num,:) = stat;
 
 %% Reset temporary variables
