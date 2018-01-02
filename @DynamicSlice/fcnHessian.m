@@ -34,18 +34,18 @@ if nargin >= 4
             ND = slice.NumberDataCenters;
             NV = slice.NumberVNFs;
             NL = slice.NumberVirtualLinks;
-            if length(vars) == slice.num_vars
-                var_node = vars((NP+1):slice.num_vars);
+            num_baisc_vars = options.num_varx+options.num_varz;
+            if length(vars) == num_baisc_vars
+                var_node = vars((NP+1):num_baisc_vars);
                 node_load = slice.getNodeLoad(var_node);
             else
-                var_offset = slice.num_vars;
-                var_vnf = reshape(vars(var_offset+(1:options.num_varv)), ND, NV);
+                var_vnf = reshape(vars(num_baisc_vars+(1:options.num_varv)), ND, NV);
                 node_load = sum(var_vnf,2);
             end
             if isempty(slice.lower_bounds)
                 link_load = slice.getLinkLoad(var_path);
             else
-                var_offset = options.num_orig_vars*2;
+                var_offset = (options.num_varx+options.num_varz+options.num_varv)*2;
                 link_load = vars(var_offset+(1:NL));
             end
             % Since we pricing the resources, we should know amount of resource occupied,
@@ -70,7 +70,7 @@ if nargin >= 4
                 end
                 h2 = h2 + (tril(h2,-1))';   % fill the upper triangle since the
                 h2 = repmat(h2, NV, NV);
-                hess((NP+1):slice.num_vars, (NP+1):slice.num_vars) = h2;
+                hess((NP+1):num_baisc_vars, (NP+1):num_baisc_vars) = h2;
             else
                 % second derviatives of resource cost on (x,z) = 0;
                 % second derviatives of resource cost on (c,w(v))

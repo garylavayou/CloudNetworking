@@ -146,11 +146,16 @@ assert(this.checkFeasible(var0), 'error: infeasible start point.');
 fmincon_opt = optimoptions(@fmincon);
 fmincon_opt.Algorithm = 'interior-point';
 fmincon_opt.SpecifyObjectiveGradient = true;
+fmincon_opt.MaxIterations = 60;
+fmincon_opt.MaxFunctionEvaluations = 180;
 fmincon_opt.Display = InfoLevel.InnerModelDebug.char;   %'notify-detailed'; %'iter';
-% options.Form = 'normal';
+% fmincon_opt.CheckGradients = true;
+% fmincon_opt.Diagnostics = 'on';
+% fmincon_opt.FiniteDifferenceType = 'central';
 options.num_varx = this.NumberPaths;
 options.num_varz = this.num_varz;
 options.num_varv = this.num_varv;
+options.Form = 'normal';
 if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
     % column/variables: isequal(this.I_active_variables', sum(this.As_res,1)~=0)
     % row/constraints:  isequal(active_rows, find(sum(this.As_res,2)~=0))  
@@ -177,7 +182,6 @@ if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
     bs = bs(active_rows);
 %     old_z_reconfig_cost = this.z_reconfig_cost;
 %     this.z_reconfig_cost = this.z_reconfig_cost(z_filter);
-    options.num_orig_vars = this.num_vars+this.num_varv;
     fmincon_opt.HessianFcn = ...
         @(x,lambda)DynamicSlice.fcnHessianCompact(x, lambda, this, options);
     [x_compact, fval, exitflag, output] = ...
@@ -187,7 +191,6 @@ if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
     x(this.I_active_variables) = x_compact;
 %     this.z_reconfig_cost = old_z_reconfig_cost;     % recover.
 else
-    lbs = sparse(num_vars,1);
     fmincon_opt.HessianFcn = @(x,lambda)DynamicSlice.fcnHessian(x, lambda, this, options);
     [x, fval, exitflag, output] = fmincon(@(x)DynamicSlice.fcnProfit(x, this, options), ...
         var0, As, bs, [], [], lbs, [], [], fmincon_opt);

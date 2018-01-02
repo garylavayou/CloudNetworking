@@ -54,7 +54,14 @@ bs = sparse(this.num_lcon_res,1);
 fmincon_opt = optimoptions(@fmincon);
 fmincon_opt.Algorithm = 'interior-point';
 fmincon_opt.SpecifyObjectiveGradient = true;
+%% diagnostics
 fmincon_opt.Display = InfoLevel.InnerModel.char;   %'notify-detailed'; %'iter';
+% fmincon_opt.CheckGradients = true;
+% fmincon_opt.FiniteDifferenceType = 'central';
+% fmincon_opt.FiniteDifferenceStepSize = 1e-10;
+% fmincon_opt.Diagnostics = 'on';
+%%
+% options.Form = 'normal';
 if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
     %     isequal(this.I_active_variables', sum(this.As_res,1)~=0)
     z_filter = sparse(repmat(...
@@ -63,7 +70,6 @@ if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
     As_compact = this.As_res(:, this.I_active_variables);
     var0_compact = this.x0(this.I_active_variables);
     lbs = sparse(length(var0_compact),1);
-    options.num_orig_vars = this.num_vars;
     fmincon_opt.HessianFcn = ...
         @(x,lambda)Slice.fcnHessianCompact(x, lambda, this, options);
     [x_compact, fval, exitflag, output] = ...

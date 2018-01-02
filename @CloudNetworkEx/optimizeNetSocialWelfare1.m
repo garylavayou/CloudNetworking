@@ -163,7 +163,7 @@ output.profit = table(t, t, t, t, 'VariableNames',...
     {'ApproximatePercent', 'ApproximatePrice', 'AccuratePercent', 'AccuratePrice'});
 clear t;
 options.Model = 'Accurate';
-options.Final;
+options.bFinal = true;
 output.flow_rate = [];
 for s = 1:NS
     sl = this.slices{s};

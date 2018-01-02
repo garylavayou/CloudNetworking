@@ -105,7 +105,7 @@ classdef Slice < VirtualNetwork & EventReceiver
         % equation:
         %    $\sum_{p,f}{b_{np}z_{npf}} \le V_{n}$
         %
-        % For the node capacity constraint, the coefficient matrix is filled row-by-row.
+        % For the _node capacity constraint_, the coefficient matrix is filled row-by-row.
         % On row i, the non-zero elements located at (i-1)+(1:NC:((NP-1)*NC+1)) for the
         % first |NC*NP| columns, and then the first |NC*NP| columns are duplicated for
         % |NV| times, resulting in |NC*NP*NV| columns.
@@ -117,14 +117,14 @@ classdef Slice < VirtualNetwork & EventReceiver
             NV = this.NumberVNFs;
             
             H = spalloc(NC, this.num_varz, nnz(this.I_node_path)*NV);
-            col_index = (1:NC:((NP-1)*NC+1))';
-            col_index = repmat(col_index, 1, NV);
+            col_index = (1:NC:((NP-1)*NC+1))';      % the vnf variable index related to the first node
+            col_index = repmat(col_index, 1, NV);   % derive other node's vnf variable index
             for v = 2:NV
                 col_index(:,v) = col_index(:,v-1) + NC*NP;
             end
             col_index = col_index(:);
-            for n = 1:NC
-                H(n, col_index) = repmat(this.I_node_path(n,:),1, NV);  %#ok<SPRIX>
+            for n = 1:NC    % all path that use node n is counted
+                H(n, col_index) = repmat(this.I_node_path(n,:), 1, NV);  %#ok<SPRIX>
                 col_index = col_index + 1;
             end
             this.Hrep = H;
@@ -282,10 +282,8 @@ classdef Slice < VirtualNetwork & EventReceiver
         %
         % NOTE: we can also remove the all-zero rows of the coefficient matrix, which do not
         % influence the number of variables. See also <optimalFlowRate>.
-        % 
-        % *options* must be specified with 'num_orig_vars'.
         function [profit, grad]= fcnProfitCompact(act_vars, slice, options)
-            vars = zeros(options.num_orig_vars,1);
+            vars = zeros(slice.num_vars,1);
             vars(slice.I_active_variables) = act_vars;
             
             % we extend the active variables by adding zeros to the inactive ones.
@@ -315,7 +313,7 @@ classdef Slice < VirtualNetwork & EventReceiver
         hess = fcnHessian(var_x, ~, slice, options);
         %% Compact form of Hessian matrix of the Lagrangian
         function hess = fcnHessianCompact(act_vars, lambda, slice, options) %#ok<INUSL>
-            vars = zeros(options.num_orig_vars,1);
+            vars = zeros(slice.num_vars,1);
             vars(slice.I_active_variables) = act_vars;
             if nargin == 3
                 hess = Slice.fcnHessian(vars, [], slice);
