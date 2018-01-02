@@ -26,7 +26,7 @@ if isempty(slice.weight)        % for network as a single slice.    TODO: remove
 else                        % for network as multiple slice.
     weight = slice.weight*ones(slice.NumberFlows, 1);
 end
-var_node = vars((slice.NumberPaths+1):end);
+var_node = vars((slice.NumberPaths+1):slice.num_vars);
 node_load = slice.getNodeLoad(var_node);
 link_load = slice.getLinkLoad(var_path);  % equal to <getLinkCapacity>
 profit = -sum(weight.*fcnUtility(flow_rate)) + slice.getResourceCost(node_load, link_load);
