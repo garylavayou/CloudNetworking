@@ -70,6 +70,7 @@ if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
     As_compact = this.As_res(:, this.I_active_variables);
     var0_compact = this.x0(this.I_active_variables);
     lbs = sparse(length(var0_compact),1);
+    options.num_orig_vars = this.num_vars;
     fmincon_opt.HessianFcn = ...
         @(x,lambda)Slice.fcnHessianCompact(x, lambda, this, options);
     [x_compact, fval, exitflag, output] = ...

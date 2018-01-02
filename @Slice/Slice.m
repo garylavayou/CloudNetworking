@@ -283,7 +283,7 @@ classdef Slice < VirtualNetwork & EventReceiver
         % NOTE: we can also remove the all-zero rows of the coefficient matrix, which do not
         % influence the number of variables. See also <optimalFlowRate>.
         function [profit, grad]= fcnProfitCompact(act_vars, slice, options)
-            vars = zeros(slice.num_vars,1);
+            vars = zeros(options.num_orig_vars,1);
             vars(slice.I_active_variables) = act_vars;
             
             % we extend the active variables by adding zeros to the inactive ones.
@@ -298,7 +298,7 @@ classdef Slice < VirtualNetwork & EventReceiver
         
         [profit, grad] = fcnSocialWelfare(x_vars, S);
         function [profit, grad] = fcnSocialWelfareCompact(act_vars, slice)
-            vars = zeros(slice.num_vars,1);
+            vars = zeros(options.num_orig_vars,1);
             vars(slice.I_active_variables) = act_vars;
             
             if nargout <= 1
@@ -313,7 +313,7 @@ classdef Slice < VirtualNetwork & EventReceiver
         hess = fcnHessian(var_x, ~, slice, options);
         %% Compact form of Hessian matrix of the Lagrangian
         function hess = fcnHessianCompact(act_vars, lambda, slice, options) %#ok<INUSL>
-            vars = zeros(slice.num_vars,1);
+            vars = zeros(options.num_orig_vars,1);
             vars(slice.I_active_variables) = act_vars;
             if nargin == 3
                 hess = Slice.fcnHessian(vars, [], slice);

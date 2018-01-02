@@ -180,8 +180,7 @@ if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
     var0_compact = var0(this.I_active_variables);
     lbs = lbs(this.I_active_variables);
     bs = bs(active_rows);
-%     old_z_reconfig_cost = this.z_reconfig_cost;
-%     this.z_reconfig_cost = this.z_reconfig_cost(z_filter);
+    options.num_orig_vars = this.num_vars+this.num_varv;
     fmincon_opt.HessianFcn = ...
         @(x,lambda)DynamicSlice.fcnHessianCompact(x, lambda, this, options);
     [x_compact, fval, exitflag, output] = ...
@@ -189,7 +188,6 @@ if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
         var0_compact, As_compact, bs, [], [], lbs, [], [], fmincon_opt);
     x = zeros(num_vars, 1);
     x(this.I_active_variables) = x_compact;
-%     this.z_reconfig_cost = old_z_reconfig_cost;     % recover.
 else
     fmincon_opt.HessianFcn = @(x,lambda)DynamicSlice.fcnHessian(x, lambda, this, options);
     [x, fval, exitflag, output] = fmincon(@(x)DynamicSlice.fcnProfit(x, this, options), ...

@@ -111,6 +111,7 @@ if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
     if ~isempty(parameters.ub)
         parameters.ub = parameters.ub(this.I_active_variables);
     end
+    options.num_orig_vars = this.num_vars; 
     options.fmincon_opt.HessianFcn = ...
         @(x,lambda)Slice.fcnHessianCompact(x, lambda, this, options);
 else
