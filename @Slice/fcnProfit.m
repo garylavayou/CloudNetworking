@@ -30,10 +30,12 @@ switch options.PricingPolicy
         profit = -slice.weight*sum(fcnUtility(flow_rate)) ...
             + dot(slice.prices.Link, link_load) + dot(slice.prices.Node, node_load);
 end
-% If there is only one output argument, return the real profit (positive)
-if nargout <= 1
+
+% When the 'bFinal' option is provided, return the real profit (positive).
+if isfield(options, 'bFinal') && options.bFinal
     profit = -profit;
-else
+end
+if nargout == 2
     %% Gradient value of the objective function
     % *The number of non-zero elements in the gradient vector*:
     %  the gradient on path variable is non-zeros, so there is |P| components;

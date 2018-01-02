@@ -39,6 +39,7 @@ end
 % Here, the invoked method must be <Slice.fcnProfit>.
 % Use class name to avoid dynamic loading of class.
 % Subclasses may override this method to define different ways to calculate profits.
+options.bFinal = true;
 profit = Slice.fcnProfit(vars, slice, options); 
 slice.prices.Node = [];
 slice.prices.Link = [];

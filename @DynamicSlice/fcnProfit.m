@@ -7,7 +7,8 @@
 %   computation, we rewrite the method from the superclass, instead of calling the
 %   superclass method.
 function [profit, grad] = fcnProfit(vars, slice, options)
-num_basic_vars = slice.num_vars;        % number of (x,z)
+num_basic_vars = (options.num_varx+options.num_varz);        % number of (x,z)
+num_orig_vars = num_basic_vars + options.num_varv;
 num_vars = length(vars);
 NP = slice.NumberPaths;
 ND = slice.NumberDataCenters;
@@ -21,8 +22,7 @@ if num_vars == num_basic_vars
 else
     % with reconfiguration cost constraint, node capacity equals to sum of VNF capacity.
     % VNF/node capacity lower-bound might be specified or not.
-    var_offset = slice.num_vars;
-    var_vnf = reshape(vars(var_offset+(1:options.num_varv)), ND, NV);
+    var_vnf = reshape(vars(num_basic_vars+(1:options.num_varv)), ND, NV);
     node_load = sum(var_vnf,2);
 end
 if isempty(slice.lower_bounds)
@@ -31,8 +31,7 @@ if isempty(slice.lower_bounds)
     link_load = slice.getLinkLoad(var_path);
 else
     % when the link capacity lower-bound is specified, we have the link capacity variable;
-    var_offset = options.num_orig_vars*2;
-    link_load = vars(var_offset+(1:NL));
+    link_load = vars(num_orig_vars*2+(1:NL));
 end
 flow_rate = slice.getFlowRate(var_path);
 
@@ -66,10 +65,11 @@ if isfield(options, 'num_varv') % for _fastConfigure2_
     profit = profit + dot(var_tv, slice.topts.vnf_reconfig_cost);
 end
 
-% If there is only one output argument, return the real profit (positive)
-if nargout <= 1
+% When the 'bFinal' option is provided, return the real profit (positive).
+if isfield(options, 'bFinal') && options.bFinal
     profit = -profit;
-else
+end
+if nargout == 2
     % If no lower bound, the objective is the function of (x,z,v);
     % Otherwise, the objective is the function of (x,c,w,v)(w is function of v), 
     % since sum(w)<=c. 
@@ -116,12 +116,13 @@ else
         v_index = slice.num_vars+(1:slice.num_varv);
         grad(v_index) = repmat(node_price_grad, 1, NV);
         %% partial derivatives on c
-        c_index = (var_offset+1):num_vars;
+        c_index = (num_orig_vars*2+1):num_vars;
         grad(c_index) = link_price_grad;
     end
     grad(num_basic_vars+(1:NP)) = slice.topts.x_reconfig_cost;
     grad(num_basic_vars+NP+(1:slice.num_varz)) = slice.topts.z_reconfig_cost;
     if isfield(options, 'num_varv')
+        var_offset = num_orig_vars*2;
         grad((var_offset-slice.num_varv+1):var_offset) = slice.topts.vnf_reconfig_cost;
     end
 end
