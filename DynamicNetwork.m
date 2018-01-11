@@ -19,48 +19,21 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
 
     methods
         function this = DynamicNetwork(varargin)
-            global InfoLevel;
             % Only called by subclasses, other member must be initialized by subclasses.
             %             this@PhysicalNetwork(varargin);
             if length(varargin)>=4
+                % |VNFReconfigCoefficient|'s default value is 3.
                 this.options = structmerge(this.options, ...
                     getstructfields(varargin{4}, ...
-                    {'VNFReconfigCoefficient', 'DiffNonzeroTolerance'}, 'ignore'));
-            end
-            if ~isfield(this.options, 'VNFReconfigCoefficient')
-                % |VNFReconfigCoefficient|'s default value is 3.
-                this.options.VNFReconfigCoefficient = 3;
-                if InfoLevel.Class >= DisplayLevel.Notify
-                    warning('''VNFReconfigCoefficient'' options is not specfied, set as %d.', ...
-                        this.options.VNFReconfigCoefficient);
-                end
-            end
-            if ~isfield(this.options, 'DiffNonzeroTolerance')
-                this.options.DiffNonzeroTolerance = 10^-4;
-                if InfoLevel.Class >= DisplayLevel.Notify
-                    warning('''DiffNonzeroTolerance'' options is not specfied, set as %E.', ...
-                        this.options.DiffNonzeroTolerance);
-                end
+                    {'VNFReconfigCoefficient', 'DiffNonzeroTolerance'}, 'default', ...
+                    {3, 10^-4}));
+                this.options = structmerge(this.options, ...
+                    getstructfields(varargin{4}, 'ReconfigMethod'));
             end
         end
     end
     
-    methods        
-        %%%
-        % Since CloudNetwork and EventDrivenNetwork has different definition of AddSlice,
-        % we need override the two superclass methods.
-        function sl = AddSlice(this, slice_opt, varargin)
-            AddSlice@PhysicalNetwork(this, slice_opt, varargin{:});
-            %% Perform admiting control and resource allocation
-            % Compute the resource allocation for the slice, and decide if this slice can
-            % be admitted.
-            % NOTE: currently we admit all slice request, so this function also does not
-            % do anything.
-            %
-            % Subclasses should implement <onAddingSlice>.
-            sl = this.onAddingSlice(this.slices{end});
-            %% TODO: provide options when constructing the network.
-        end        
+    methods          
         function sl = RemoveSlice(this, arg1)
             sl = RemoveSlice@PhysicalNetwork(this, arg1);
             sl = this.onRemovingSlice(sl);
@@ -230,7 +203,7 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
         % |ft|: return flow table entries.
         function ft = createflow(this, slice, numflow)
             % map virtual network to physical network
-            global DEBUG InfoLevel;    %#ok<NUSED>
+            global DEBUG;    
             A = spalloc(this.NumberNodes, this.NumberNodes, this.NumberLinks);
             C = spalloc(this.NumberNodes, this.NumberNodes, this.NumberLinks);
             for i = 1:slice.NumberVirtualLinks
@@ -264,7 +237,7 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                     b_vailid_flow = true;
                     ft = this.generateFlowTable(graph, slice_opt);
                 catch ME
-                    if InfoLevel.UserModel >= DisplayLevel.Iter
+                    if ~isempty(DEBUG) && DEBUG
                         disp(ME)
                     end
                     if strcmp(ME.identifier, 'PhysicalNetwork:Disconnected')
@@ -299,6 +272,13 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
         %                 sub_slices{i}.finalize;
         %             end
         %         end
+        function slice_opt = preAddingSlice(this, slice_opt)   
+            if ~isfield(slice_opt, 'ReconfigMethod')
+                slice_opt = structmerge(slice_opt,...
+                    getstructfields(slice_opt, 'ReconfigMethod', 'default', ...
+                    this.options.ReconfigMethod));
+            end
+        end
     end
         
     methods(Static, Access = protected)
