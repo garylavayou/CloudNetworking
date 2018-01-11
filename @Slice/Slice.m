@@ -58,13 +58,11 @@ classdef Slice < VirtualNetwork & EventReceiver
             if isfield(slice_data,'Weight')
                 this.weight = slice_data.Weight;
             end
-            if ~isfield(slice_data, 'Method')
-                this.options.Method = 'dynamic-slicing';
-                warning('Method option is not provided, set as ''%s''.', ...
-                    this.options.Method);
-            else
-                this.options.Method = slice_data.Method;
-            end
+            
+            this.options = structmerge(this.options, ...
+                getstructfields(slice_data, 'Method', 'default', 'dynamic-slicing'),...
+                getstructfields(slice_data, 'PricingPolicy', 'ignore'));
+
             this.getAs_res;
             this.getHrep;
             this.getHdiag;
@@ -324,7 +322,7 @@ classdef Slice < VirtualNetwork & EventReceiver
         end
         
         function interpretExitflag(exitflag, message)
-            global InfoLevel;
+            global DEBUG INFO;
             if nargin <= 1
                 message = '';
             else
@@ -332,16 +330,20 @@ classdef Slice < VirtualNetwork & EventReceiver
             end
             switch exitflag
                 case 0
-                    if InfoLevel.UserModel >= DisplayLevel.Notify
+                    if ~isempty(DEBUG) && DEBUG
                         warning(message);    % max-iteration number exceed.
+                    elseif ~isempty(INFO) && INFO
+                        cprintf('SystemCommands', '%s\n', message);
                     end
                 case 1
-                    if InfoLevel.UserModel >= DisplayLevel.Iteration
+                    if ~isempty(INFO) && INFO
                         fprintf('(%d) %s\n', exitflag, message);
                     end
                 case 2
-                    if InfoLevel.UserModelDebug >= DisplayLevel.Notify      % converge
-                        cprintf('Comment', '(%d) %s\n', exitflag, message);
+                    if ~isempty(DEBUG) && DEBUG
+                        warning('%s(%d)', message, exitflag);
+                    elseif ~isempty(INFO) && INFO
+                        cprintf('Comment', '%s(%d)\n', message, exitflag);
                     end
                 case -3
                     error('error: Objective function unbounded below (%d). %s', exitflag, message);
@@ -486,8 +488,9 @@ classdef Slice < VirtualNetwork & EventReceiver
         % Called by _optimalFlowRate_, if 'Form=compact', options should be speicifed with
         % 'num_orig_vars'.
         function [x, fval] = optimize(this, params, options)
+            global DEBUG;
             if contains(options.Method, 'price') % 'price', 'slice-price'
-                if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
+                if strcmpi(options.Form, 'compact')
                     [x_compact, fval, exitflag, output] = ...
                         fmincon(@(x)Slice.fcnProfitCompact(x, this, options), ...
                         params.x0, params.As, params.bs, params.Aeq, params.beq, ...
@@ -499,7 +502,7 @@ classdef Slice < VirtualNetwork & EventReceiver
                         params.lb, params.ub, [], options.fmincon_opt);
                 end
             else  % 'normal', 'single-function', ...
-                if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
+                if strcmpi(options.Form, 'compact')
                     [x_compact, fval, exitflag, output] = ...
                         fmincon(@(x)Slice.fcnSocialWelfareCompact(x,this), ...
                         params.x0, params.As, params.bs, params.Aeq, params.beq, ...
@@ -512,11 +515,13 @@ classdef Slice < VirtualNetwork & EventReceiver
                 end
             end
             this.interpretExitflag(exitflag, output.message);
-            assert(this.checkFeasible(x, ...
-                struct('ConstraintTolerance', options.fmincon_opt.ConstraintTolerance)), ...
-                'error: infeasible solution.');
+            if ~isempty(DEBUG) && DEBUG
+                assert(this.checkFeasible(x, ...
+                    struct('ConstraintTolerance', options.fmincon_opt.ConstraintTolerance)), ...
+                    'error: infeasible solution.');
+            end
             
-            if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
+            if strcmpi(options.Form, 'compact')
                 x = spalloc(this.num_vars, 1, nnz(x_compact));
                 x(this.I_active_variables) = x_compact;
             end
@@ -535,7 +540,7 @@ classdef Slice < VirtualNetwork & EventReceiver
         %
         % NOTE: due to rounding to zero, the capacity constraints will not be violated.
         function [tf, vars] = postProcessing(this)
-            global InfoLevel;
+            global DEBUG INFO;
             var_x = this.Variables.x;
             var_z = this.Variables.z;
             tol_zero = this.Parent.options.NonzeroTolerance;
@@ -547,8 +552,11 @@ classdef Slice < VirtualNetwork & EventReceiver
             v2 = A2*var_z;
             index_violate = find(v1+v2>0);      % re = v1+v2
             if ~isempty(index_violate)
-                if InfoLevel.UserModel >= DisplayLevel.Notify
-                    warning('[Post Processing]: Maximal violation is %.4f.', full(max(v1+v2)));
+                message = sprintf('%s: Maximal violation is %.4f.', calledby, full(max(v1+v2)));
+                if ~isempty(DEBUG) && DEBUG
+                    warning(message); %#ok<SPWRN>
+                elseif ~isempty(INFO) && INFO
+                    cprintf('SystemCommands', '%s\n', message);
                 end
                 
                 NP = this.NumberPaths;
@@ -567,9 +575,10 @@ classdef Slice < VirtualNetwork & EventReceiver
                             end
                             pid = pid + 1;
                         end
-                        % The rounding error may still leads to postive error, therefore we set a
-                        % relatively small tolerance, i.e. 1e-10. 
-                        assert(this.checkFeasible([var_x; var_z], struct('ConstraintTolerance', 1e-10)), ...
+                        % The rounding error may still leads to postive error, therefore
+                        % we set a relatively small tolerance, i.e. 1e-10. 
+                        assert(this.checkFeasible([var_x; var_z], ...
+                            struct('ConstraintTolerance', 1e-10)), ...
                             '[Post Processing]: failed infeasible solution.');
                     case {'drop','recover'}
                         %% Ignore the tiny components
@@ -624,7 +633,7 @@ classdef Slice < VirtualNetwork & EventReceiver
                             var_x(pidx) = 0;
                         end
                     otherwise
-                        error('[Post Processing]: invalid processing option (%s).', post_process);
+                        error('%s: invalid processing option (%s).', calledby, post_process);
                 end
             end
             if nargout >= 2
