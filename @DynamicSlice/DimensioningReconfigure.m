@@ -1,7 +1,11 @@
 function [profit,cost] = DimensioningReconfigure( this, action, new_opts )
 global DEBUG; %#ok<NUSED>
-this.b_dim = false;
+if nargin <= 2
+    new_opts = struct;
+end
+new_opts.PricingPolicy = 'quadratic-price';
 
+this.b_dim = false;
 if isempty(fieldnames(this.net_changes))
     switch this.getOption('Trigger')
         case 'TimeBased'
@@ -62,7 +66,7 @@ else
 end
 
 if ~this.b_dim
-    switch this.options.Method
+    switch this.options.ReconfigMethod
         case {'dimconfig', 'dimconfig1'}
             [profit,cost] = this.fastReconfigure(action, new_opts);
         case {'dimconfig2'}
