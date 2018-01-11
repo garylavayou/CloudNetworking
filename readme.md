@@ -29,3 +29,23 @@ Slice dimensioning is scheduled at longer time scale to address the resource mis
 It could be scheduled either periodically (e.g. time period, event period, etc.), or triggered by slice condition, such as resource utilization, user data rate, profit level, etc.
 In the hybrid scheme, slice dimensiong has been extended with consideration on reconfiguration cost.
 So like the fast reconfigration schemes, the reconfiuration cost could also be reduced at a large extent.
+
+# Configuration  
+## Debug Control
+* `DEBUG`: The global variable is used to enable debug code (See also [getstructfields](E:/workspace/Matlab/Projects/Language/getstructfields.m)). To define debug code, use following syntax:
+    ```matlab {.line-numbers}
+    global DEBUG;
+    if ~isempty(DEBUG) && DEBUG
+        debug_code statements;
+    end
+    ``` 
+    Since `DEBUG` has global effect, to temporarily modify the debug behavior in the code, we can use the following code:
+    ```matlab {.line-numbers}
+    global DEBUG;
+    old_debug = DEBUG;  % DEBUG might be empty.
+    DEBUG = ture;       % to disable debug, set to false
+    ...
+    DEBUG = old_debug;  % recover DEBUG setting
+    ```
+* `INFO`: The global variable is used to control output of normal information. The usage is similar to `DEBUG`.
+* `TRACE`: The global variable is used to enable conditional breakpoint.
