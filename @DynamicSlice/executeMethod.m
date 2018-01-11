@@ -1,10 +1,8 @@
 function [exitflag, fidx] = executeMethod(this, action)
-global g_results event_num DEBUG InfoLevel; %#ok<NUSED>
+global g_results event_num DEBUG INFO; 
 this.temp_vars = struct;
 
 %%
-options = getstructfields(this.Parent.options, {'Form'});  % Form = {'compact'|'normal'}
-options.PricingPolicy = 'quadratic-price';
 this.getAs_res;         % TODO, incremental upate of As_res, Hrep, and Hdiag.
 this.getHrep;
 this.getHdiag;
@@ -20,7 +18,7 @@ if ~strcmpi(this.options.Method, 'fastconfig')
     % vector (See <DimensioningReconfigure>).
     this.old_variables.v = this.VNFCapacity(:);
 end
-switch this.options.Method
+switch this.options.ReconfigMethod
     case 'reconfig'
         % provide 'method' and 'model' to customize the <optimalFlowRate>
         % Since we adopt |FixedCost| model, the resource cost that is a
@@ -33,12 +31,11 @@ switch this.options.Method
         this.prices.Node = this.VirtualDataCenters.Price;
         [profit,cost] = this.optimalFlowRate(options);
     case 'fastconfig'
-        [profit,cost] = this.fastReconfigure(action, options);
+        [profit,cost] = this.fastReconfigure(action);
     case 'fastconfig2'
-        [profit,cost] = this.fastReconfigure2(action, options);
+        [profit,cost] = this.fastReconfigure2(action);
     case {'dimconfig', 'dimconfig1', 'dimconfig2', 'dimconfig0'}
-        options.bReserve = true;  % resource reservation
-        [profit,cost] = this.DimensioningReconfigure(action, options);
+        [profit,cost] = this.DimensioningReconfigure(action);
     otherwise
         error('NetworkSlicing:UnsupportedMethod', ...
             'error: unsupported method (%s) for network slicing.', ...
@@ -64,17 +61,30 @@ if isempty(fidx)
 else
     exitflag = 0;
     fidx0 = this.FlowTable.Rate<=0;
-    if InfoLevel.UserModel>=DisplayLevel.Notify ||...
-            InfoLevel.UserModelDebug>=DisplayLevel.Final
-        if ~isempty(setdiff(this.FlowTable.Identifier(fidx0), this.reject_index))
-            cprintf('SystemCommands', '[%s]: reject flows due to zero rate.\n', this.options.Method);
+    if ~isempty(setdiff(this.FlowTable.Identifier(fidx0), this.reject_index))
+        message = sprintf('%s: [%s] reject flows due to zero rate.', ...
+            calledby, this.options.Method);
+        if ~isempty(DEBUG) && DEBUG
+            warning(message); %#ok<SPWRN>
+        else
+            if ~isempty(INFO) && INFO
+                cprintf('SystemCommands', '%s\n', message);
+            end
         end
     end
     % due to reconfiguration cost, some arriving flows might be directly rejected. In this
     % case we need to perform slice redimensioning.
     if contains(this.options.Method, {'dimconfig'}) && ...
             ~isempty(setdiff(this.FlowTable.Identifier(fidx), this.reject_index))
-        cprintf('SystemCommands', '[%s]: reconfigure flows due to low rate.\n', this.options.Method);
+        message = sprintf('%s: [%s] reconfigure flows due to low rate.\n', ...
+            calledby, this.options.Method);
+        if ~isempty(DEBUG) && DEBUG
+            warning(message); %#ok<SPWRN>
+        else
+            if ~isempty(INFO) && INFO
+                cprintf('SystemCommands', '%s\n', message);
+            end
+        end
         options.b_dim = true;
         [profit,cost] = this.DimensioningReconfigure(action, options);
     end
@@ -83,7 +93,7 @@ this.reject_index = this.FlowTable.Identifier(fidx);
 
 % stat.Solution = this.Variables;
 stat = this.get_reconfig_stat();
-switch this.options.Method
+switch this.options.ReconfigMethod
     case 'reconfig'
         stat.Profit = profit - stat.Cost;
         stat.ReconfigType = ReconfigType.Reconfigure;
