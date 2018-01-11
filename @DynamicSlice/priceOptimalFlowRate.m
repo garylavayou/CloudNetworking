@@ -1,33 +1,28 @@
 %% priceOptimalFlowRate
 % Extending <Slice.priceOptimalFlowRate>, Considering resource reconfiguration cost.
 % NOTE: update price before call this function.
-function [net_profit, node_load, link_load] = priceOptimalFlowRate(this, x0, options)
-if isempty(fieldnames(this.net_changes)) && (false == this.b_dim)
+function [net_profit, node_load, link_load] = priceOptimalFlowRate(this, x0, new_opts)
+global DEBUG INFO;
+if nargin <= 2
+    new_opts = struct;
+end
+if strcmpi(this.options.ReconfigMethod, 'dimconfig0') ||... 
+        (isempty(fieldnames(this.net_changes)) && (false == this.b_dim))
     if nargout <= 1
-        net_profit = priceOptimalFlowRate@Slice(this, x0, options);
+        net_profit = priceOptimalFlowRate@Slice(this, x0, new_opts);
     else
-        [net_profit, node_load, link_load] = priceOptimalFlowRate@Slice(this, x0, options);
+        [net_profit, node_load, link_load] = priceOptimalFlowRate@Slice(this, x0, new_opts);
     end
     return;
 end
-options = structmerge(...
-    getstructfields(options, 'PricingPolicy', 'empty-ignore'),...
-    getstructfields(this.Parent.options, 'Form', 'empty-ignore'));
-if isempty(options.Form)
-    options.Form = 'normal';
-    warning('Slice.calculateOutput: <Form> set to default (%s).', options.Form);
-end
-if isempty(options.PricingPolicy)
-    options.PricingPolicy = 'linear';
-    warning('Slice.calculateOutput: <PricingPolicy> set to default (%s).', ...
-        options.PricingPolicy);
-end
-options.Method = this.options.Method;
 
-global InfoLevel;
+options = structmerge(new_opts, ...
+    getstructfields(this.Parent.options, 'Form'), ...
+    getstructfields(this.options, 'PricingPolicy', 'default', 'linear'),...
+    'exclude');     
+
 NP = this.NumberPaths;
 NV = this.NumberVNFs;
-
 Hd = this.Hdiag;
 As_res = this.As_res;        % update As_res
 
@@ -148,7 +143,7 @@ fmincon_opt.Algorithm = 'interior-point';
 fmincon_opt.SpecifyObjectiveGradient = true;
 fmincon_opt.MaxIterations = 60;
 fmincon_opt.MaxFunctionEvaluations = 180;
-fmincon_opt.Display = InfoLevel.InnerModelDebug.char;   %'notify-detailed'; %'iter';
+fmincon_opt.Display = 'notify';   %'notify-detailed'; %'iter';
 % fmincon_opt.CheckGradients = true;
 % fmincon_opt.Diagnostics = 'on';
 % fmincon_opt.FiniteDifferenceType = 'central';
@@ -194,7 +189,7 @@ else
         var0, As, bs, [], [], lbs, [], [], fmincon_opt);
 end
 this.interpretExitflag(exitflag, output.message);
-if InfoLevel.UserModelDebug >= DisplayLevel.Iteration
+if (~isempty(DEBUG) && DEBUG) || (~isempty(INFO) && INFO)
     fprintf('\tThe optimal net profit of the slice: %G.\n', -fval);
 end
 

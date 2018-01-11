@@ -9,7 +9,7 @@
 % |options|: if price is not provided in |options|, then this method will use the price
 % stored in the slice.
 function [net_profit, node_load, link_load] = priceOptimalFlowRate(this, x0, options)
-global InfoLevel;
+global DEBUG INFO;
 options = structmerge(...
     getstructfields(options, 'PricingPolicy', 'empty-ignore'),...
     getstructfields(this.Parent.options, 'Form', 'empty-ignore'));
@@ -55,7 +55,7 @@ fmincon_opt = optimoptions(@fmincon);
 fmincon_opt.Algorithm = 'interior-point';
 fmincon_opt.SpecifyObjectiveGradient = true;
 %% diagnostics
-fmincon_opt.Display = InfoLevel.InnerModel.char;   %'notify-detailed'; %'iter';
+fmincon_opt.Display = 'notify';   %'notify-detailed'; %'iter';
 % fmincon_opt.CheckGradients = true;
 % fmincon_opt.FiniteDifferenceType = 'central';
 % fmincon_opt.FiniteDifferenceStepSize = 1e-10;
@@ -85,7 +85,7 @@ else
         this.x0, this.As_res, bs, [], [], lbs, [], [], fmincon_opt);
 end
 this.interpretExitflag(exitflag, output.message);
-if InfoLevel.UserModelDebug == DisplayLevel.Iteration
+if (~isempty(DEBUG) && DEBUG) || (~isempty(INFO) && INFO)
     fprintf('\tThe optimal net profit of the slice: %G.\n', -fval);
 end
 
@@ -106,10 +106,8 @@ end
 % this.temp_vars.x(this.temp_vars.x<tol_zero*max(this.temp_vars.x)) = 0;
 % this.temp_vars.z(this.temp_vars.z<tol_zero*max(this.temp_vars.z)) = 0;
 % if ~this.checkFeasible([this.temp_vars.x; this.temp_vars.z])
-%     if InfoLevel.UserModel >= DisplayLevel.Notify
 %         warning('priceOptimalFlowRate: the rounding of variables %s', ...
 %             'with small quantity will make the solution infeasible.');
-%     end
 % end
 this.x0 = x;
 

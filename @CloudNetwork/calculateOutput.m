@@ -14,13 +14,8 @@ end
 if nargin < 3
     options = struct;
 end
-options = getstructfields(options, {'Slices', 'PricingPolicy'}, 'default-ignore', ...
-    {this.slices,[]});
-if isempty(options.PricingPolicy)
-    options.PricingPolicy = 'linear';
-    warning('Slice.calculateOutput: <PricingPolicy> set to default [%s].', ...
-        options.PricingPolicy);
-end
+options = getstructfields(options, {'Slices', 'PricingPolicy'}, 'default', ...
+    {this.slices,'linear'});
 options.bFinal = true;
 
 argout.LinkPrice = this.getLinkField('Price');

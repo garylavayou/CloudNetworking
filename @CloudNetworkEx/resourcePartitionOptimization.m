@@ -6,7 +6,7 @@
 % The process is different from VNE, which knows the explicit demand of network resources,
 % and try to find the embedding solution.
 function [ output, runtime ] = resourcePartitionOptimization( this, slice_weight )
-global InfoLevel;
+global DEBUG;
 options = getstructfields(this.options, ...
     {'Method', 'ProfitType', 'WelfareType', 'PercentFactor'});
 
@@ -75,7 +75,7 @@ this.finalize(node_price, link_price);
 
 %% calculate the output (net social welfare)
 output = this.calculateOutput();
-if InfoLevel.UserModelDebug >= DisplayLevel.Final
+if ~isempty(DEBUG) && DEBUG
     fprintf('\tOptimal net social welfare: fx = %G.\n', output.welfare_approx);
 end
 end

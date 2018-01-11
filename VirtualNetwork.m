@@ -40,7 +40,6 @@ classdef VirtualNetwork < matlab.mixin.Copyable
         
     methods
         function this = VirtualNetwork(vnet_data)
-            declare_info_level;
             if nargin == 0
                 return;
             elseif isa(vnet_data, 'VirtualNetwork')

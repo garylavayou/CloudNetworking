@@ -11,7 +11,7 @@
 
 %%
 function [output, runtime] = optimizeResourcePrice0(this, init_price)
-global InfoLevel;
+global DEBUG;
 options = getstructfields(this.options, {'PricingFactor', 'PercentFactor'});
 
 this.clearStates;
@@ -124,7 +124,7 @@ while true
     stop_cond2 = norm(new_profit-profit)/norm(profit);
     %     stop_cond3 = norm(new_net_welfare-net_welfare)/NS < 10^-3;
     stop_cond3 = norm(new_net_welfare-net_welfare)/norm(new_net_welfare);
-    if InfoLevel.UserModelDebug == DisplayLevel.Iteration
+    if ~isempty(DEBUG) && DEBUG
         fprintf('\tObjective value: %d.\n', new_net_welfare);
         fprintf('\t stop condition 1: (%G,%G).\n', stop_cond11,stop_cond12);
         fprintf('\t stop condition 2: %G.\n', stop_cond2);
@@ -141,7 +141,7 @@ while true
     end
     number_iter = number_iter + 1;
 end
-if InfoLevel.UserModelDebug >= DisplayLevel.Notify
+if ~isempty(DEBUG) && DEBUG
     fprintf('\tFirst stage objective value: %d.\n', new_net_welfare);
 end
 
@@ -198,7 +198,7 @@ this.finalize(node_price, link_price);
 output = this.calculateOutput();
 
 % output the optimization results
-if InfoLevel.UserModelDebug >= DisplayLevel.Final
+if ~isempty(DEBUG) && DEBUG
     fprintf('Optimization results:\n');
     fprintf('\tThe optimization procedure contains %d iterations.\n', number_iter);
     fprintf('\tOptimal objective value: %d.\n', new_net_welfare);

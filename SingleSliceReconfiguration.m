@@ -1,14 +1,16 @@
-global DEBUG g_results event_num InfoLevel; 
+global TRACE g_results event_num DEBUG; 
 event_num = 0;
 g_results = table;
-DEBUG = true;
+TRACE = true;
+%% Trace conditional bearkpoint
+% The global variable |TRACE| is used to enable conditional breakpoint.
 
 %% TODO
 % 3. test Remove of ListArray/PriorityQueue, nargout.
 
 %% Create Network
 if ~isfield(options, 'NetworkType')
-    if InfoLevel.Global >= DisplayLevel.Notify
+    if ~isempty(DEBUG) && DEBUG
         warning('Network type is not provided, use the ''DynamicCloudNetwork'' class.');
     end
     options.NetworkType = 'DynamicCloudNetwork';

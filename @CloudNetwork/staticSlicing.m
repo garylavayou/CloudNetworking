@@ -10,7 +10,7 @@
 %
 % *TODO*: we can adjust the unit price according to the residual capacity.
 function output = staticSlicing(this, slice)
-options = getstructfields(this.options,  {'ConstraintTolerance','Method','Form'}, 'ignore');
+options = getstructfields(this.options, {'ConstraintTolerance','Method','Form'}, 'ignore');
 if contains(options.Method, 'price')  % options for _optimalFlowRate_.
     options.PricingPolicy = 'linear';
 else

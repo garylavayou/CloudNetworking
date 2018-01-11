@@ -1,4 +1,13 @@
-function [profit, cost] = fastReconfigure(this, action, options)
+function [profit, cost] = fastReconfigure(this, action, new_opts)
+if nargin <= 2
+    new_opts = struct;
+end
+options = structmerge(new_opts, ...
+    getstructfields(this.Parent.options, 'Form'), ...
+    getstructfields(this.options, 'PricingPolicy', 'default', 'quadratic'), ...
+    getstructfields(this.options, 'ReconfigMethod'),...
+    'exclude');     
+
 if this.NumberFlows == 0
     [profit, cost] = this.handle_zero_flow(options);
     return;
@@ -18,7 +27,6 @@ NP = this.NumberPaths;
 %   (3) Link capacity constraint: NL;
 %   (4) link reconfiguration cost constraint: 2*NP;
 %   (5) node reconfiguration cost constraint: 2*NN*NP*NV (2*this.num_varz);
-global DEBUG InfoLevel; %#ok<NUSED>
 Hd = this.Hdiag;
 As_res = this.As_res;        % update As_res
 nnz_As = nnz(As_res) + nnz(Hd) + nnz(this.I_edge_path) + ...
@@ -62,7 +70,7 @@ assert(this.checkFeasible(var0), 'error: infeasible solution.');
 fmincon_opt = optimoptions(@fmincon);
 fmincon_opt.Algorithm = 'interior-point';
 fmincon_opt.SpecifyObjectiveGradient = true;
-fmincon_opt.Display = InfoLevel.InnerModel.char;
+fmincon_opt.Display = 'notify';
 if nargin >= 2 && strcmpi(options.Form, 'compact')
     %% get the compact formulation
     % There are lots of zeros in z_npf, which could be determined by h_np.
@@ -115,13 +123,6 @@ this.flow_rate = this.getFlowRate(this.temp_vars.x);
 this.Variables.x = this.temp_vars.x;
 this.Variables.z = this.temp_vars.z;
 this.postProcessing();
-% if ~b
-%     if InfoLevel.UserModelDebug >= DisplayLevel.Iteration
-%         warning('FastReconfigure: the rounding of variables %s\n%s', ...
-%             'with small quantity will make the solution infeasible.',...
-%             'successfully recoverd.');
-%     end
-% end
 this.setPathBandwidth;
 this.FlowTable.Rate = this.getFlowRate;
 this.VirtualLinks.Load = this.getLinkLoad;

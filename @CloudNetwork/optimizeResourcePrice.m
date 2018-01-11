@@ -3,8 +3,8 @@
 % adjustment algorithm.
 % * *TODO* Resource Cost Model: linear, convex (quatratic)
 function [output, runtime] = optimizeResourcePrice(this, init_price)
-global InfoLevel;
-options = getstructfields(this.options, {'Threshold'});
+global DEBUG;
+options.Threshold = this.options.Threshold;
 options.PricingPolicy = 'quadratic-price';
 % this.clearStates;
 if nargout == 2
@@ -60,7 +60,7 @@ while true
     node_price(b_node_violate) = node_price(b_node_violate) + delta_node_price(b_node_violate);
     delta_node_price(b_node_violate) = delta_node_price(b_node_violate) * 2;
 end
-if InfoLevel.ClassDebug > DisplayLevel.Final
+if ~isempty(DEBUG) && DEBUG
     fprintf('\tFirst stage objective value: %d.\n', new_net_welfare);
 end
 
@@ -79,13 +79,13 @@ partial_node_violate = false(NC, 1);
 b_first = true;
 while stop_cond1 && stop_cond2 && stop_cond3
     number_iter = number_iter + 1;
-    if InfoLevel.UserModelDebug == DisplayLevel.Iteration
+    if ~isempty(DEBUG) && DEBUG
         disp('----link price    delta link price----')
         disp([link_price delta_link_price]);
     end
     b_link = link_price > delta_link_price;
     link_price(b_link) = link_price(b_link) - delta_link_price(b_link);
-    if InfoLevel.UserModelDebug == DisplayLevel.Iteration
+    if ~isempty(DEBUG) && DEBUG
         disp('----node price    delta node price----')
         disp([node_price delta_node_price]);
     end
@@ -177,7 +177,7 @@ if ~stop_cond3
             link_price = temp_link_price;
             node_price = temp_node_price;
             if h-l < 10^-4
-                if InfoLevel.UserModelDebug == DisplayLevel.Iteration
+                if ~isempty(DEBUG) && DEBUG
                     warning('precision error: %.4f', profit_gap);
                 end
             end
@@ -202,7 +202,7 @@ this.finalize(node_price, link_price);
 output = this.calculateOutput([], options);
 
 % output the optimization results
-if InfoLevel.UserModel > DisplayLevel.Off
+if ~isempty(DEBUG) && DEBUG
     fprintf('Optimization results:\n');
     fprintf('\tThe optimization procedure contains %d iterations.\n', number_iter);
     fprintf('\tOptimal objective value: %d.\n', output_optimal.welfare_accurate);

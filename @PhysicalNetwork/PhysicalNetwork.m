@@ -43,6 +43,10 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
         slice_template;
     end
     
+    properties (Access = {?PhysicalNetwork, ?Slice})
+        % |options| will be visited by <CloudNetwork> and <DynamicNetwork>
+        options;
+    end    
 
     properties (Access = protected)
         path_identifier_generator;
@@ -52,15 +56,11 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
         AggregateLinkUsage;
         AggregateNodeUsage;
     end
-    properties (Access = {?PhysicalNetwork, ?Slice})
-        options;
-    end
     
     methods
         %% Constructor
         %   PhysicalNetwork(node_opt, link_opt, VNF_opt, options)
         function this = PhysicalNetwork(varargin)
-            declare_info_level;
             if isempty(varargin)
                 return;
             elseif isa(varargin{1}, 'PhysicalNetwork')

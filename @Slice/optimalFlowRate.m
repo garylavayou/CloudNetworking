@@ -8,29 +8,29 @@
 % * *FixedCost*: used when slice's resource amount and resource prices are fixed, resource
 % cost is fixed. See also <fcnSocialWelfare>, <DynamicSlice>.
 %% Options: 
-%  _Methods_
+% _Methods_
 %	*single-normal*: combine all flows in one slice, and solve it as a global
 %           optimization; 
 %   *single-function*:
-%   *slice*: solve each slice's problem independently;
-%   *price*: solve each slice's problem independently, with resource price known. resource
-%   prices should be set beforehand.
-%   _Form_: 'compact'|'normal'.
+%   *slice-price*: solve each slice's problem independently, with resource price known.
+%    resource prices should be set beforehand.
+% _CostModel_: 'fixed'.
+% _Form_: 'compact'|'normal'.
+% _PricingPolicy_: 'quadratic'|'linear'.
+% NOTE: check options before computing.
+
 %% Output
 % If output argument is provided, _optimalFlowRate_ will calculate the final results.
 % Otherwise, the results is stored in temporary variables.
 function [profit, cost] = optimalFlowRate( this, new_opts )
-global InfoLevel;
 if nargin < 2
     new_opts = struct;
 end
-options = structmerge(...
-    getstructfields(this.Parent.options, {'Method', 'Form'}, 'default', {'','compact'}),...
-    new_opts);  % |new_opts| may contains other fields than 'Method', specified by caller, such as 'CostModel'.
-if contains(options.Method, 'price')
-    options = structmerge(options, ...
-        getstructfields(new_opts, {'PricingPolicy'}, 'default', 'linear'));
-end
+options = structmerge(new_opts, ...
+    getstructfields(this.Parent.options, 'Form'), ...
+    getstructfields(this.options, 'PricingPolicy', 'default', 'linear'), ...
+    getstructfields(new_opts, 'Method'),...
+    'exclude');     
 
 NL = this.NumberVirtualLinks;
 NC = this.NumberDataCenters;
@@ -100,8 +100,8 @@ parameters.beq = [];
 options.fmincon_opt = optimoptions(@fmincon);
 options.fmincon_opt.Algorithm = 'interior-point';
 options.fmincon_opt.SpecifyObjectiveGradient = true;
-options.fmincon_opt.Display = InfoLevel.InnerModelDebug.char;
-if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
+options.fmincon_opt.Display = 'notify';
+if strcmpi(options.Form, 'compact')
     z_filter = sparse(repmat(...
         reshape(logical(this.I_node_path), numel(this.I_node_path),1), NV, 1));
     this.I_active_variables = [true(NP,1) ;  z_filter];
@@ -173,6 +173,6 @@ if nargout >= 1    % final results
     this.VirtualDataCenters.Load = this.getNodeLoad;
 end
 if nargout >= 2
-    cost = this.getSliceCost(new_opts.PricingPolicy);   % method is overrided by subclasses.
+    cost = this.getSliceCost(options.PricingPolicy);   % method is overrided by subclasses.
 end
 end

@@ -4,7 +4,7 @@
 % current point.
 %%
 function [output] = optimizeNetSocialWelfare1( this )
-global InfoLevel;
+global DEBUG;
 options = getstructfields(this.options, {'PricingFactor', 'PercentFactor'});
 
 % network data
@@ -40,7 +40,7 @@ while true
     end
     dual_fval = dual_fval - dot(lambda.n, node_capacity) - ...
         dot(lambda.e, link_capacity);
-    if InfoLevel.UserModelDebug == DisplayLevel.Iteration
+    if ~isempty(DEBUG) && DEBUG
         fprintf('\tDual problem: new value: %.3e, old value: %.3e, difference: %.3e.\n', ...
             dual_fval, prev_dual_fval, dual_fval-prev_dual_fval);
     end
@@ -95,7 +95,7 @@ while true
     end
     dual_fval = dual_fval - dot(lambda.n, node_capacity) - dot(lambda.e, link_capacity);
     [node_load, link_load] = this.getNetworkLoad([], 'sum');
-    if InfoLevel.UserModelDebug == DisplayLevel.Iteration
+    if ~isempty(DEBUG) && DEBUG
         fprintf('\tDual problem: new value: %.3e, old value: %.3e, difference: %.3e.\n', ...
             dual_fval, prev_dual_fval, dual_fval-prev_dual_fval);
     end
@@ -225,7 +225,7 @@ output.profit.ApproximatePrice(end) = output.welfare_approx - ...
     sum(output.profit.ApproximatePrice(1:(end-1))) + embed_profit_approx;
 output.profit.AccuratePrice(end) = output.welfare_accurate - ...
     sum(output.profit.AccuratePrice(1:(end-1))) + embed_profit_accurate;  
-if InfoLevel.UserModelDebug > DisplayLevel.Off
+if ~isempty(DEBUG) && DEBUG
     fprintf('\tOptimal solution: fx = %G, g(¦Ë) = %G.\n', output.welfare_accurate, dual_fval);
     fprintf('\tIteration number: %d, Evaluation Number: %G.\n', iter_num, eval_num);
 end

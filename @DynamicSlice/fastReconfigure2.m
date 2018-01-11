@@ -2,13 +2,23 @@
 % Comparing with <_fastReconfigure_>, this method also considers VNF instance re-scaling,
 % i.e., the capacity of VNF instances could change during reconfiguration.
 % See also <fastReconfigure>.
-function [profit,cost] = fastReconfigure2(this, action, options)
+function [profit,cost] = fastReconfigure2(this, action, new_opts)
+global DEBUG; %#ok<NUSED>
+
+if nargin <= 2
+    new_opts = struct;
+end
+options = structmerge(new_opts, ...
+    getstructfields(this.Parent.options, 'Form'), ...
+    getstructfields(this.options, 'PricingPolicy', 'default', 'quadratic'), ...
+    getstructfields(this.options, 'ReconfigMethod'),...
+    'exclude');   
+
 if this.NumberFlows == 0
     [profit, cost] = this.handle_zero_flow(options);
     return;
 end
 
-global InfoLevel;
 NL = this.NumberVirtualLinks;
 NN = this.NumberDataCenters;
 NP = this.NumberPaths;
@@ -16,7 +26,6 @@ NV = this.NumberVNFs;
 
 %%% Formulate input for convex optimization (fmincon).
 % The problem has multiple inequalities, and the lowerbounds for variables.
-global DEBUG; %#ok<NUSED>
 Hd = this.Hdiag;
 Hr = this.Hrep;
 As_res = this.As_res;        % update As_res
@@ -89,7 +98,7 @@ assert(this.checkFeasible(var0), 'error: infeasible start point.');
 fmincon_opt = optimoptions(@fmincon);
 fmincon_opt.Algorithm = 'interior-point';
 fmincon_opt.SpecifyObjectiveGradient = true;
-fmincon_opt.Display = InfoLevel.InnerModel.char;
+fmincon_opt.Display = 'notify';
 if nargin >= 2 && strcmpi(options.Form, 'compact')
     %% get the compact formulation
     % There are lots of zeros in $z_npf$, which could be determined by $h_np$.

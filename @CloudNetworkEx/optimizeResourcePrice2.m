@@ -2,7 +2,7 @@
 % * *TODO* _refine the price adjustment algorithm._
 % * *TODO* Resource Cost Model: linear, convex (quatratic)
 function [output, runtime] = optimizeResourcePrice2(this, init_price)
-global InfoLevel;
+global DEBUG;
 options = getstructfields(this.options, {'PricingFactor', 'PercentFactor'});
 
 this.clearStates;
@@ -78,7 +78,7 @@ while true
     node_price(b_node_violate) = node_price(b_node_violate) + delta_node_price(b_node_violate);
     delta_node_price(b_node_violate) = delta_node_price(b_node_violate) * 2;
 end
-if InfoLevel.UserModelDebug >= DisplayLevel.Notify
+if ~isempty(DEBUG) && DEBUG
     fprintf('\tFirst stage objective value: %d.\n', new_net_welfare);
 end
 
@@ -97,13 +97,13 @@ partial_node_violate = false(NN, 1);
 b_first = true;
 while stop_cond1 && stop_cond2 && stop_cond3
     number_iter = number_iter + 1;
-    if InfoLevel.UserModelDebug == DisplayLevel.Iteration
+    if ~isempty(DEBUG) && DEBUG
         disp('----link price    delta link price----')
         disp([link_price delta_link_price]);
     end
     b_link = link_price > delta_link_price;
     link_price(b_link) = link_price(b_link) - delta_link_price(b_link);
-    if InfoLevel.UserModelDebug == DisplayLevel.Iteration
+    if ~isempty(DEBUG) && DEBUG
         disp('----node price    delta node price----')
         disp([node_price delta_node_price]);
     end
@@ -257,7 +257,7 @@ this.finalize(node_price, link_price);
 output = this.calculateOutput();
 
 % output the optimization results
-if InfoLevel.UserModelDebug >= DisplayLevel.Final
+if ~isempty(DEBUG) && DEBUG
     fprintf('Optimization results:\n');
     fprintf('\tThe optimization procedure contains %d iterations.\n', number_iter);
     fprintf('\tOptimal objective value: %d.\n', output_optimal.welfare_accurate);

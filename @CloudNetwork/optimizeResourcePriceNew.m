@@ -2,17 +2,16 @@
 % * Resource Cost Model: linear, convex (quatratic)
 % DATE: 2017-04-23
 function [output, runtime] = optimizeResourcePriceNew(this, init_price, slices)
-global InfoLevel;
-options = getstructfields(this.options, {'Threshold','Form'}, 'default', '');
+global DEBUG; 
+
+options = getstructfields(this.options, {'Threshold','Form'});
 options.PricingPolicy = 'quadratic-price';
-% options.Threshold = '';
 switch options.Threshold
     case {'min', 'average', 'max'}
         b_profit_ratio = true;
     otherwise
         b_profit_ratio = false;
 end
-global DEBUG; %#ok<NUSED>
 % this.clearStates;
 if nargout == 2
     slice_runtime = 0;
@@ -236,7 +235,7 @@ while true
     new_net_welfare = SolveSCP(node_price, link_price);
     k = k+1;
 end
-if InfoLevel.UserModelDebug >= DisplayLevel.Notify
+if ~isempty(DEBUG) && DEBUG
     fprintf('\tFirst stage objective value: %d.\n', new_net_welfare);
 end
 
@@ -262,13 +261,13 @@ if k>1
     b_first = true;
     while stop_cond1 && stop_cond2 && stop_cond3
         number_iter = number_iter + 1;
-        if InfoLevel.UserModelDebug == DisplayLevel.Iteration
+        if ~isempty(DEBUG) && DEBUG
             disp('----link price    delta link price----')
             disp([link_price delta_link_price]);
         end
         b_link = link_price > delta_link_price;
         link_price(b_link) = link_price(b_link) - delta_link_price(b_link);
-        if InfoLevel.UserModelDebug == DisplayLevel.Iteration
+        if ~isempty(DEBUG) && DEBUG
             disp('----node price    delta node price----')
             disp([node_price delta_node_price]);
         end
@@ -351,14 +350,14 @@ this.finalize(node_price, link_price, slices);
 output = this.calculateOutput([], getstructfields(options, {'Slices','PricingPolicy'}));
 
 % output the optimization results
-if InfoLevel.UserModel > DisplayLevel.Off
+if DEBUG
     fprintf('Optimization results:\n');
     fprintf('\tThe optimization procedure contains %d iterations.\n', number_iter);
     fprintf('\tOptimal objective value: %d.\n', output.Welfare);
     fprintf('\tNormalized network utilization is %G.\n', this.utilizationRatio);
 end
 
-%%
+%% sub-problem
     function netprofit = SolveSCP(node_price_t, link_price_t)
         for s = 1:NS
             sl = slices{s};

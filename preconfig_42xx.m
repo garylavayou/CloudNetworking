@@ -4,7 +4,6 @@
 % and 'dimconfig2'). 
 % # This experiment uses network topology Sample-(2) see also <run_test21>.
 clear link_opt node_opt options VNF_opt type ;
-clearvars -global InfoLevel;
 if ~exist('debug_info', 'var') && exist('breakpoint.mat', 'file')
     load('breakpoint.mat');
     dbstop(debug_info);
@@ -49,7 +48,6 @@ options.DiffNonzeroTolerance = 10^-3;
 options.PostProcessing = 'round';
 
 %% Experiment Control
-declare_info_level({'Global', 'ClassDebug'}, [DisplayLevel.Notify, DisplayLevel.Notify]);
 warning('off', 'backtrace');
 warning('off', 'verbose');
 b_reconfig = true;

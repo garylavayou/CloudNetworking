@@ -1,5 +1,5 @@
 function [output, runtime] = partitionResourcePricing(this, init_price)
-global InfoLevel;
+global DEBUG;
 options = getstructfields(this.options, ...
     {'Method', 'ProfitType', 'WelfareType', 'PercentFactor'});
 
@@ -85,13 +85,13 @@ partial_link_violate = false(NL, 1);
 partial_node_violate = false(NN, 1);
 b_first = true;
 while stop_cond1 && stop_cond2 && stop_cond3
-    if InfoLevel.UserModelDebug == DisplayLevel.Iteration
+    if ~isempty(DEBUG) && DEBUG
         disp('----link price    delta link price----')
     end
     disp([link_price delta_link_price]);
     b_link = link_price > delta_link_price;
     link_price(b_link) = link_price(b_link) - delta_link_price(b_link);
-    if InfoLevel.UserModelDebug == DisplayLevel.Iteration
+    if ~isempty(DEBUG) && DEBUG
         disp('----node price    delta node price----')
     end
     disp([node_price delta_node_price]);
@@ -341,7 +341,7 @@ output.profit.AccuratePrice = output.profit.ApproximatePrice;
 output.profit.AccuratePrice(end) = output.welfare_accurate - ...
     sum(output.profit.AccuratePrice(1:(end-1))) + embed_profit_accurate;
 % output the optimization results
-if InfoLevel.UserModelDebug >= DisplayLevel.Final
+if ~isempty(DEBUG) && DEBUG
     fprintf('Optimization results:\n');
     fprintf('\tThe optimization procedure contains %d iterations.\n', number_iter);
     fprintf('\tOptimal objective value: %d.\n', new_net_welfare);
