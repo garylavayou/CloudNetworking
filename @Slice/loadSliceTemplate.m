@@ -165,6 +165,7 @@ for i = 1:length(type_index)
             slice_template(i).Flow.ServiceInterval = 300; 
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
             slice_template(i).ReconfigScaler = 2;       % beta
+            slice_template(i).PricingPolicy = 'quadratic';
         case 54
             %% Type-2 for experiment 4-2: DynamicNetwork
             % Type-2 is a middle term service, e.g. inter-data centers communications (1
@@ -187,6 +188,7 @@ for i = 1:length(type_index)
             slice_template(i).Flow.ServiceInterval = 900; 
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
             slice_template(i).ReconfigScaler = 2.4;
+            slice_template(i).PricingPolicy = 'quadratic';
         case 64 
             %% Type-3 for experiment 4-2: DynamicNetwork
             % Type-3 is a middle term service with high QoS-demand (10 arrivals/hour, 1
@@ -210,6 +212,7 @@ for i = 1:length(type_index)
             slice_template(i).Flow.ServiceInterval = 900; 
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
             slice_template(i).ReconfigScaler = 0.5;
+            slice_template(i).PricingPolicy = 'quadratic';
         otherwise
             error('error: unrecognized slice type (%d).', type_index(i));
     end
