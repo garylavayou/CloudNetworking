@@ -30,7 +30,7 @@ if nargin >= 4
         return;
     end
     switch options.PricingPolicy
-        case 'quadratic-price'
+        case {'quadratic-price', 'quadratic'}
             ND = slice.NumberDataCenters;
             NV = slice.NumberVNFs;
             NL = slice.NumberVirtualLinks;
@@ -79,7 +79,9 @@ if nargin >= 4
                 v_index = slice.num_vars+(1:slice.num_varv);
                 hess(v_index,v_index) = block_diag(diag(nph), NV);
             end
+        case 'linear'
         otherwise
+            error('%s: invalid pricing policy', calledby);
     end
 end
 end

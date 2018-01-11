@@ -22,13 +22,15 @@ node_load = slice.getNodeLoad(var_node);
 flow_rate = slice.getFlowRate(var_path);
 
 switch options.PricingPolicy
-    case 'quadratic-price'
+    case {'quadratic-price', 'quadratic'}
         [link_payment,link_price_grad] = slice.fcnLinkPricing(slice.prices.Link, link_load);
         [node_payment,node_price_grad] = slice.fcnNodePricing(slice.prices.Node, node_load);
         profit = -slice.weight*sum(fcnUtility(flow_rate)) + link_payment + node_payment;
-    otherwise
+    case 'linear'
         profit = -slice.weight*sum(fcnUtility(flow_rate)) ...
             + dot(slice.prices.Link, link_load) + dot(slice.prices.Node, node_load);
+    otherwise
+        error('%s: invalid pricing policy', calledby);
 end
 
 % When the 'bFinal' option is provided, return the real profit (positive).
@@ -67,12 +69,14 @@ if nargout == 2
     for p = 1:slice.NumberPaths
         i = slice.path_owner(p);
         switch options.PricingPolicy
-            case 'quadratic-price'
+            case {'quadratic-price', 'quadratic'}
                 grad(p) = -slice.weight/(1+slice.I_flow_path(i,:)*var_path) +  ...
                     dot(link_price_grad,slice.I_edge_path(:,p)); %#ok<SPRIX>
-            otherwise
+            case 'linear'
                 grad(p) = -slice.weight/(1+slice.I_flow_path(i,:)*var_path) +  ...
                     dot(slice.prices.Link,slice.I_edge_path(:,p)); %#ok<SPRIX>
+            otherwise
+                error('%s: invalid pricing policy', calledby);
         end
     end
     
@@ -99,8 +103,10 @@ if nargout == 2
                 % |grad(z_index)| is a vector, and the right side is a matrix, the value
                 % of the matrix will be assigned to |grad(z_index)| column by column.
                 grad(z_index) = node_price_grad.*slice.I_node_path; %#ok<SPRIX>
-            otherwise
+            case 'linear'
                 grad(z_index) = slice.prices.Node.*slice.I_node_path; %#ok<SPRIX>
+            otherwise
+                error('%s: invalid pricing policy', calledby);
         end
         z_index = z_index + nz;
     end

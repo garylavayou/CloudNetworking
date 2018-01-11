@@ -38,7 +38,7 @@ if nargin >= 4
         return;
     end
     switch options.PricingPolicy
-        case 'quadratic-price'
+        case {'quadratic-price', 'quadratic'}
             %% quadratic-price
             % Second derivatives on the link payment componet:
             %
@@ -94,7 +94,9 @@ if nargin >= 4
             h2 = h2 + (tril(h2,-1))';   % fill the upper triangle since the
             h2 = repmat(h2, slice.NumberVNFs, slice.NumberVNFs);
             hess((NP+1):slice.num_vars, (NP+1):slice.num_vars) = h2;
+        case 'linear'
         otherwise
+            error('%s: invalid pricing policy', calledby);
     end
 end
 end
