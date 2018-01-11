@@ -1,5 +1,9 @@
 classdef DynamicSlice < Slice & EventSender 
     %DynamicSlice Event-driven to dynamic configure slice.
+    properties(Constant)
+        NUM_MEAN_BETA = 10;
+        ENABLE_DYNAMIC_NORMALIZER = false;
+    end
     properties
         FlowArrivalRate;
         FlowServiceInterval;
@@ -46,6 +50,7 @@ classdef DynamicSlice < Slice & EventSender
         topts;              % used in optimization, avoid passing extra arguments.
         reject_index;
         lower_bounds = struct([]);
+        old_beta;
     end
     properties(Dependent, Access=protected)
         num_varv;
@@ -144,7 +149,12 @@ classdef DynamicSlice < Slice & EventSender
             % Interval for performing dimensioning should be configurable.
             this.options = structmerge(this.options, ...
                 getstructfields(slice_data, ...
-                {'TimeInterval', 'EventInterval', 'Trigger', 'Adhoc'}, 'ignore'));
+                {'TimeInterval', 'EventInterval', 'Trigger', 'Adhoc'}, ...
+                'ignore'));
+            this.options = structmerge(this.options, ...
+                getstructfields(slice_data, 'ReconfigMethod', 'error'));
+            this.options = structmerge(this.options, ...
+                getstructfields(slice_data, 'bReserve', 'default', 'true'));
             if isfield(this.options, 'EventInterval')
                 this.time.DimensionInterval = this.options.EventInterval/(2*this.FlowArrivalRate); % both arrival and departure events
             elseif isfield(this.options, 'TimeInterval')
@@ -152,10 +162,12 @@ classdef DynamicSlice < Slice & EventSender
             elseif isfield(this.options, 'Trigger')
                 this.time.DimensionInterval = 10/this.FlowArrivalRate;
             end
-            if ~isfield(slice_data, 'ReconfigScaler')
-                this.options.ReconfigScaler = 1;
-            else
-                this.options.ReconfigScaler = slice_data.ReconfigScaler;
+            if ~DynamicSlice.ENABLE_DYNAMIC_NORMALIZER
+                if ~isfield(slice_data, 'ReconfigScaler')
+                    this.options.ReconfigScaler = 1;
+                else
+                    this.options.ReconfigScaler = slice_data.ReconfigScaler;
+                end
             end
         end
         
@@ -299,12 +311,15 @@ classdef DynamicSlice < Slice & EventSender
             link_load = this.VirtualLinks.Capacity;
             node_price = this.VirtualDataCenters.Price;
             node_load = this.VirtualDataCenters.Capacity;
-            if strcmpi(pricing_policy, 'quadratic-price')
-                link_payment = this.fcnLinkPricing(link_price, link_load);
-                node_payment = this.fcnNodePricing(node_price, node_load);
-                cost = link_payment + node_payment;
-            else
-                cost = dot(link_price, link_load) + dot(node_price, node_load);
+            switch pricing_policy
+                case {'quadratic-price', 'quadratic'}
+                    link_payment = this.fcnLinkPricing(link_price, link_load);
+                    node_payment = this.fcnNodePricing(node_price, node_load);
+                    cost = link_payment + node_payment;
+                case 'linear'
+                    cost = dot(link_price, link_load) + dot(node_price, node_load);
+                otherwise
+                    error('%s: invalid pricing policy', calledby);
             end
             if ~strcmpi(reconfig_cost_model, 'none')
                 cost = cost + this.get_reconfig_cost(reconfig_cost_model);
@@ -372,7 +387,7 @@ classdef DynamicSlice < Slice & EventSender
         
         function stat = get_reconfig_stat(this, stat_names)
             options = getstructfields(this.Parent.options, ...
-                {'Method', 'DiffNonzeroTolerance', 'NonzeroTolerance'});    
+                {'DiffNonzeroTolerance', 'NonzeroTolerance'});    
             if nargin == 1
                 stat_names = {'All'};
             elseif ischar(stat_names)
@@ -563,6 +578,21 @@ classdef DynamicSlice < Slice & EventSender
             %                     this.VNFCapacity = 0;
             %                 end
         end
+        
+        
+        function beta = postl1normalizer(this, cost, linear_cost)
+            % dynamic adjust the normalizer for L1-approximation of the reconfiguration
+            % cost.
+            % This method is used when 'ENABLE_DYNAMIC_NORMALIZER' is set to true.
+            idx = find(cost~=0 & linear_cost~=0);
+            beta = mean(cost(idx)./linear_cost(idx));
+            if length(this.old_beta) < this.NUM_MEAN_BETA
+                this.old_beta(end+1) = beta;
+            else
+                this.old_beta = [this.old_beta; beta];
+            end
+            beta = mean(this.old_beta);
+        end
     end
  
     
@@ -577,6 +607,11 @@ classdef DynamicSlice < Slice & EventSender
             if nargin <= 1
                 new_opts = struct;
             end
+            if ~isfield(new_opts, 'CostModel') || ~strcmpi(new_opts.CostModel, 'fixcost')
+                [profit,cost] = optimalFlowRate@Slice( this, new_opts );
+                return;
+            end
+            
             if this.NumberFlows == 0
                 [profit, cost] = this.handle_zero_flow(new_opts);
             else
