@@ -20,7 +20,7 @@ if b_reconfig
     % optimization procedure is independent on the cosefficient, and the reconfiguration
     % cost with other coefficient can be derieved from the one results by using the
     % coefficient.
-    options.Method = 'reconfig';
+    options.ReconfigMethod = 'reconfig';
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Reconfiguration');
     pause(0.01);
     GlobalState.Initialize();
@@ -32,7 +32,7 @@ end
 
 %%
 if b_fastconfig
-    options.Method = 'fastconfig';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
+    options.ReconfigMethod = 'fastconfig';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Fast Reconfiguration');
     pause(0.01);
     for i = 1:length(etas)
@@ -50,7 +50,7 @@ end
 
 %%
 if b_fastconfig2
-    options.Method = 'fastconfig2';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
+    options.ReconfigMethod = 'fastconfig2';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Fast Reconfiguration 2');
     pause(0.01);
     for i = 1:length(etas)
@@ -68,7 +68,7 @@ end
 
 %%
 if b_dimconfig
-    options.Method = 'dimconfig';
+    options.ReconfigMethod = 'dimconfig';
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Hybrid Slicing Scheme');
     pause(0.01);
     for i = 1:length(etas)
@@ -86,7 +86,7 @@ end
 
 %%
 if b_dimconfig2
-    options.Method = 'dimconfig2';
+    options.ReconfigMethod = 'dimconfig2';
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Hybrid Slicing Scheme 2');
     pause(0.01);
     for i = 1:length(etas)
@@ -104,7 +104,7 @@ end
 
 %%
 if b_dimconfig0
-    options.Method = 'dimconfig0';
+    options.ReconfigMethod = 'dimconfig0';
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Hybrid Slicing Scheme 0');
     pause(0.01);
     for i = 1:length(etas)

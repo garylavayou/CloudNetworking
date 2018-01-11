@@ -27,12 +27,12 @@
 % TODO: Part of the functionalities are moved to <ClouldNetworkEx>.
 function [output, runtime] = singleSliceOptimization( this, new_opts )
 % this.clearStates;
-options = getstructfields(this.options, 'Method');
-assert(contains(options.Method, {'single-normal', 'single-function'}),...
-    'error: unrecognized method (%s).', options.Method);
 if nargin < 2
     new_opts = struct;
 end
+options = getstructfields(this.options, 'SlicingMethod');
+assert(contains(options.Method, {'single-normal', 'single-function'}),...
+    'error: unrecognized method (%s).', options.SlicingMethod);
 options = structmerge(options, getstructfields(new_opts, 'bCompact', 'default', true));
 options.PricingPolicy = 'linear';       % can be specified by the input argument.
 
