@@ -16,6 +16,7 @@ classdef DynamicCloudAccessNetwork < CloudAccessNetwork & DynamicNetwork
         function sl = AddSlice(this, slice_opt, varargin)
             slice_opt = this.preAddingSlice(slice_opt);
             sl = AddSlice@DynamicNetwork(this, slice_opt, varargin{:});
+            this.onAddingSlice(sl);
         end   
         
         function sl = RemoveSlice(this, arg1)
@@ -33,7 +34,10 @@ classdef DynamicCloudAccessNetwork < CloudAccessNetwork & DynamicNetwork
             this.slices{end+1} = DynamicAccessSlice(slice_opt);
             sl = this.slices{end};
         end
-        
+        function slice_opt = preAddingSlice(this, slice_opt)  
+            slice_opt = structmerge(preAddingSlice@CloudAccessNetwork(this, slice_opt),...
+                preAddingSlice@DynamicNetwork(this, slice_opt));
+        end
         function sl = onAddingSlice(this, sl)          
             %             output2 = this.singleSliceOptimization(this.options);
             %             vnf2 = sl.VNFCapacity;

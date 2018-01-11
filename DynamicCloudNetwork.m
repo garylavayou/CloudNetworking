@@ -69,6 +69,8 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             % We select the method of <DynamicNetwork> to perform adding slice.
             %             AddSlice@CloudNetwork(this, slice_opt, varargin{:});
             sl = AddSlice@DynamicNetwork(this, slice_opt, varargin{:});
+            
+            this.onAddingSlice(sl);
         end   
         
         function sl = RemoveSlice(this, arg1)
@@ -213,9 +215,11 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             sl.FlowTable{:, 'Type'} = FlowType.Normal;  % Specify flow type
         end
         
-        % Override the inherited function.
-        %         function slice_opt = preAddingSlice(this, slice_opt)
-        %         end
+        % Override the inherited function from <CloudNetwork> and <DynamicNetwork>.
+        function slice_opt = preAddingSlice(this, slice_opt)
+            slice_opt = structmerge(preAddingSlice@CloudNetwork(this, slice_opt),...
+                preAddingSlice@DynamicNetwork(this, slice_opt));
+        end
         
         function sl = onAddingSlice(this, sl)          
             this.pending_slices.Add(sl);
