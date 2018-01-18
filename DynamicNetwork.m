@@ -25,8 +25,10 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                 % |VNFReconfigCoefficient|'s default value is 3.
                 this.options = structmerge(this.options, ...
                     getstructfields(varargin{4}, ...
-                    {'VNFReconfigCoefficient', 'DiffNonzeroTolerance'}, 'default', ...
-                    {3, 10^-4}));
+                    {'VNFReconfigCoefficient', 'DiffNonzeroTolerance', 'UnitReconfigureCost'},...
+                    'default', {3, 10^-4, 1}));
+                h = DynamicSlice.GLOBAL_OPTIONS;
+                h.eta = this.options.UnitReconfigureCost; 
                 this.options = structmerge(this.options, ...
                     getstructfields(varargin{4}, 'ReconfigMethod'));
             end
@@ -221,16 +223,15 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                     max(slice.VirtualLinks{slice.Topology.IndexEdge(h,t),'Capacity'},1); %#ok<SPRIX>
             end
             graph = DirectedGraph(A, C);
-            slice_opt.FlowPattern = slice.options.FlowPattern;
-            slice_opt.DelayConstraint = slice.options.DelayConstraint;
+            slice_opt = getstructfields(slice.options, ...
+                {'FlowPattern','DelayConstraint','NumberPaths'});
             slice_opt = this.updateDynamicSliceOptions(slice, slice_opt);
             if nargin <= 2
                 slice_opt.NumberFlows = 1;
             else
                 slice_opt.NumberFlows = numflow;
             end
-            slice_opt.NumberPaths = slice.options.NumberPaths;
-            slice_opt.Method = 'dynamic-slicing';
+            slice_opt.SlicingMethod = 'dynamic-slicing';
             b_vailid_flow = false;
             while ~b_vailid_flow
                 try

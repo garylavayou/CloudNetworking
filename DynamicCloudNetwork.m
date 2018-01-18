@@ -280,12 +280,10 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 return;
             end
             graph = this.graph;
-            slice_opt.FlowPattern = slice.options.FlowPattern;
-            slice_opt.DelayConstraint = slice.options.DelayConstraint;
+            slice_opt = getstructfields(slice.options, ...
+                {'FlowPattern', 'DelayConstraint', 'NumberPaths', 'SlicingMethod'});
             slice_opt = this.updateDynamicSliceOptions(slice, slice_opt);
             slice_opt.NumberFlows = numflow;
-            slice_opt.NumberPaths = slice.options.NumberPaths;
-            slice_opt.Method = slice.options.Method;
             [ft, phy_adjacent] = this.generateFlowTable(graph, slice_opt);
             ft.Properties.VariableNames = ...
                 {'Source', 'Target', 'Rate', 'Delay', 'Paths'};
@@ -449,11 +447,11 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             [~, slice.VirtualLinks.ReconfigCost] = ...
                 slice.fcnLinkPricing(link_price, link_load);
             slice.VirtualLinks.ReconfigCost = ...
-                (DynamicSlice.ETA/slice.time.DimensionInterval) * slice.VirtualLinks.ReconfigCost;
+                (DynamicSlice.GLOBAL_OPTIONS.eta/slice.time.DimensionInterval) * slice.VirtualLinks.ReconfigCost;
             [~, slice.VirtualDataCenters.ReconfigCost] = ...
                 slice.fcnNodePricing(node_price, node_load);
             slice.VirtualDataCenters.ReconfigCost = ...
-                (DynamicSlice.ETA/slice.time.DimensionInterval) * slice.VirtualDataCenters.ReconfigCost;
+                (DynamicSlice.GLOBAL_OPTIONS.eta/slice.time.DimensionInterval) * slice.VirtualDataCenters.ReconfigCost;
         end
         %         function [link_reconfig_cost, node_reconfig_cost] = ...
         %                 updateRedimensionCost(this, slice, link_id, node_id)

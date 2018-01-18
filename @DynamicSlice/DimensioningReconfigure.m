@@ -4,6 +4,8 @@ if nargin <= 2
     new_opts = struct;
 end
 new_opts.PricingPolicy = 'quadratic-price';
+new_opts = structmerge(new_opts, ...
+    getstructfields(this.Parent.options, 'PricingPolicy', 'ignore'));
 
 this.b_dim = false;
 if isempty(fieldnames(this.net_changes))
@@ -40,8 +42,14 @@ if isempty(fieldnames(this.net_changes))
             this.x_reconfig_cost = (this.I_edge_path)' * this.VirtualLinks.ReconfigCost;
             this.z_reconfig_cost = repmat(this.VirtualDataCenters.ReconfigCost, ...
                 this.NumberPaths*this.NumberVNFs, 1);
-            this.topts.x_reconfig_cost = this.options.ReconfigScaler*this.x_reconfig_cost;
-            this.topts.z_reconfig_cost = this.options.ReconfigScaler*this.z_reconfig_cost;
+            if this.ENABLE_DYNAMIC_NORMALIZER
+                beta =this.getbeta();
+                this.topts.x_reconfig_cost = beta.x*this.x_reconfig_cost;
+                this.topts.z_reconfig_cost = beta.z*this.z_reconfig_cost;
+            else
+                this.topts.x_reconfig_cost = this.options.ReconfigScaler*this.x_reconfig_cost;
+                this.topts.z_reconfig_cost = this.options.ReconfigScaler*this.z_reconfig_cost;
+            end
         else
             %%
             % Since we need maintain information of the deleted variables, we should use
@@ -51,15 +59,28 @@ if isempty(fieldnames(this.net_changes))
             old_num_paths = length(this.old_state.path_owner);
             this.z_reconfig_cost = repmat(this.VirtualDataCenters.ReconfigCost, ...
                 old_num_paths*this.NumberVNFs, 1);
-            this.topts.x_reconfig_cost = ...
-                this.options.ReconfigScaler*this.x_reconfig_cost(~this.changed_index.x);
-            this.topts.z_reconfig_cost = ...
-                this.options.ReconfigScaler*this.z_reconfig_cost(~this.changed_index.z);
+            if this.ENABLE_DYNAMIC_NORMALIZER
+                beta =this.getbeta();
+                this.topts.x_reconfig_cost = ...
+                    beta.x*this.x_reconfig_cost(~this.changed_index.x);
+                this.topts.z_reconfig_cost = ...
+                    beta.z*this.z_reconfig_cost(~this.changed_index.z);
+            else
+                this.topts.x_reconfig_cost = ...
+                    this.options.ReconfigScaler*this.x_reconfig_cost(~this.changed_index.x);
+                this.topts.z_reconfig_cost = ...
+                    this.options.ReconfigScaler*this.z_reconfig_cost(~this.changed_index.z);
+            end
         end
         this.vnf_reconfig_cost = this.Parent.options.VNFReconfigCoefficient * ...
             repmat(this.VirtualDataCenters.ReconfigCost, this.NumberVNFs, 1);
-        this.topts.vnf_reconfig_cost = ...
-            this.options.ReconfigScaler*this.vnf_reconfig_cost;
+        if this.ENABLE_DYNAMIC_NORMALIZER
+            beta = this.getbeta();
+            this.topts.vnf_reconfig_cost = beta.v*this.vnf_reconfig_cost;
+        else
+            this.topts.vnf_reconfig_cost = ...
+                this.options.ReconfigScaler*this.vnf_reconfig_cost;
+        end
     end
 else
     this.b_dim = true;
@@ -73,7 +94,7 @@ if ~this.b_dim
             [profit,cost] = this.fastReconfigure2(action, new_opts);
         case {'dimconfig0'}
             new_opts.CostModel = 'fixcost';
-            new_opts.Method = 'slice-price';
+            new_opts.SlicingMethod = 'slice-price';
             this.prices.Link = this.VirtualLinks.Price;
             this.prices.Node = this.VirtualDataCenters.Price;
             [profit,cost] = this.optimalFlowRate(new_opts);
@@ -127,11 +148,11 @@ end
 % With 'dimconfig', we cannot reconfigure the VNF instance capacity after dimensioning.
 % Therefore, we need to reserve resource for VNF instances. On the other hand, with
 % 'dimconfig2' and 'dimconfig0', we only need reserved resources for the nodes.
-if isfield(new_opts, 'bReserve') && new_opts.bReserve
+if isfield(this.options, 'bReserve') && this.options.bReserve
     this.lower_bounds = struct;
     this.lower_bounds.link = setlowerbounds(...
         this.old_state.link_load, this.old_state.link_capacity, 0.7);
-    switch this.options.Method
+    switch this.options.ReconfigMethod
         case {'dimconfig', 'dimconfig1'}
             this.lower_bounds.VNF = setlowerbounds(...
                 this.old_state.vnf_load, this.old_state.vnf_capacity, 0.7);       % getVNFCapacity should be renamed as this.getVNFLoad.

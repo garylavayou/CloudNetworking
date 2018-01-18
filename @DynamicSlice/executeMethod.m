@@ -6,10 +6,15 @@ this.temp_vars = struct;
 this.getAs_res;         % TODO, incremental upate of As_res, Hrep, and Hdiag.
 this.getHrep;
 this.getHdiag;
-if ~strcmpi(this.options.Method, 'fastconfig')
+if ~strcmpi(this.options.ReconfigMethod, 'fastconfig')
     this.vnf_reconfig_cost = this.Parent.options.VNFReconfigCoefficient * ...
         repmat(this.VirtualDataCenters.ReconfigCost, this.NumberVNFs, 1);
-    this.topts.vnf_reconfig_cost = this.options.ReconfigScaler*this.vnf_reconfig_cost;
+    if this.ENABLE_DYNAMIC_NORMALIZER
+        beta = this.getbeta();
+        this.topts.vnf_reconfig_cost = beta.v*this.vnf_reconfig_cost;
+    else
+        this.topts.vnf_reconfig_cost = this.options.ReconfigScaler*this.vnf_reconfig_cost;
+    end
     %% Save the VNF capacity to the previous state, berfore optimization
     % After the slice is created, |VNFCapacity| is recorded. After each optimization, the
     % |VNFCapacity| is updated.
@@ -26,7 +31,7 @@ switch this.options.ReconfigMethod
         % should exclude it from the |profit|, as well as the reconfiguration
         % cost.
         options.CostModel = 'fixcost';
-        options.Method = 'slice-price';
+        options.SlicingMethod = 'slice-price';
         this.prices.Link = this.VirtualLinks.Price;
         this.prices.Node = this.VirtualDataCenters.Price;
         [profit,cost] = this.optimalFlowRate(options);
@@ -39,9 +44,9 @@ switch this.options.ReconfigMethod
     otherwise
         error('NetworkSlicing:UnsupportedMethod', ...
             'error: unsupported method (%s) for network slicing.', ...
-            this.options.Method) ;
+            this.options.ReconfigMethod) ;
 end
-if contains(this.options.Method, {'dimconfig', 'dimconfig2'}) && isempty(profit)
+if contains(this.options.ReconfigMethod, {'dimconfig', 'dimconfig2'}) && isempty(profit)
     exitflag = -1;
     return;
 end
@@ -52,6 +57,8 @@ link_util = this.VirtualLinks.Load(idx)./this.VirtualLinks.Capacity(idx);
 sum_link_util = sum(this.VirtualLinks.Load(idx))./sum(this.VirtualLinks.Capacity(idx));
 mean_link_util = mean(link_util);
 %}
+old_info = INFO;
+INFO = true;
 fidx = find(this.FlowTable.Rate<=0.1*median(this.FlowTable.Rate));
 if isempty(fidx)
     exitflag = 1;
@@ -63,7 +70,7 @@ else
     fidx0 = this.FlowTable.Rate<=0;
     if ~isempty(setdiff(this.FlowTable.Identifier(fidx0), this.reject_index))
         message = sprintf('%s: [%s] reject flows due to zero rate.', ...
-            calledby, this.options.Method);
+            calledby, this.options.ReconfigMethod);
         if ~isempty(DEBUG) && DEBUG
             warning(message); %#ok<SPWRN>
         else
@@ -74,10 +81,10 @@ else
     end
     % due to reconfiguration cost, some arriving flows might be directly rejected. In this
     % case we need to perform slice redimensioning.
-    if contains(this.options.Method, {'dimconfig'}) && ...
+    if contains(this.options.ReconfigMethod, {'dimconfig'}) && ...
             ~isempty(setdiff(this.FlowTable.Identifier(fidx), this.reject_index))
         message = sprintf('%s: [%s] reconfigure flows due to low rate.\n', ...
-            calledby, this.options.Method);
+            calledby, this.options.ReconfigMethod);
         if ~isempty(DEBUG) && DEBUG
             warning(message); %#ok<SPWRN>
         else
@@ -90,9 +97,20 @@ else
     end
 end
 this.reject_index = this.FlowTable.Identifier(fidx);
+INFO = old_info;
 
 % stat.Solution = this.Variables;
-stat = this.get_reconfig_stat();
+if this.ENABLE_DYNAMIC_NORMALIZER
+    [stat, reconfig_cost] = this.get_reconfig_stat();
+    if this.b_dim
+        this.postl1normalizer(reconfig_cost, reconfig_cost.linear);
+    else
+        this.postl1normalizer(getstructfields(reconfig_cost, {'x','z'}),...
+            getstructfields(reconfig_cost.linear, {'x','z'}));
+    end
+else
+    stat = this.get_reconfig_stat();
+end
 switch this.options.ReconfigMethod
     case 'reconfig'
         stat.Profit = profit - stat.Cost;

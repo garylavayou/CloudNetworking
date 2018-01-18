@@ -25,7 +25,7 @@ if b_reconfig
     pause(0.01);
     GlobalState.Initialize();
     seed_dynamic = SEED;
-    DynamicSlice.ETA(1);
+    options.UnitReconfigureCost = 1;
     SingleSliceReconfiguration;
     results.Reconfig = g_results;
 end
@@ -38,7 +38,7 @@ if b_fastconfig
     for i = 1:length(etas)
         GlobalState.Initialize();
         seed_dynamic = SEED;
-        DynamicSlice.ETA(etas(i));
+        options.UnitReconfigureCost = etas(i);
         SingleSliceReconfiguration;
         if i == 1
             results.Fastconfig = {g_results};
@@ -56,7 +56,7 @@ if b_fastconfig2
     for i = 1:length(etas)
         GlobalState.Initialize();
         seed_dynamic = SEED;
-        DynamicSlice.ETA(etas(i));
+        options.UnitReconfigureCost = etas(i);
         SingleSliceReconfiguration;
         if i == 1
             results.Fastconfig2 = {g_results};
@@ -74,7 +74,7 @@ if b_dimconfig
     for i = 1:length(etas)
         GlobalState.Initialize();
         seed_dynamic = SEED;
-        DynamicSlice.ETA(etas(i));
+        options.UnitReconfigureCost = etas(i);
         SingleSliceReconfiguration;
         if i == 1
             results.Dimconfig = {g_results};
@@ -92,7 +92,7 @@ if b_dimconfig2
     for i = 1:length(etas)
         GlobalState.Initialize();
         seed_dynamic = SEED;
-        DynamicSlice.ETA(etas(i));
+        options.UnitReconfigureCost = etas(i);
         SingleSliceReconfiguration;
         if i == 1
             results.Dimconfig2 = {g_results};
@@ -110,7 +110,7 @@ if b_dimconfig0
     for i = 1:length(etas)
         GlobalState.Initialize();
         seed_dynamic = SEED;
-        DynamicSlice.ETA(etas(i));
+        options.UnitReconfigureCost = etas(i);
         SingleSliceReconfiguration;
         if i == 1
             results.Dimconfig0 = {g_results};

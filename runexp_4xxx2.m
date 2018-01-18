@@ -22,11 +22,11 @@ Dispachers = creatempty('SliceFlowEventDispatcher', length(etas), 0);
 global_state(length(etas),1) = GlobalState;
 old_num_event = NUM_EVENT;
 NUM_EVENT = options.NumberEventWarmUp; %#ok<NASGU>
-options.Method = 'dimconfig';
+options.ReconfigMethod = 'dimconfig';
 for i = 1:length(etas)
     GlobalState.Initialize();
     seed_dynamic = SEED;
-    DynamicSlice.ETA(etas(i));
+    options.UnitReconfigureCost = etas(i);
     SingleSliceReconfiguration;
     %% Create Network
     PNs(i) = PN;
@@ -52,14 +52,14 @@ PNs = PNsnew;
 Dispachers = Dispachersnew;
 %%
 if b_fastconfig
-    options.Method = 'fastconfig';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
+    options.ReconfigMethod = 'fastconfig';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Fast Reconfiguration');
     pause(0.01);
     for i = 1:length(etas)
         global_state(i).Restore();
         PN = PNs(i).copy;
         SFED = Dispachers(i).copy;
-        DynamicSlice.ETA(etas(i));  % should be reset each iteration.
+        options.UnitReconfigureCost = etas(i);  % should be reset each iteration.
         RepeatSliceReconfiguration;
         if i == 1
             results.Fastconfig = {g_results};
@@ -71,14 +71,14 @@ end
 
 %%
 if b_fastconfig2
-    options.Method = 'fastconfig2';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
+    options.ReconfigMethod = 'fastconfig2';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Fast Reconfiguration 2');
     pause(0.01);
     for i = 1:length(etas)
         global_state(i).Restore();
         PN = PNs(i).copy;
         SFED = Dispachers(i).copy;
-        DynamicSlice.ETA(etas(i));
+        options.UnitReconfigureCost = etas(i);
         RepeatSliceReconfiguration;
         if i == 1
             results.Fastconfig2 = {g_results};
@@ -94,27 +94,27 @@ if b_reconfig
     % optimization procedure is independent on the cosefficient, and the reconfiguration
     % cost with other coefficient can be derieved from the one results by using the
     % coefficient.
-    options.Method = 'reconfig';
+    options.ReconfigMethod = 'reconfig';
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Reconfiguration');
     pause(0.01);
     global_state(1).Restore();
     PN = PNs(1).copy;
     SFED = Dispachers(1).copy;
-    DynamicSlice.ETA(1);
+    options.UnitReconfigureCost = 1;
     RepeatSliceReconfiguration;
     results.Reconfig = g_results;
 end
 
 %%
 if b_dimconfig
-    options.Method = 'dimconfig';
+    options.ReconfigMethod = 'dimconfig';
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Hybrid Slicing Scheme');
     pause(0.01);
     for i = 1:length(etas)
         global_state(i).Restore();
         PN = PNs(i).copy;
         SFED = Dispachers(i).copy;
-        DynamicSlice.ETA(etas(i));
+        options.UnitReconfigureCost = etas(i);
         RepeatSliceReconfiguration;
         if i == 1
             results.Dimconfig = {g_results};
@@ -126,14 +126,14 @@ end
 
 %%
 if b_dimconfig2
-    options.Method = 'dimconfig2';
+    options.ReconfigMethod = 'dimconfig2';
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Hybrid Slicing Scheme 2');
     pause(0.01);
     for i = 1:length(etas)
         global_state(i).Restore();
         PN = PNs(i).copy;
         SFED = Dispachers(i).copy;
-        DynamicSlice.ETA(etas(i));
+        options.UnitReconfigureCost = etas(i);
         RepeatSliceReconfiguration;
         if i == 1
             results.Dimconfig2 = {g_results};
