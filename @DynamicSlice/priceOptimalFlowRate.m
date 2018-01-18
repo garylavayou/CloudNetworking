@@ -35,7 +35,8 @@ As_res = this.As_res;        % update As_res
 %   (5) VNF instance reconfiguration cost constraint: 2*NV*NN;
 %   (6) virtual link capacity constraint: NL (optional);
 %   (7) lower bound of virtual link capacity (optional);
-%   (8) lower bound of virtual node capacity (dimconfig2);
+%   (8) lower bound of virtual node capacity (dimconfig2): sum capacity of VNF isntance
+%       larger than the lowbound;
 %   (9) lower bound of VNF instance capacity (dimconfig1).
 %
 % Number of Variables
@@ -59,28 +60,34 @@ if ~isempty(this.lower_bounds)
     end
 end
 As = spalloc(num_lcon, num_vars, nnz_As);
+%% (1)
 As(1:this.num_lcon_res,1:this.num_vars) = As_res;
 row_offset = this.num_lcon_res;
+%% (2)
 As(row_offset+(1:this.num_varv), NP+(1:this.num_varz)) = Hd;
 As(row_offset+(1:this.num_varv), this.num_vars+(1:this.num_varv)) = -eye(this.num_varv);
 row_offset = row_offset + this.num_varv;
+%% (3)
 As(row_offset+(1:NP), 1:NP) = eye(NP);
 As(row_offset+(1:NP), num_base_vars+(1:NP)) = -eye(NP);
 row_offset = row_offset + NP;
 As(row_offset+(1:NP), 1:NP) = -eye(NP);
 As(row_offset+(1:NP), num_base_vars+(1:NP)) = -eye(NP);
 row_offset = row_offset + NP;
+%% (4)
 As(row_offset+(1:this.num_varz), (NP+1):this.num_vars) = eye(this.num_varz);
 As(row_offset+(1:this.num_varz), (num_base_vars+NP)+(1:this.num_varz)) = -eye(this.num_varz);
 row_offset = row_offset + this.num_varz;
 As(row_offset+(1:this.num_varz), (NP+1):this.num_vars) = -eye(this.num_varz);
 As(row_offset+(1:this.num_varz), (num_base_vars+NP)+(1:this.num_varz)) = -eye(this.num_varz);
 row_offset = row_offset + this.num_varz;
+%% (5)
 As(row_offset+(1:this.num_varv), (this.num_vars+1):num_base_vars) = eye(this.num_varv);
 As(row_offset+(1:this.num_varv), (num_base_vars+this.num_vars+1):num_base_vars*2) = -eye(this.num_varv);
 row_offset = row_offset + this.num_varv;
 As(row_offset+(1:this.num_varv), (this.num_vars+1):num_base_vars) = -eye(this.num_varv);
 As(row_offset+(1:this.num_varv), (num_base_vars+this.num_vars+1):num_base_vars*2) = -eye(this.num_varv);
+%% (6)
 row_offset = row_offset + this.num_varv;
 if ~isempty(this.lower_bounds)
     As(row_offset+(1:NL), 1:NP) = this.I_edge_path;
@@ -143,14 +150,14 @@ fmincon_opt.Algorithm = 'interior-point';
 fmincon_opt.SpecifyObjectiveGradient = true;
 fmincon_opt.MaxIterations = 60;
 fmincon_opt.MaxFunctionEvaluations = 180;
-fmincon_opt.Display = 'notify';   %'notify-detailed'; %'iter';
+fmincon_opt.Display = 'notify';   %'notify-detailed'; %'iter'; 'notify'
 % fmincon_opt.CheckGradients = true;
-% fmincon_opt.Diagnostics = 'on';
 % fmincon_opt.FiniteDifferenceType = 'central';
+% fmincon_opt.Diagnostics = 'on';
 options.num_varx = this.NumberPaths;
 options.num_varz = this.num_varz;
 options.num_varv = this.num_varv;
-options.Form = 'normal';
+% options.Form = 'normal';
 if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
     % column/variables: isequal(this.I_active_variables', sum(this.As_res,1)~=0)
     % row/constraints:  isequal(active_rows, find(sum(this.As_res,2)~=0))  
