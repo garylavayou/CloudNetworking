@@ -213,6 +213,36 @@ for i = 1:length(type_index)
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
             slice_template(i).ReconfigScaler = 0.5;
             slice_template(i).PricingPolicy = 'quadratic';
+        case 74
+            %%
+            % similar to type 44, but with
+            % smaller user utility, higher arrival rate.
+            slice_template(i).Weight = 10;
+            slice_template(i).NumberPaths = 1;
+            slice_template(i).VNFList = [1,2,3];
+            slice_template(i).ArrivalRate = 1/(3600*24);   % 1 arrivals/24 hour => 3600 sec/arrival
+            slice_template(i).ServiceInterval = 3600*24*7;
+            slice_template(i).NumberFlows = 150;
+            slice_template(i).Flow.ArrivalRate = 1800/3600; 
+            slice_template(i).Flow.ServiceInterval = 300; 
+            slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
+            slice_template(i).ReconfigScaler = 2;       % beta
+            slice_template(i).PricingPolicy = 'quadratic';
+        case 84
+            %%
+            % similar to type 44, but with
+            % smaller user utility, higher arrival rate.
+            slice_template(i).Weight = 10;
+            slice_template(i).NumberPaths = 1;
+            slice_template(i).VNFList = [1,2,3];
+            slice_template(i).ArrivalRate = 1/(3600*24);   % 1 arrivals/24 hour => 3600 sec/arrival
+            slice_template(i).ServiceInterval = 3600*24*7;
+            slice_template(i).NumberFlows = 150;
+            slice_template(i).Flow.ArrivalRate = 3600/3600; 
+            slice_template(i).Flow.ServiceInterval = 300; 
+            slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
+            slice_template(i).ReconfigScaler = 2;       % beta
+            slice_template(i).PricingPolicy = 'quadratic';
         otherwise
             error('error: unrecognized slice type (%d).', type_index(i));
     end
@@ -228,6 +258,10 @@ for i = 1:length(type_index)
                     slice_template(i).EventInterval = 20;
                 case 64
                     slice_template(i).EventInterval = 6;
+                case 74
+                    slice_template(i).EventInterval = 40;
+                case 84
+                    slice_template(i).EventInterval = 40;
                 otherwise
                     error('error: unrecognized slice type (%d).', type_index(i));
             end
@@ -240,6 +274,10 @@ for i = 1:length(type_index)
                     slice_template(i).TimeInterval = 300;
                 case 64
                     slice_template(i).TimeInterval = 900;
+                case 74
+                    slice_template(i).TimeInterval = 40;
+                case 84
+                    slice_template(i).TimeInterval = 20;
                 otherwise
                     error('error: unrecognized slice type (%d).', type_index(i));
             end
