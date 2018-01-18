@@ -23,7 +23,7 @@ for temp_sid = 1:PN.NumberSlices
         sl.AddListener(PN, {'AddFlowSucceed', 'AddFlowFailed', ...
             'RemoveFlowSucceed', 'RemoveFlowFailed',...
             'RequestDimensioning', 'DeferDimensioning'}, @PN.eventhandler);
-        sl.setOption('Method', options.Method);
+        sl.setOption('ReconfigMethod', options.ReconfigMethod);
     end
 end
 

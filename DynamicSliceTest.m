@@ -12,7 +12,7 @@ classdef DynamicSliceTest < DynamicSlice
             this.saved_options = this.options;
             this.options = structmerge(this.options, ...
                 getstructfields(slice_data, 'NumberEventWarmUp','default-ignore', 50));
-            this.options.Method = 'dimconfig';
+            this.options.ReconfigMethod = 'dimconfig';
         end
     end
     
@@ -22,7 +22,7 @@ classdef DynamicSliceTest < DynamicSlice
             global event_num DEBUG;  %#ok<NUSED>
             [exitflag,fidx] = executeMethod@DynamicSlice(this, action);
             if event_num == this.getOption('NumberEventWarmUp')
-                this.options.Method = this.saved_options.Method;
+                this.options.ReconfigMethod = this.saved_options.ReconfigMethod;
             end
         end
     end

@@ -254,14 +254,14 @@ classdef CloudNetworkEx < CloudNetwork
         % used for single slices.
         function slice_data = updateSliceData(this, slice_data)
             slice_data.ConstantProfit = 0;
-            if strcmp(this.options.Method, 'single-function')
+            if strcmp(this.options.SlicingMethod, 'single-function')
                 slice_data.Alpha_f = zeros(NS, 1);
                 slice_data.VNFList = 1;
             end
             for s = 1:this.NumberSlices
                 sl = this.slices{s};
                 slice_data.ConstantProfit = slice_data.ConstantProfit + sl.constant_profit;
-                if strcmp(this.options.Method, 'single-function')
+                if strcmp(this.options.SlicingMethod, 'single-function')
                     slice_data.Alpha_f(s) = sum(this.VNFTable{sl.VNFList,{'ProcessEfficiency'}});
                 end
             end

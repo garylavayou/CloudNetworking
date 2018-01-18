@@ -179,7 +179,7 @@ classdef SliceEx < Slice
     
     methods(Access=protected)
         function [x, fval, exitflag] = optimize(this, params, options)
-            switch options.Method
+            switch options.SlicingMethod
                 case 'price'
                     [x, fval, exitflag] = optimize@Slice(this, params, options);
                 otherwise

@@ -16,7 +16,7 @@ classdef CloudNetwork < PhysicalNetwork
         %       _Threshold_ is used for resource pricing. 
         %       _Method_ is used for selecting method to solve sub-problem.
         %
-        % NOTE: only put common options ('Method', 'Form', etc.)in the constructor. Put
+        % NOTE: only put common options ('SlicingMethod', 'Form', etc.)in the constructor. Put
         % those method-specific options to the correspongding method.
         function this = CloudNetwork(varargin)
             this@PhysicalNetwork(varargin{:});
@@ -169,7 +169,7 @@ classdef CloudNetwork < PhysicalNetwork
     
     methods (Access=protected) 
         function graph = residualgraph(this, slice_opt)
-            if contains(slice_opt.Method, 'static')
+            if contains(slice_opt.SlicingMethod, 'static')
                 % If a link's residual capacity is zero, then this link should be removed
                 % from the grpah.
                 % If a node's residual capacity is zero, then this node and the adjacent
@@ -204,7 +204,7 @@ classdef CloudNetwork < PhysicalNetwork
         end
         
         % Implement the abstract function.
-        % By default, the options including 'Method' and 'AdmitPolicy' is inherited from
+        % By default, the options including 'SlicingMethod' and 'AdmitPolicy' is inherited from
         % the network. But slice can use its own options in the configuration file.
         function slice_opt = preAddingSlice(this, slice_opt)  
             global DEBUG;
@@ -217,7 +217,7 @@ classdef CloudNetwork < PhysicalNetwork
             end
                 
             slice_opt = structmerge(slice_opt,...
-                getstructfields(slice_opt, 'Method', 'default', this.options.SlicingMethod));
+                getstructfields(slice_opt, 'SlicingMethod', 'default', this.options.SlicingMethod));
             %% pricing policy
             % each slice can specify their own pricing, but the network determines whether
             % to adopt this polocy or use the network specified pricing policy.
@@ -402,7 +402,7 @@ classdef CloudNetwork < PhysicalNetwork
         
         %% ISSUE: VNFlist is not conmmonly shared.
         function slice_data = updateSliceData(this, slice_data, options)
-            if strcmp(options.Method, 'single-normal')
+            if strcmp(options.SlicingMethod, 'single-normal')
                 if options.bCompact
                     b_vnf = false(this.NumberVNFs, 1);
                     for s = 1:this.NumberSlices
@@ -487,7 +487,7 @@ classdef CloudNetwork < PhysicalNetwork
             end
             
             if isempty(path_list)
-                if contains(slice_opt.Method, 'static')
+                if contains(slice_opt.SlicingMethod, 'static')
                     % two choice: reject the slice or reject the flow.
                     if isfield(slice_opt, 'AdmitPolicy') && ...
                             strcmp(slice_opt.AdmitPolicy, 'reject-slice')

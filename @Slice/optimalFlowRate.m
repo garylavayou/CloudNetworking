@@ -29,7 +29,7 @@ end
 options = structmerge(new_opts, ...
     getstructfields(this.Parent.options, 'Form'), ...
     getstructfields(this.options, 'PricingPolicy', 'default', 'linear'), ...
-    getstructfields(new_opts, 'Method'),...
+    getstructfields(new_opts, 'SlicingMethod'),...
     'exclude');     
 
 NL = this.NumberVirtualLinks;
@@ -71,7 +71,7 @@ parameters.bs(idx) = [];
 % * *Start Point*: in case that the capacity of a virtual link/node is zero, we initialize
 % $z_{min}$ and $x_{min}$ as the nonzero minimum value.
 parameters.x0 = zeros(this.num_vars,1);
-switch options.Method
+switch options.SlicingMethod
     case 'single-function'
         max_alpha_f = max(options.Alpha_f);
     otherwise
@@ -115,7 +115,7 @@ if strcmpi(options.Form, 'compact')
     options.fmincon_opt.HessianFcn = ...
         @(x,lambda)Slice.fcnHessianCompact(x, lambda, this, options);
 else
-    if contains(options.Method, 'price')
+    if contains(options.SlicingMethod, 'price')
         options.fmincon_opt.HessianFcn = ...
             @(x,lambda)Slice.fcnHessian(x, lambda, this, options);
     else
@@ -135,7 +135,7 @@ end
 %
 % On the other hand, too small components should be rounded.
 this.temp_vars.x = x(1:NP);
-switch options.Method
+switch options.SlicingMethod
     case 'single-function'
         %% TODO
         % allocate VNF instance by order.

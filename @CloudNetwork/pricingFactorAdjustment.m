@@ -7,7 +7,7 @@ if nargin < 2
 end
 options = structmerge(getstructfields(this.options, {'PricingFactor'}), ...
     getstructfields(new_opts, {'PricingPolicy'}, 'default', 'linear'));
-options.Method = 'slice-price';
+options.SlicingMethod = 'slice-price';
 
 if nargout == 3
     runtime.Serial = 0;

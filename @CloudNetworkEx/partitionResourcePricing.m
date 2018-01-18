@@ -1,7 +1,7 @@
 function [output, runtime] = partitionResourcePricing(this, init_price)
 global DEBUG;
 options = getstructfields(this.options, ...
-    {'Method', 'ProfitType', 'WelfareType', 'PercentFactor'});
+    {'SlicingMethod', 'ProfitType', 'WelfareType', 'PercentFactor'});
 
 this.clearStates;
 if nargout == 2

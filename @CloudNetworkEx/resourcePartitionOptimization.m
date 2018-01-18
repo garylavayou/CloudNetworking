@@ -8,7 +8,7 @@
 function [ output, runtime ] = resourcePartitionOptimization( this, slice_weight )
 global DEBUG;
 options = getstructfields(this.options, ...
-    {'Method', 'ProfitType', 'WelfareType', 'PercentFactor'});
+    {'SlicingMethod', 'ProfitType', 'WelfareType', 'PercentFactor'});
 
 this.clearStates;
 

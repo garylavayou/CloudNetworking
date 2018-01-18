@@ -60,7 +60,7 @@ classdef Slice < VirtualNetwork & EventReceiver
             end
             
             this.options = structmerge(this.options, ...
-                getstructfields(slice_data, 'Method', 'default', 'dynamic-slicing'),...
+                getstructfields(slice_data, 'SlicingMethod', 'default', 'dynamic-slicing'),...
                 getstructfields(slice_data, 'PricingPolicy', 'ignore'));
 
             this.getAs_res;
@@ -489,7 +489,7 @@ classdef Slice < VirtualNetwork & EventReceiver
         % 'num_orig_vars'.
         function [x, fval] = optimize(this, params, options)
             global DEBUG;
-            if contains(options.Method, 'price') % 'price', 'slice-price'
+            if contains(options.SlicingMethod, 'price') % 'price', 'slice-price'
                 if strcmpi(options.Form, 'compact')
                     [x_compact, fval, exitflag, output] = ...
                         fmincon(@(x)Slice.fcnProfitCompact(x, this, options), ...

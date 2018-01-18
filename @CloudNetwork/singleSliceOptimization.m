@@ -31,7 +31,7 @@ if nargin < 2
     new_opts = struct;
 end
 options = getstructfields(this.options, 'SlicingMethod');
-assert(contains(options.Method, {'single-normal', 'single-function'}),...
+assert(contains(options.SlicingMethod, {'single-normal', 'single-function'}),...
     'error: unrecognized method (%s).', options.SlicingMethod);
 options = structmerge(options, getstructfields(new_opts, 'bCompact', 'default', true));
 options.PricingPolicy = 'linear';       % can be specified by the input argument.
@@ -77,14 +77,14 @@ slice_data.DelayConstraint = inf;
 
 slice_data = this.updateSliceData(slice_data, options);      % override by subclasses
 slice_data.NumberPaths = [];             % avoid warning, no use here.
-slice_data.Method = [];
+slice_data.SlicingMethod = [];
 slice_data.Parent = this;
 % the flow id and path id has been allocated in each slice already, no need to reallocate.
 ss = Slice(slice_data);
-if strcmpi(options.Method, 'single-function')
+if strcmpi(options.SlicingMethod, 'single-function')
     ss.getAs_res(flow_owner, slice_data.Alpha_f);
     options.Alpha_f = slice_data.Alpha_f;
-elseif strcmpi(options.Method, 'single-normal')
+elseif strcmpi(options.SlicingMethod, 'single-normal')
     %% Coefficient for global optimization
     % When all slices are combined into one slice, a VNF might not be used by all paths
     % (_i.e._ all flows). If a VNF |f| is not used by a path |p|, there is no
@@ -111,7 +111,7 @@ if nargout == 2
     runtime.Serial = toc;
     runtime.Parallel = runtime.Serial;
 end
-if strcmpi(options.Method, 'single-normal')
+if strcmpi(options.SlicingMethod, 'single-normal')
     nz = ss.NumberDataCenters*ss.NumberPaths;
     z_index = 1:nz;
     for v = 1:ss.NumberVNFs
