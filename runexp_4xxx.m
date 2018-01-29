@@ -2,7 +2,7 @@
 % single slice reconfiguration
 NUM_TEST = length(etas);
 TOTAL_NUM= NUM_EVENT*(NUM_TEST*(...
-    b_fastconfig+b_fastconfig2+b_dimconfig+b_dimconfig2+b_dimconfig0)+b_reconfig);
+    b_fastconfig+b_fastconfig2+b_dimconfig+b_dimconfig1+b_dimconfig2+b_dimconfig0)+b_reconfig);
 global total_iter_num;
 total_iter_num = 0;
 if exist('progress_bar', 'var') && isvalid(progress_bar)
@@ -85,7 +85,25 @@ if b_dimconfig
 end
 
 %%
-if b_dimconfig2
+if b_dimconfig1
+    options.ReconfigMethod = 'dimconfig1';
+    progress_bar.Name = horzcat(EXPNAME, ' - ', 'Hybrid Slicing Scheme 1');
+    pause(0.01);
+    for i = 1:length(etas)
+        GlobalState.Initialize();
+        seed_dynamic = SEED;
+        options.UnitReconfigureCost = etas(i);
+        SingleSliceReconfiguration;
+        if i == 1
+            results.Dimconfig1 = {g_results};
+        else
+            results.Dimconfig1{i,1} = g_results;
+        end
+    end
+end
+
+%%
+if b_dimconfig1
     options.ReconfigMethod = 'dimconfig2';
     progress_bar.Name = horzcat(EXPNAME, ' - ', 'Hybrid Slicing Scheme 2');
     pause(0.01);
