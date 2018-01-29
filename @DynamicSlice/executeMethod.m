@@ -1,6 +1,8 @@
 function [exitflag, fidx] = executeMethod(this, action)
-global g_results event_num DEBUG INFO; 
-this.temp_vars = struct;
+global g_results event_num DEBUG INFO;  %#ok<NUSED>
+this.temp_vars = struct();
+this.diff_state = struct([]);
+fidx = [];
 
 %%
 this.getAs_res;         % TODO, incremental upate of As_res, Hrep, and Hdiag.
@@ -34,19 +36,19 @@ switch this.options.ReconfigMethod
         options.SlicingMethod = 'slice-price';
         this.prices.Link = this.VirtualLinks.Price;
         this.prices.Node = this.VirtualDataCenters.Price;
-        [profit,cost] = this.optimalFlowRate(options);
+        profit = this.optimalFlowRate(options);
     case 'fastconfig'
-        [profit,cost] = this.fastReconfigure(action);
+        profit = this.fastReconfigure(action);
     case 'fastconfig2'
-        [profit,cost] = this.fastReconfigure2(action);
+        profit = this.fastReconfigure2(action);
     case {'dimconfig', 'dimconfig1', 'dimconfig2', 'dimconfig0'}
-        [profit,cost] = this.DimensioningReconfigure(action);
+        profit = this.DimensioningReconfigure(action);
     otherwise
         error('NetworkSlicing:UnsupportedMethod', ...
             'error: unsupported method (%s) for network slicing.', ...
             this.options.ReconfigMethod) ;
 end
-if contains(this.options.ReconfigMethod, {'dimconfig', 'dimconfig2'}) && isempty(profit)
+if contains(this.options.ReconfigMethod, {'dimconfig', 'dimconfig1', 'dimconfig2'}) && isempty(profit)
     exitflag = -1;
     return;
 end
@@ -57,74 +59,22 @@ link_util = this.VirtualLinks.Load(idx)./this.VirtualLinks.Capacity(idx);
 sum_link_util = sum(this.VirtualLinks.Load(idx))./sum(this.VirtualLinks.Capacity(idx));
 mean_link_util = mean(link_util);
 %}
-old_info = INFO;
-INFO = true;
-fidx = find(this.FlowTable.Rate<=0.1*median(this.FlowTable.Rate));
-if isempty(fidx)
-    exitflag = 1;
-    if nargout >= 2
-        fidx = [];
-    end
-else
-    exitflag = 0;
-    fidx0 = this.FlowTable.Rate<=0;
-    if ~isempty(setdiff(this.FlowTable.Identifier(fidx0), this.reject_index))
-        message = sprintf('%s: [%s] reject flows due to zero rate.', ...
-            calledby, this.options.ReconfigMethod);
-        if ~isempty(DEBUG) && DEBUG
-            warning(message); %#ok<SPWRN>
-        else
-            if ~isempty(INFO) && INFO
-                cprintf('SystemCommands', '%s\n', message);
-            end
-        end
-    end
-    % due to reconfiguration cost, some arriving flows might be directly rejected. In this
-    % case we need to perform slice redimensioning.
-    if contains(this.options.ReconfigMethod, {'dimconfig'}) && ...
-            ~isempty(setdiff(this.FlowTable.Identifier(fidx), this.reject_index))
-        message = sprintf('%s: [%s] reconfigure flows due to low rate.\n', ...
-            calledby, this.options.ReconfigMethod);
-        if ~isempty(DEBUG) && DEBUG
-            warning(message); %#ok<SPWRN>
-        else
-            if ~isempty(INFO) && INFO
-                cprintf('SystemCommands', '%s\n', message);
-            end
-        end
-        options.b_dim = true;
-        [profit,cost] = this.DimensioningReconfigure(action, options);
-    end
-end
-this.reject_index = this.FlowTable.Identifier(fidx);
-INFO = old_info;
 
 % stat.Solution = this.Variables;
 if this.ENABLE_DYNAMIC_NORMALIZER
-    [stat, reconfig_cost] = this.get_reconfig_stat();
-    if this.b_dim
-        this.postl1normalizer(reconfig_cost, reconfig_cost.linear);
-    else
-        this.postl1normalizer(getstructfields(reconfig_cost, {'x','z'}),...
-            getstructfields(reconfig_cost.linear, {'x','z'}));
-    end
-else
-    stat = this.get_reconfig_stat();
+    this.postl1normalizer();
 end
+stat = this.get_reconfig_stat();
+stat.Profit = profit;
 switch this.options.ReconfigMethod
     case 'reconfig'
-        stat.Profit = profit - stat.Cost;
         stat.ReconfigType = ReconfigType.Reconfigure;
     case {'fastconfig','fastconfig2'}
-        stat.Profit = profit + stat.LinearCost - stat.Cost;
         stat.ReconfigType = ReconfigType.FastReconfigure;
     case{'dimconfig', 'dimconfig1', 'dimconfig2'}
-        %% ISSUE: LinearCost does not include in the profit
-        stat.Profit = profit - stat.Cost;      %  + stat.LinearCost 
         stat.ReconfigType = ReconfigType.Dimensioning;
         if ~this.b_dim
             stat.ReconfigType = ReconfigType.FastReconfigure;
-            stat.Profit = stat.Profit + stat.LinearCost;
         elseif this.getOption('Adhoc')
             % If the slice do not support Adhoc flows, then we do not release resource
             % decriptors for the slice.
@@ -132,18 +82,14 @@ switch this.options.ReconfigMethod
         end
     case {'dimconfig0'}
         if this.b_dim
-            stat.Profit = profit - stat.Cost;   % + stat.LinearCost 
             if this.getOption('Adhoc')
                 this.release_resource_description();
             end
             stat.ReconfigType = ReconfigType.Dimensioning;
         else
-            stat.Profit = profit - stat.Cost;
             stat.ReconfigType = ReconfigType.Reconfigure;
         end
 end
-stat.ResourceCost = cost;
-stat.FairIndex = (sum(this.FlowTable.Rate))^2/(this.NumberFlows*sum(this.FlowTable.Rate.^2));
 g_results(event_num,:) = stat;
 
 %% Reset temporary variables
@@ -155,5 +101,6 @@ this.prices.Node = [];
 this.topts = struct();
 this.changed_index = struct();
 this.net_changes = struct();
-
+this.b_dim = false;
+exitflag = 0;
 end
