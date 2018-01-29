@@ -3,14 +3,14 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
     properties
         %%
         % for *DeferDimensioning*;
-        pending_slices;    
+        pending_slices;
     end
     
     events
         ReallocateSlice;
     end
     
-    methods 
+    methods
         function h = eventhandler(this, source, eventData)
             switch eventData.EventName
                 case 'RequestDimensioning'
@@ -71,7 +71,7 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             sl = AddSlice@DynamicNetwork(this, slice_opt, varargin{:});
             
             this.onAddingSlice(sl);
-        end   
+        end
         
         function sl = RemoveSlice(this, arg1)
             sl = RemoveSlice@CloudNetwork(this, arg1);
@@ -90,7 +90,7 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             
             b_idle_slices = false(length(slices),1);
             for i = 1:length(slices)
-                if slices{i}.NumberFlows == 0 
+                if slices{i}.NumberFlows == 0
                     b_idle_slices(i) = true;
                 end
             end
@@ -132,9 +132,11 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 if nargout >= 2
                     [output, runtime] = optimizeResourcePriceNew@CloudNetwork...
                         (this, init_price, normal_slices);
-                else
+                elseif nargout == 1
                     output = optimizeResourcePriceNew@CloudNetwork...
                         (this, init_price, normal_slices);
+                else
+                    optimizeResourcePriceNew@CloudNetwork(this, init_price, normal_slices);
                 end
                 %% Reconfiguration Cost Model (optional)
                 % profit of Slice Customer: utility - resource consumption payment - reconfiguration cost;
@@ -144,19 +146,19 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 % net social welfare: utility - resource consumption cost - reconfiguration cost.
                 %
                 % NOTE: the model should be refined to dexcribe the reconfiguration cost.
-                % 
+                %
                 % In <CloudNetwork.optimizeResourcePriceNew> we did not calculate the
                 % reconfiguration cost for slices and the net social welfare
                 % (see <CloudNetwork.calculateOutput> and <Slice.getProfit>). So we need
-                % to append this part of cost. 
+                % to append this part of cost.
                 % Reconfiguration cost for slices is additionally calculate in
                 % <executeMethod>.
-                for i = 1:num_slices
-                    if isa(normal_slices{i}, 'DynamicSlice')
-                        reconfig_cost = normal_slices{i}.get_reconfig_cost();
-                        output.Welfare = output.Welfare - reconfig_cost;
-                    end
-                end
+                %                 for i = 1:num_slices
+                %                     if isa(normal_slices{i}, 'DynamicSlice')
+                %                         reconfig_cost = normal_slices{i}.get_reconfig_cost();
+                %                         output.Welfare = output.Welfare - reconfig_cost;
+                %                     end
+                %                 end
             end
             if ~isempty(idle_slices)
                 % recycle all resources
@@ -177,6 +179,59 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 end
             end
         end
+                
+        function rc = getReconfigurationCost(this, slices)
+            if nargin <= 1
+                slices = this.slices;
+            end
+            
+            rc = 0;
+            for i = 1:length(slices)
+                % Only <DynamicSlice> can perform redimensioning
+                % When |b_dim=true|, the slice is going through redimensioning. After
+                % redimensioning, |b_dim| is set to 'false'.
+                if isa(slices{i}, 'DynamicSlice') && slices{i}.invoke_method >= 2
+                    if slices{i}.isFinal()
+                        if slices{i}.b_dim
+                            % slice has been finalized, but the |b_dim| flag has not been
+                            % cleared, we count the true reconfiguration cost.
+                            rc = rc + slices{i}.get_reconfig_cost('const');
+                        end
+                        % If the |b_dim| flag has been cleared, we do not count
+                        % reconfiguration cost (When adding slice).
+                    else
+                        % still in optimization stage, we count the approximated
+                        % reconfiguration cost.
+                        rc = rc + slices{i}.get_reconfig_cost('linear', false);
+                    end
+                end
+            end
+        end
+        
+        %% Get network cost
+        % Reconfiguration cost is considered. Note: only those slices involved in
+        % dimensioning will count the reconfiguration cost. 
+        % Call this function from superclass will not calculate the reconfiguration cost
+        % (unless the 'slices' argument is set improperly, the superclass method has no
+        % such an argument.) 
+        %
+        % See also <CloudNetwork.getNetworkCost>.
+        function c = getNetworkCost(this, node_load, link_load, reconfig_slices)
+            switch nargin
+                case 1
+                    c = getNetworkCost@CloudNetwork(this);
+                case 2
+                    c = getNetworkCost@CloudNetwork(this, node_load);
+                case {3,4,5}
+                    c = getNetworkCost@CloudNetwork(this, node_load, link_load);
+                otherwise
+                    error('%s: unexpected number of input arguments.', calledby);
+            end
+            if nargin >= 4
+                c = c + this.getReconfigurationCost(reconfig_slices);
+            end   
+        end
+        
     end
     
     methods(Access=protected)
@@ -188,7 +243,7 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             % Make a deep copy of the DeepCp object
             % *pending_slices* is just a soft link to data (slices). Therefore, we do not directly
             % call <ListArray.copy> to avoid copying the content in the List. Instead, we will
-            % update the corresponding elements with new links to the data. 
+            % update the corresponding elements with new links to the data.
             %             temp = copyElement@DynamicNetwork(pn);
             %             this.listeners = temp.listeners;
             %             this.targets = temp.targets;
@@ -200,7 +255,7 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 this.pending_slices.Add(this.slices{sid});
             end
         end
-
+        
         function tf = onRemovingSlice(this) %#ok<MANU>
             tf = true;
         end
@@ -221,7 +276,7 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 preAddingSlice@DynamicNetwork(this, slice_opt));
         end
         
-        function sl = onAddingSlice(this, sl)          
+        function sl = onAddingSlice(this, sl)
             this.pending_slices.Add(sl);
             if ~isa(sl, 'DynamicSlice')
                 % We may add static slices to the network. In that case, we will allocate
@@ -229,18 +284,13 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 % until a dynamic slice is added and resource allocation is triggered.
                 return;
             end
-            output = this.optimizeResourcePriceNew([], this.pending_slices{:});
+
+            this.optimizeResourcePriceNew([], this.pending_slices{:});
             this.pending_slices.Clear();
             % At the beginning, the slice is added, without consideration of
             % reconfiguration cost.
-            stat = sl.get_reconfig_stat();
-            stat.Profit = output.Profit(end-1);
-            stat.ReconfigType = ReconfigType.Dimensioning;
-            stat.ResourceCost = sl.getSliceCost('quadratic-price');   % _optimizeResourcePriceNew_ use 'quadratic-price'
-            stat.FairIndex = (sum(sl.FlowTable.Rate))^2/(sl.NumberFlows*sum(sl.FlowTable.Rate.^2));
-            global g_results; 
-            g_results = stat;       % The first event.
         end
+        
         %%
         % |finalize| should only be called when dimensiong network slices.
         function finalize(this, node_price, link_price, sub_slices)
@@ -250,14 +300,53 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             finalize@CloudNetwork(this, node_price, link_price, sub_slices);
             %             finalize@DynamicNetwork(this, sub_slices);
         end
+        
+        % [Experimental]Reconfiguration cost is counted into the slice provider's revenue.
+        % Profit of Slice Provider: resource consumption payment - resource consumption cost =
+        %       (resource consumption payment + reconfiguration cost - resource consumption cost
+        %       - reconfiguration cost);
+        function [profit, revenue] = ...
+                getSliceProviderProfit(this, node_price, link_price, new_opts)
+            if nargin <= 3
+                new_opts = struct();
+            end
+            
+            [profit, revenue] = getSliceProviderProfit@CloudNetwork(this, ...
+                node_price, link_price, new_opts);
+            
+            % In the superclass (ClouNetwork) method, the reconfiguration cost is not
+            % counted.
+            % Therefore, the revenue should be added with reconfiguration cost, while the
+            % profit is not changed.
+            new_opts = getstructfields(new_opts, {'Slices'}, 'default-ignore', this.slices);
+            reconfig_cost = this.getReconfigurationCost(new_opts.Slices);
+            revenue = revenue + reconfig_cost;
+        end
+        
+        function argout = calculateOutput(this, argin, options)
+            if nargin < 2
+                options = struct;
+            end
+            if nargin < 3
+                options = struct;
+            end
+            argout = calculateOutput@CloudNetwork(this, argin, options);
+            
+            %%
+            % the base method does not count the reconfiguration cost;
+            options = getstructfields(options, 'Slices', 'default', this.slices);
+            rc = this.getReconfigurationCost(options.Slices);
+            argout.Welfare = argout.Welfare - rc;
+            argout.Profit(end) = argout.Profit(end) - rc;
+        end
     end
     
     methods(Static, Access = protected)
     end
-    methods(Access=protected)    
-        % overide the default action. 
+    methods(Access=protected)
+        % overide the default action.
         % (1) simulate flows originating from un-covered stations, which triggers resource
-        %     reallocation of the slice. 
+        %     reallocation of the slice.
         %     (a) It should be controlled that only a portion of flows will originated
         %         from uncovered areas, other the reoource reallocation will be too
         %         frequent. The portion can be specified as a paramteter of the slice. We
@@ -272,7 +361,7 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             assert(isempty(fieldnames(slice.net_changes)), ...
                 'error: <slice.net_changes> not reset.');
             if slice.getOption('Adhoc')==false || ~slice.isAdhocFlow
-                ft = createflow@DynamicNetwork(this, slice, numflow);   
+                ft = createflow@DynamicNetwork(this, slice, numflow);
                 ft{:,'Type'} = FlowType.Normal;
                 if nargout >= 2
                     phy_adjacent = [];
@@ -325,13 +414,13 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 %    [e1,e2,...eL, ea, eb, ...]
                 % Since new nodes/links are append to the end of the list, it may be
                 % arranged out of physical order (order in the physical network, e.g. node
-                % with small physical ID is append to end). 
+                % with small physical ID is append to end).
                 % To keep the original link index ([idx, head, tail]) unchanged, we should
                 % index the added links separately, instead of column indexing the whole
-                % new adjacent matrix. Then append the results to the original link index.  
+                % new adjacent matrix. Then append the results to the original link index.
                 % *Note* that the resulted link index is no more mapped to the colum
                 % indexing of the adjacent matrix.
-                % 
+                %
                 % Another solution is to insert the node and links in physical order.
                 %  * New node index is determined by physical node index;
                 %  * But, we need to record the changes of orignal node/link index, e.g.
@@ -340,19 +429,19 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 %    '+' represent the newly added nodes in physical order. Thus the new
                 %    indices of the origin/new nodes becomes
                 %           new index:  1   2   4   5   ... 20   | 3	19
-                %    and the new node set's old indices is 
+                %    and the new node set's old indices is
                 %           old index:  1   2   0   3   ... 0   18  (0 means no old index)
                 %    We still perform column-indexing for the link re-mapping procedure,
                 %    and identify those new links (not appear in the orignal link set).
                 %    Use the identification to generate the new index.
                 %  * The new index changes are used to remap the solution of the last
                 %    stage (x,z,v). So that we can compare the old and new solution
-                %    correctly. 
+                %    correctly.
                 %
                 % The edge-path, node-path matrix might be augmented. Besides, with the
                 % second method, we should first perform row exchanges for the matrices,
                 % according to the new index. Then append the incremental part.
-                % 
+                %
                 % Finally, the components of old solution (x,z,v) should be exchanged
                 % according to the new index. Then apply the incremental part.
                 pre_num_nodes = slice.NumberVirtualNodes;
@@ -366,7 +455,7 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 new_phy_node_id = find(b_phy_node);
                 new_num_nodes = numel(new_phy_node_id);
                 new_node_index = pre_num_nodes + (1:new_num_nodes)';
-                slice.VirtualNodes{new_node_index, :} = 0; 
+                slice.VirtualNodes{new_node_index, :} = 0;
                 slice.VirtualNodes{new_node_index, 'PhysicalNode'} = new_phy_node_id;
                 slice.PhysicalNodeMap{new_phy_node_id, 'VirtualNode'} = new_node_index;
                 new_dc_node_index = pre_num_nodes + ...
@@ -422,9 +511,9 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 end
             end
         end
-
+        
     end
-       
+    
     methods (Access = {?DynamicCloudNetwork,?DynamicSlice})
         %%
         % see also <DynamicSlice.finalize>.
