@@ -70,6 +70,8 @@ classdef Slice < VirtualNetwork & EventReceiver
         
         function finalize(this, node_price, link_price)
             if this.NumberFlows == 0
+                this.temp_vars.x = [];
+                this.temp_vars.z = [];
                 this.Variables.x = [];
                 this.Variables.z = [];
                 this.VirtualDataCenters{:,'Load'} = 0;
@@ -96,6 +98,20 @@ classdef Slice < VirtualNetwork & EventReceiver
             if nargin >= 3 && ~isempty(link_price)
                 this.VirtualLinks.Price = link_price(this.VirtualLinks.PhysicalLink);
             end
+        end
+        
+        function tf = isFinal(this)
+            if this.VirtualLinks.Price==0 % true if all elements is zero
+                % At the beginning of optimization, the price vector is set to 0.
+                % See also <CloudNetwork.optimizeResourcePriceNew>.
+                tf = false;
+            elseif this.VirtualDataCenters.Price == 0
+                tf = false;
+            else
+                % If the slice is not redimensioned, the price vector is nonzero.
+                tf = true;
+            end
+
         end
     end
     
@@ -195,19 +211,19 @@ classdef Slice < VirtualNetwork & EventReceiver
         % protected methods <getLinkLoad> and <getNodeLoad> respectively. But in
         % subclasses of <Slice>, the slice load might be less than its capacity, so that
         % the two group of methods return different results.
-        function c = getLinkCapacity(this, path_vars)
-            if nargin == 1
+        function c = getLinkCapacity(this, isfinal)
+            if nargin == 1 || isfinal
                 c = this.getLinkLoad;
             else
-                c = this.getLinkLoad(path_vars);
+                c = this.getLinkLoad(this.temp_vars.x);
             end
         end
         
-        function c = getNodeCapacity(this, node_vars)
-            if nargin == 1
+        function c = getNodeCapacity(this, isfinal)
+            if nargin == 1 || isfinal
                 c = this.getNodeLoad;
             else
-                c = this.getNodeLoad(node_vars);
+                c = this.getNodeLoad(this.temp_vars.z);
             end
         end
         
@@ -308,18 +324,7 @@ classdef Slice < VirtualNetwork & EventReceiver
         end
 
         % Hessian matrix
-        hess = fcnHessian(var_x, ~, slice, options);
-        %% Compact form of Hessian matrix of the Lagrangian
-        function hess = fcnHessianCompact(act_vars, lambda, slice, options) %#ok<INUSL>
-            vars = zeros(options.num_orig_vars,1);
-            vars(slice.I_active_variables) = act_vars;
-            if nargin == 3
-                hess = Slice.fcnHessian(vars, [], slice);
-            else
-                hess = Slice.fcnHessian(vars, [], slice, options);
-            end
-            hess = hess(slice.I_active_variables, slice.I_active_variables);
-        end
+        hs = fcnHessian(var_x, ~, slice, options);
         
         function interpretExitflag(exitflag, message)
             global DEBUG INFO;
@@ -485,46 +490,31 @@ classdef Slice < VirtualNetwork & EventReceiver
     end
   
     methods (Access = protected)
-        % Called by _optimalFlowRate_, if 'Form=compact', options should be speicifed with
+        % Called by _optimalFlowRate_, if 'bCompact = true', options should be speicifed with
         % 'num_orig_vars'.
         function [x, fval] = optimize(this, params, options)
-            global DEBUG;
             if contains(options.SlicingMethod, 'price') % 'price', 'slice-price'
-                if strcmpi(options.Form, 'compact')
-                    [x_compact, fval, exitflag, output] = ...
-                        fmincon(@(x)Slice.fcnProfitCompact(x, this, options), ...
-                        params.x0, params.As, params.bs, params.Aeq, params.beq, ...
-                        params.lb, params.ub, [], options.fmincon_opt);
-                else
-                    [x, fval, exitflag, output] = ...
-                        fmincon(@(x)Slice.fcnProfit(x, this, options), ...
-                        params.x0, params.As, params.bs, params.Aeq, params.beq, ...
-                        params.lb, params.ub, [], options.fmincon_opt);
-                end
+                [xs, fval, exitflag, output] = ...
+                    fmincon(@(x)Slice.fcnProfit(x, this, options), ...
+                    params.x0, params.As, params.bs, params.Aeq, params.beq, ...
+                    params.lb, params.ub, [], options.fmincon_opt);
             else  % 'normal', 'single-function', ...
-                if strcmpi(options.Form, 'compact')
-                    [x_compact, fval, exitflag, output] = ...
-                        fmincon(@(x)Slice.fcnSocialWelfareCompact(x,this), ...
-                        params.x0, params.As, params.bs, params.Aeq, params.beq, ...
-                        params.lb, params.ub, [], options.fmincon_opt);
-                else
-                    [x, fval, exitflag, output] = ...
-                        fmincon(@(x)Slice.fcnSocialWelfare(x,this), ...
-                        params.x0, params.As, params.bs, params.Aeq, params.beq, ...
-                        params.lb, params.ub, [], options.fmincon_opt);
-                end
-            end
-            this.interpretExitflag(exitflag, output.message);
-            if ~isempty(DEBUG) && DEBUG
-                assert(this.checkFeasible(x, ...
-                    struct('ConstraintTolerance', options.fmincon_opt.ConstraintTolerance)), ...
-                    'error: infeasible solution.');
+                [xs, fval, exitflag, output] = ...
+                    fmincon(@(x)Slice.fcnSocialWelfare(x,this), ...
+                    params.x0, params.As, params.bs, params.Aeq, params.beq, ...
+                    params.lb, params.ub, [], options.fmincon_opt);
             end
             
-            if strcmpi(options.Form, 'compact')
-                x = spalloc(this.num_vars, 1, nnz(x_compact));
-                x(this.I_active_variables) = x_compact;
+            this.interpretExitflag(exitflag, output.message);
+            if isfield(options, 'bCompact') && options.bCompact
+                x = zeros(options.num_orig_vars, 1);
+                x(this.I_active_variables) = xs;
+            else
+                x = xs;
             end
+            assert(this.checkFeasible(x, ...
+                struct('ConstraintTolerance', options.fmincon_opt.ConstraintTolerance)), ...
+                'error: infeasible solution.');
         end
         
         %%%
