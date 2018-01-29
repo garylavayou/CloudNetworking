@@ -5,8 +5,6 @@
 %% Model
 % * *Accurate*
 % * *Approximate*
-% * *FixedCost*: used when slice's resource amount and resource prices are fixed, resource
-% cost is fixed. See also <fcnSocialWelfare>, <DynamicSlice>.
 %% Options: 
 % _Methods_
 %	*single-normal*: combine all flows in one slice, and solve it as a global
@@ -18,7 +16,6 @@
 % _Form_: 'compact'|'normal'.
 % _PricingPolicy_: 'quadratic'|'linear'.
 % NOTE: check options before computing.
-
 %% Output
 % If output argument is provided, _optimalFlowRate_ will calculate the final results.
 % Otherwise, the results is stored in temporary variables.
@@ -27,7 +24,7 @@ if nargin < 2
     new_opts = struct;
 end
 options = structmerge(new_opts, ...
-    getstructfields(this.Parent.options, 'Form'), ...
+    getstructfields(this.Parent.options, 'Form', 'default', 'normal'), ...
     getstructfields(this.options, 'PricingPolicy', 'default', 'linear'), ...
     getstructfields(new_opts, 'SlicingMethod'),...
     'exclude');     
@@ -112,18 +109,12 @@ if strcmpi(options.Form, 'compact')
         parameters.ub = parameters.ub(this.I_active_variables);
     end
     options.num_orig_vars = this.num_vars; 
-    options.fmincon_opt.HessianFcn = ...
-        @(x,lambda)Slice.fcnHessianCompact(x, lambda, this, options);
+    options.bCompact = true;
 else
-    if contains(options.SlicingMethod, 'price')
-        options.fmincon_opt.HessianFcn = ...
-            @(x,lambda)Slice.fcnHessian(x, lambda, this, options);
-    else
-        options.fmincon_opt.HessianFcn = ...
-            @(x,lambda)Slice.fcnHessian(x, lambda, this);
-    end
     parameters.lb = sparse(this.num_vars,1);
 end
+options.fmincon_opt.HessianFcn = ...
+    @(x,lambda)Slice.fcnHessian(x, lambda, this, options);
 [x, fval] = this.optimize(parameters, options);
 
 %% Additional Process

@@ -9,7 +9,7 @@ if nargin <= 2
     new_opts = struct;
 end
 options = structmerge(new_opts, ...
-    getstructfields(this.Parent.options, 'Form'), ...
+    getstructfields(this.Parent.options, 'Form', 'default', 'normal'), ...
     getstructfields(this.options, 'PricingPolicy', 'default', 'quadratic'), ...
     getstructfields(this.options, 'ReconfigMethod'),...
     'exclude');   
@@ -26,8 +26,6 @@ NV = this.NumberVNFs;
 
 %%% Formulate input for convex optimization (fmincon).
 % The problem has multiple inequalities, and the lowerbounds for variables.
-Hd = this.Hdiag;
-Hr = this.Hrep;
 As_res = this.As_res;        % update As_res
 %%
 % List of constraints:
@@ -45,13 +43,13 @@ As_res = this.As_res;        % update As_res
 %   (5) VNF instance reconfiguration cost constraint: 2*NV*NN;
 num_lcon = this.num_lcon_res + this.num_varv + NN + NL + ...
     2*NP + 2*this.num_varz + 2*this.num_varv;
-nnz_As = nnz(As_res) + (nnz(Hd)+this.num_varv) + nnz(Hr) + nnz(this.I_edge_path) + ...
+nnz_As = nnz(As_res) + (nnz(this.Hdiag)+this.num_varv) + nnz(this.Hrep) + nnz(this.I_edge_path) + ...
     + 4*NP + 4*this.num_varz+ 4*this.num_varv;
 num_vars = 2*this.num_vars + 2*this.num_varv;
 As = spalloc(num_lcon, num_vars, nnz_As);
 As(1:this.num_lcon_res,1:this.num_vars) = As_res;
 row_offset = this.num_lcon_res;
-As(row_offset+(1:this.num_varv), NP+(1:this.num_varz)) = Hd;
+As(row_offset+(1:this.num_varv), NP+(1:this.num_varz)) = this.Hdiag;
 As(row_offset+(1:this.num_varv), this.num_vars+(1:this.num_varv)) = -eye(this.num_varv);
 row_offset = row_offset + this.num_varv;
 As(row_offset+(1:NN), this.num_vars+(1:this.num_varv)) = repmat(eye(NN),1,NV);
@@ -99,7 +97,7 @@ fmincon_opt = optimoptions(@fmincon);
 fmincon_opt.Algorithm = 'interior-point';
 fmincon_opt.SpecifyObjectiveGradient = true;
 fmincon_opt.Display = 'notify';
-if nargin >= 2 && strcmpi(options.Form, 'compact')
+if strcmpi(options.Form, 'compact')
     %% get the compact formulation
     % There are lots of zeros in $z_npf$, which could be determined by $h_np$.
     % If a row is all zero, this row is in-active, and could be removed.
@@ -112,28 +110,30 @@ if nargin >= 2 && strcmpi(options.Form, 'compact')
     active_rows = [(1:row_offset)'; row_offset+find(z_filter); ...
         row_offset+this.num_varz+find(z_filter); ...
         ((num_lcon-2*this.num_varv+1):num_lcon)'];
-    As_compact = As(active_rows, this.I_active_variables);
-    var0_compact = var0(this.I_active_variables);
+    As = As(active_rows, this.I_active_variables);
+    var0 = var0(this.I_active_variables);
     bs = bs(active_rows);
-    fcn_opts.num_varx = this.NumberPaths;
     fcn_opts.num_varz = nnz(z_filter);
-    fcn_opts.num_varv = this.num_varv;
     this.topts.z_reconfig_cost = this.topts.z_reconfig_cost(z_filter);
-    lbs = sparse(length(var0_compact),1);
-    fmincon_opt.HessianFcn = ...
-        @(x,lambda)DynamicSlice.fcnHessianCompact(x,lambda,this,fcn_opts);
-    [x_compact, fval, exitflag, output] = ...
-        fmincon(@(x)DynamicSlice.fcnFastConfigProfitCompact(x,this,fcn_opts), ...
-        var0_compact, As_compact, bs, [], [], lbs, [], [], fmincon_opt);
-    x = zeros(num_vars, 1);
-    x(this.I_active_variables) = x_compact;
+    fcn_opts.bCompact = true;
 else
-    lbs = sparse(2*this.num_vars,1);
-    fmincon_opt.HessianFcn = @(x,lambda)Slice.fcnHessian(x,lambda,this);
-    [x, fval, exitflag, output] = ...
-        fmincon(@(x)DynamicSlice.fcnFastConfigProfit(x,this), ...
-        var0, As, bs, [], [], lbs, [], [], fmincon_opt);
+    fcn_opts.num_varz = this.num_varz;
 end
+lbs = sparse(length(var0),1);
+fcn_opts.num_varx = this.NumberPaths;
+fcn_opts.num_varv = this.num_varv;
+fmincon_opt.HessianFcn = ...
+    @(x,lambda)DynamicSlice.hessReconfigure(x, lambda, this, fcn_opts);
+[xs, fval, exitflag, output] = ...
+    fmincon(@(x)DynamicSlice.fcnFastConfigProfit(x, this, fcn_opts), ...
+    var0, As, bs, [], [], lbs, [], [], fmincon_opt);
+if strcmpi(options.Form, 'compact')
+    x = zeros(num_vars, 1);
+    x(this.I_active_variables) = xs;
+else
+    x = xs;
+end
+
 %% Reconfiguration Cost in Problem Formulation
 % comparing the old variables with new variables to decide the reconfiguration
 % cost.
@@ -156,6 +156,9 @@ this.setPathBandwidth;
 this.FlowTable.Rate = this.getFlowRate;
 this.VirtualLinks.Load = this.getLinkLoad;
 this.VirtualDataCenters.Load = this.getNodeLoad;
-cost = this.getSliceCost(options.PricingPolicy);
-profit = -fval - cost;
+if nargout >= 1
+    cost = this.getSliceCost(options.PricingPolicy, 'const');
+    rc_linear = this.get_reconfig_cost('linear', true);
+    profit = -fval - cost + rc_linear;
+end
 end

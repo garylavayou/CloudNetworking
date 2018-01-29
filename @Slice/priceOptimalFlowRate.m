@@ -11,16 +11,8 @@
 function [net_profit, node_load, link_load] = priceOptimalFlowRate(this, x0, options)
 global DEBUG INFO;
 options = structmerge(...
-    getstructfields(options, 'PricingPolicy', 'empty-ignore'),...
-    getstructfields(this.Parent.options, 'Form', 'empty-ignore'));
-if isempty(options.Form)
-    options.Form = 'normal';
-    warning('Slice.calculateOutput: <Form> set to default (%s).', options.Form);
-end
-if isempty(options.PricingPolicy)
-    options.PricingPolicy = 'linear';
-    warning('Slice.calculateOutput: <PricingPolicy> set to default (%s).', options.PricingPolicy);
-end
+    getstructfields(options, 'PricingPolicy', 'default', 'quadratic'),...
+    getstructfields(this.Parent.options, 'Form', 'default', 'normal'));
 
 NP = this.NumberPaths;
 NV = this.NumberVNFs;
@@ -33,6 +25,7 @@ else%if isempty(this.x0)
     alpha_max = max(this.Parent.VNFTable.ProcessEfficiency(this.VNFList));
     this.x0((NP+1):end) = alpha_max;
 end
+num_vars = length(this.x0);
 assert(this.checkFeasible(this.x0), 'error: infeasible start point.');
 
 bs = sparse(this.num_lcon_res,1);
@@ -62,27 +55,30 @@ fmincon_opt.Display = 'notify';   %'notify-detailed'; %'iter';
 % fmincon_opt.Diagnostics = 'on';
 %%
 % options.Form = 'normal';
-if isfield(options, 'Form') && strcmpi(options.Form, 'compact')
+if strcmpi(options.Form, 'compact')
     %     isequal(this.I_active_variables', sum(this.As_res,1)~=0)
     z_filter = sparse(repmat(...
         reshape(logical(this.I_node_path), numel(this.I_node_path),1), NV, 1));
     this.I_active_variables = [true(NP,1) ;  z_filter];
-    As_compact = this.As_res(:, this.I_active_variables);
-    var0_compact = this.x0(this.I_active_variables);
-    lbs = sparse(length(var0_compact),1);
+    As = this.As_res(:, this.I_active_variables);
+    var0 = this.x0(this.I_active_variables);
+    lbs = sparse(length(var0),1);
     options.num_orig_vars = this.num_vars;
-    fmincon_opt.HessianFcn = ...
-        @(x,lambda)Slice.fcnHessianCompact(x, lambda, this, options);
-    [x_compact, fval, exitflag, output] = ...
-        fmincon(@(x)Slice.fcnProfitCompact(x,this, options), ...
-        var0_compact, As_compact, bs, [], [], lbs, [], [], fmincon_opt);
-    x = zeros(this.num_vars, 1);
-    x(this.I_active_variables) = x_compact;
+    options.bCompact = true;
 else
     lbs = sparse(this.num_vars,1);
-    fmincon_opt.HessianFcn = @(x,lambda)Slice.fcnHessian(x, lambda, this, options);
-    [x, fval, exitflag, output] = fmincon(@(x)Slice.fcnProfit(x, this, options), ...
-        this.x0, this.As_res, bs, [], [], lbs, [], [], fmincon_opt);
+    As = this.As_res;
+    var0 = this.x0;
+end
+fmincon_opt.HessianFcn = ...
+    @(x,lambda)Slice.fcnHessian(x, lambda, this, options);
+[xs, fval, exitflag, output] = fmincon(@(x)Slice.fcnProfit(x, this, options), ...
+    var0, As, bs, [], [], lbs, [], [], fmincon_opt);
+if strcmpi(options.Form, 'compact')
+    x = zeros(num_vars, 1);
+    x(this.I_active_variables) = xs;
+else
+    x = xs;
 end
 this.interpretExitflag(exitflag, output.message);
 if (~isempty(DEBUG) && DEBUG) || (~isempty(INFO) && INFO)

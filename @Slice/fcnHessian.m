@@ -15,28 +15,32 @@
 %    {(1+\sum_{p_0\in\mathcal{P}}{q_{i_p,p_0}\cdot x_{p_0}})^2}$$
 %% Method declaration
 %   hess = fcnHessian(vars, lambda, slice, options)
-% # Input Arguments
-% * *options*
-%       - |PricingPolicy|:
-function hess = fcnHessian(vars, lambda, slice, options) %#ok<INUSL>
-if isempty(slice.weight)
-    weight = slice.FlowTable.Weight;    % for single slice;
-else
-    weight = slice.weight*ones(slice.NumberFlows, 1);  % for multiple slices
-end
-NP = slice.NumberPaths;
-hess = spalloc(length(vars),length(vars), NP^2);
-var_path = vars(1:NP);
-for p = 1:NP
-    i = slice.path_owner(p);
-    hess(p,1:NP) = weight(i)*...
-        slice.I_flow_path(i,:)/(1+(slice.I_flow_path(i,:)*var_path))^2; %#ok<SPRIX>
+%
+% options:
+%   # PricingPolicy:
+%   # bCompact: 'true' for compact mode, which reduce the problem scale.
+function hs = fcnHessian(vars, lambda, this, options) %#ok<INUSL>
+if isfield(options, 'bCompact') && options.bCompact
+    full_vars = zeros(options.num_orig_vars,1);
+    full_vars(this.I_active_variables) = vars;
+    vars = full_vars;
 end
 
-if nargin >= 4
-    if ~isfield(options, 'PricingPolicy')
-        return;
-    end
+if isempty(this.weight)
+    weight = this.FlowTable.Weight;    % for single slice;
+else
+    weight = this.weight*ones(this.NumberFlows, 1);  % for multiple slices
+end
+NP = this.NumberPaths;
+hs = spalloc(length(vars),length(vars), NP^2);
+var_path = vars(1:NP);
+for p = 1:NP
+    i = this.path_owner(p);
+    hs(p,1:NP) = weight(i)*...
+        this.I_flow_path(i,:)/(1+(this.I_flow_path(i,:)*var_path))^2; %#ok<SPRIX>
+end
+
+if nargin >= 4 && isfield(options, 'PricingPolicy')
     switch options.PricingPolicy
         case {'quadratic-price', 'quadratic'}
             %% quadratic-price
@@ -52,12 +56,12 @@ if nargin >= 4
             % Then, for all paths, the hessian matrix component can represented by 
             % $G^T D_e\c G$, where matrix $G(e,p) = g_{e,p}$, $D_e$ is the
             % diagnoal matrix for $\rho_e^{''}$.
-            [~,~,lph] = slice.fcnLinkPricing(slice.prices.Link, slice.getLinkLoad(var_path)); % equal to <getLinkCapacity>
-            h1 = (slice.I_edge_path') * lph * slice.I_edge_path;
-            hess(1:NP, 1:NP) = hess(1:NP, 1:NP) + h1;
-            var_node = vars((NP+1):slice.num_vars);
-            [~,~,nph] = slice.fcnNodePricing(slice.prices.Node, slice.getNodeLoad(var_node));
-            NC = slice.NumberDataCenters;
+            [~,~,lph] = this.fcnLinkPricing(this.prices.Link, this.getLinkLoad(var_path)); % equal to <getLinkCapacity>
+            h1 = (this.I_edge_path') * diag(lph) * this.I_edge_path;
+            hs(1:NP, 1:NP) = hs(1:NP, 1:NP) + h1;
+            var_node = vars((NP+1):this.num_vars);
+            [~,~,nph] = this.fcnNodePricing(this.prices.Node, this.getNodeLoad(var_node));
+            NC = this.NumberDataCenters;
             %%%
             % Second derivatives on the node payment componet:
             % 
@@ -86,17 +90,20 @@ if nargin >= 4
                     % we only calculate the lower triangle, and use the symetric property
                     % to fill the upper triangle.
                     h2(z_index1,z_index2) = ...
-                        diag(slice.I_node_path(:,p1) .* nph .* slice.I_node_path(:,p2)); %#ok<SPRIX>
+                        diag(this.I_node_path(:,p1) .* nph .* this.I_node_path(:,p2)); %#ok<SPRIX>
                     z_index2 = z_index2 + NC;
                 end
                 z_index1 = z_index1 + NC;
             end
             h2 = h2 + (tril(h2,-1))';   % fill the upper triangle since the
-            h2 = repmat(h2, slice.NumberVNFs, slice.NumberVNFs);
-            hess((NP+1):slice.num_vars, (NP+1):slice.num_vars) = h2;
+            h2 = repmat(h2, this.NumberVNFs, this.NumberVNFs);
+            hs((NP+1):this.num_vars, (NP+1):this.num_vars) = h2;
         case 'linear'
         otherwise
             error('%s: invalid pricing policy', calledby);
     end
+end
+if isfield(options, 'bCompact') && options.bCompact
+    hs = hs(this.I_active_variables, this.I_active_variables);
 end
 end

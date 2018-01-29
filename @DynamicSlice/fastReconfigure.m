@@ -82,26 +82,27 @@ if nargin >= 2 && strcmpi(options.Form, 'compact')
     row_offset = this.num_lcon_res + NN*NV + NL + 2*NP;
     active_rows = [(1:row_offset)'; row_offset+find(z_filter); ...
         row_offset+this.num_varz+find(z_filter)];
-    As_compact = As(active_rows, this.I_active_variables);
-    var0_compact = var0(this.I_active_variables);
+    As = As(active_rows, this.I_active_variables);
+    var0 = var0(this.I_active_variables);
     bs = bs(active_rows);
-    fcn_opts.num_varx = this.NumberPaths;
     fcn_opts.num_varz = nnz(z_filter);
     this.topts.z_reconfig_cost = this.topts.z_reconfig_cost(z_filter);
-    lbs = sparse(2*(fcn_opts.num_varx+fcn_opts.num_varz),1);
-    fmincon_opt.HessianFcn = ...
-        @(x,lambda)DynamicSlice.fcnHessianCompact(x,lambda,this, fcn_opts);
-    [x_compact, fval, exitflag, output] = ...
-        fmincon(@(x)DynamicSlice.fcnFastConfigProfitCompact(x,this,fcn_opts), ...
-        var0_compact, As_compact, bs, [], [], lbs, [], [], fmincon_opt);
-    x = zeros(num_vars, 1);
-    x(this.I_active_variables) = x_compact;
+    fcn_opts.bCompact = true;
 else
-    lbs = sparse(num_vars,1);
-    fmincon_opt.HessianFcn = @(x,lambda)Slice.fcnHessian(x,lambda,this);
-    [x, fval, exitflag, output] = ...
-        fmincon(@(x)DynamicSlice.fcnFastConfigProfit(x,this), ...
-        var0, As, bs, [], [], lbs, [], [], fmincon_opt);
+    fcn_opts.num_varz = this.num_varz;
+end
+lbs = sparse(length(var0),1);
+fcn_opts.num_varx = this.NumberPaths;
+fmincon_opt.HessianFcn = ...
+    @(x,lambda)DynamicSlice.hessReconfigure(x, lambda, this, fcn_opts);
+[xs, fval, exitflag, output] = ...
+    fmincon(@(x)DynamicSlice.fcnFastConfigProfit(x, this ,fcn_opts), ...
+    var0, As, bs, [], [], lbs, [], [], fmincon_opt);
+if strcmpi(options.Form, 'compact')
+    x = zeros(num_vars, 1);
+    x(this.I_active_variables) = xs;
+else
+    x = xs;
 end
 %% Reconfiguration Cost in Problem Formulation
 % comparing the old variables with new variables to decide the reconfiguration
@@ -127,6 +128,9 @@ this.setPathBandwidth;
 this.FlowTable.Rate = this.getFlowRate;
 this.VirtualLinks.Load = this.getLinkLoad;
 this.VirtualDataCenters.Load = this.getNodeLoad;
-cost = this.getSliceCost(options.PricingPolicy);
-profit = -fval - cost;
+if nargout >= 1
+    cost = this.getSliceCost(options.PricingPolicy, 'const');
+    rc_linear = this.get_reconfig_cost('linear', true);
+    profit = -fval - cost + rc_linear;
+end
 end
