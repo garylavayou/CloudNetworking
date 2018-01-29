@@ -347,13 +347,17 @@ end
 this.finalize(node_price, link_price, slices);
 
 % Calculate the output
-output = this.calculateOutput([], getstructfields(options, {'Slices','PricingPolicy'}));
+if nargout >= 1
+    output = this.calculateOutput([], getstructfields(options, {'Slices','PricingPolicy'}));
+end
 
 % output the optimization results
 if DEBUG
     fprintf('Optimization results:\n');
     fprintf('\tThe optimization procedure contains %d iterations.\n', number_iter);
-    fprintf('\tOptimal objective value: %d.\n', output.Welfare);
+    if nargout >= 1
+        fprintf('\tOptimal objective value: %d.\n', output.Welfare);
+    end
     fprintf('\tNormalized network utilization is %G.\n', this.utilizationRatio);
 end
 

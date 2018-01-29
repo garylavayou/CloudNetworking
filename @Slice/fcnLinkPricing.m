@@ -27,7 +27,7 @@ a = (theta-1)*b.*aggr_link_usage(link_id)./this.Parent.getLinkField('Capacity', 
 % [~, ~, hess] = fcnLinkPricing(¡¤) is called in <fcnHession>.
 % See also <fcnNodePricing>
 if nargout == 3  
-    pseudo_hess = diag(a);
+    pseudo_hess = a;
     payment = [];
     grad = [];
     return

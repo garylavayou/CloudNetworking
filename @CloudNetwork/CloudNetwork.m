@@ -237,12 +237,12 @@ classdef CloudNetwork < PhysicalNetwork
             sl = this.slices{end};
         end
         %%%
-        % Calculate the profit ratio of slices and network
+        % Calculate the profit ratio of slices and network.
+        % No matter whether all slices are reconfigured, the profit ratio of all slices
+        % will be checked to ensure the profit of ratio of network higher than the
+        % threshold. 
         %
-        % |options|: 'PricingPolicy','Epsilon', 'Slices'.
-        % 	'Slices': No matter whether all slices are reconfigured, the profit ratio
-        %           of all slices will be checked to ensure the profit of ratio of
-        %           network higher than the threshold.
+        % |options|: 'PricingPolicy','Epsilon'.
         %
         % NOTE: _checkProfitRatio_ is a stop condition, which is not directly related to
         % the optimization problem.
@@ -259,16 +259,10 @@ classdef CloudNetwork < PhysicalNetwork
                 sl = this.slices{s};
                 revenue = sl.getRevenue;        % get utility
                 % Prices announced to each slice.
-                new_opts.bFinal = false;
-                if sl.VirtualLinks.Price==0
+                new_opts.bFinal = sl.isFinal();
+                if ~new_opts.bFinal 
                     sl.prices.Link = link_price(sl.VirtualLinks.PhysicalLink);
-                else
-                    new_opts.bFinal = true;
-                end
-                if sl.VirtualDataCenters.Price == 0
                     sl.prices.Node = node_price(sl.getDCPI);
-                else
-                    new_opts.bFinal = true;
                 end
                 slice_profit_ratio(s) = sl.getProfit(new_opts)/revenue;
             end
@@ -321,19 +315,19 @@ classdef CloudNetwork < PhysicalNetwork
         % <optimizeResourcePriceNew>. 
         function [profit, revenue] = ...
                 getSliceProviderProfit(this, node_price, link_price, new_opts)
-            revenue = 0;
             if nargin <= 3
-                new_opts = struct('Slices', this.slices);
-            end
-            opt1 = getstructfields(new_opts, {'Slices'}, 'default-ignore', ...
-                this.slices);
-            opt2 = getstructfields(new_opts, 'PricingPolicy', 'default', 'linear');
-            new_opts = structmerge(opt1, opt2);
+                new_opts = struct();
+            end            
+            new_opts = structmerge(...
+                getstructfields(new_opts, {'Slices'}, 'default-ignore', this.slices), ...
+                getstructfields(new_opts, 'PricingPolicy', 'default', 'quadratic'));
+
             [node_load, link_load] = this.getNetworkLoad(new_opts.Slices, 'sum');            
             if isempty(node_price) || isempty(link_price)
                 node_price = this.getDataCenterField('Price');
                 link_price = this.getLinkField('Price');
             end
+            revenue = 0;
             switch new_opts.PricingPolicy
                 case {'quadratic-price', 'quadratic'}
                     for s = 1:length(new_opts.Slices)
@@ -341,10 +335,10 @@ classdef CloudNetwork < PhysicalNetwork
                         link_id = sl.VirtualLinks.PhysicalLink;
                         dc_id = sl.getDCPI;
                         % To get the revenue of slice provider, we need to how much
-                        % resource the slices occupy.
+                        % resource the slices occupy. 
                         revenue = revenue + ...
-                            sl.fcnLinkPricing(link_price(link_id), sl.getLinkCapacity(sl.temp_vars.x)) + ...
-                            sl.fcnNodePricing(node_price(dc_id), sl.getNodeCapacity(sl.temp_vars.z));
+                            sl.fcnLinkPricing(link_price(link_id), sl.getLinkCapacity(false)) + ...
+                            sl.fcnNodePricing(node_price(dc_id), sl.getNodeCapacity(false));
                     end
                 case 'linear'
                     revenue = dot(node_load, node_price) + dot(link_load, link_price);
@@ -360,7 +354,7 @@ classdef CloudNetwork < PhysicalNetwork
         %   each slice.
         % # Virtual Nodes/Links' capacity is derived from node/link load;
         % # Calculate and announce the resource prices to each slice.
-        % # Record the substrate network's node/link load, price.
+        % # Record/update the substrate network's node/link load, price.
         %
         % Usually, this function should be provided with 3 arguments, except that it is
         % called by
@@ -379,7 +373,9 @@ classdef CloudNetwork < PhysicalNetwork
             [node_load, link_load] = this.getNetworkLoad;
             this.setLinkField('Load', link_load);
             this.setDataCenterField('Load', node_load);
-            if nargin >= 3
+            if nargin >= 3  
+                % NOTE: prices in the substrate network is updated, while the prices
+                % formerlly offered to slices is not change.
                 pre_link_idx = link_price==0;
                 link_price(pre_link_idx) = this.getLinkField('Price', pre_link_idx);
                 this.setLinkField('Price', link_price);

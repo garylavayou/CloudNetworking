@@ -52,8 +52,9 @@ warning('off', 'backtrace');
 warning('off', 'verbose');
 b_reconfig = true;
 b_fastconfig = true;
-b_fastconfig2 = true;
+b_fastconfig2 = false;
 b_dimconfig = true;
-b_dimconfig2 = true;
+b_dimconfig1 = false;
+b_dimconfig2 = false;
 b_dimconfig0 = false;
 SEED = 20170410;            % 20161231

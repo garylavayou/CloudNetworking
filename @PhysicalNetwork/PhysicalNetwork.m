@@ -597,13 +597,14 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
                 
         %% getNetworkLoad
         % Network load equals to the sums of occupied capacity from all slices. See also
-        % <Slice.getLinkCapacity> and <Slice.getNodeCapacity>.
+        % <Slice.getLinkCapacity>, <Slice.getNodeCapacity> and
+        % <DynamicSlice.getLinkCapacity>, <DynamicSlice.getNodeCapacity>. 
         %
         % If the 2nd argument is provided, calculate load from the set of |sub_slices|,
         % otherwise, calculate from all slices. 
         % If |option| is not provided, directly copy from 'Capacity' field of each slice.
-        % Otheriwse if |option='sum'|, use the temporary variables |x| and |z| of
-        % each slice, to calculate temporary capacity of each slice.  
+        % Otheriwse if |option='sum'|, use the temporary variables of each slice, to
+        % calculate temporary capacity of each slice.   
         % Makesure the temporary variables is up-to-date , when calling this method.
         function [node_load, link_load] = getNetworkLoad(this, sub_slices, option)
             if nargin <= 1 || isempty(sub_slices)
@@ -624,8 +625,8 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
                     node_load(dc_id) = node_load(dc_id) + sl.getNodeCapacity;
                     link_load(link_id) = link_load(link_id) + sl.getLinkCapacity;
                 else  % 'sum'
-                    node_load(dc_id) = node_load(dc_id) + sl.getNodeCapacity(sl.temp_vars.z);
-                    link_load(link_id) = link_load(link_id)+ sl.getLinkCapacity(sl.temp_vars.x);                    
+                    node_load(dc_id) = node_load(dc_id) + sl.getNodeCapacity(false);
+                    link_load(link_id) = link_load(link_id)+ sl.getLinkCapacity(false);                    
                 end
             end
         end
