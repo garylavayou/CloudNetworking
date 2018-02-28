@@ -281,17 +281,22 @@ classdef VirtualNetwork < matlab.mixin.Copyable
         %% Resource Utilization
         % Overall resource utilization ratio that is calculated by weighted node/link
         % utilization ration. The weight is determined by the total amount resources.
-        function [omega, sigma] = utilizationRatio(this)
-            c_node = sum(this.VirtualDataCenters.Capacity);
-            c_link = sum(this.VirtualLinks.Capacity);
+        %
+        % Exclude the resource with no capacity.
+        % TODO: split sigma into link and node metrics.
+        function [omega, sigma, alpha] = utilizationRatio(this)
+            n_idx = this.VirtualDataCenters.Capacity>eps;
+            e_idx = this.VirtualLinks.Capacity>eps;
+            c_node = sum(this.VirtualDataCenters.Capacity(n_idx));
+            c_link = sum(this.VirtualLinks.Capacity(e_idx));
             alpha = [c_node c_link]./(c_node+c_link);
-            theta_v = sum(this.VirtualDataCenters.Load)/c_node;
-            theta_l = sum(this.VirtualLinks.Load)/c_link;
+            theta_v = sum(this.VirtualDataCenters.Load(n_idx))/c_node;
+            theta_l = sum(this.VirtualLinks.Load(e_idx))/c_link;
             omega = dot(alpha, [theta_v, theta_l]);
             
             if nargout == 2
-                sigma = std([this.VirtualDataCenters.Load./this.VirtualDataCenters.Capacity; ...
-                    this.VirtualLinks.Load./this.VirtualLinks.Capacity]);
+                sigma = std([this.VirtualLinks.Load(e_idx)./this.VirtualLinks.Capacity(e_idx);...
+                    this.VirtualDataCenters.Load(n_idx)./this.VirtualDataCenters.Capacity(n_idx)]);
             end
         end
     end

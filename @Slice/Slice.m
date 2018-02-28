@@ -79,8 +79,6 @@ classdef Slice < VirtualNetwork & EventReceiver
                 this.VirtualDataCenters{:,'Capacity'} = 0;
                 this.VirtualLinks{:,'Capacity'} = 0;
             else
-                this.Variables.x = this.temp_vars.x;
-                this.Variables.z = this.temp_vars.z;
                 % subclass inctance may have different implementation of _postProcessing_, it
                 % is recommended, that the subclass maintains the default behavior of this
                 % function.
@@ -203,6 +201,7 @@ classdef Slice < VirtualNetwork & EventReceiver
             else
                 r = this.I_flow_path * path_vars;
             end
+            r = full(r);
         end
            
         %% Capacity and Load
@@ -235,7 +234,7 @@ classdef Slice < VirtualNetwork & EventReceiver
             if nargin <= 1
                 z = this.Variables.z;
             end
-            vc = this.Hdiag * z;
+            vc = full(this.Hdiag * z);
         end
         
         function c = link_unit_cost(this)
@@ -518,31 +517,34 @@ classdef Slice < VirtualNetwork & EventReceiver
         end
         
         %%%
-        % Flow processing constraint might be violated, due to rounding of x,z. Three
-        % candidate method can be applied for post processing:
+        % *Flow processing constraint* might be violated, due to rounding of x,z. Three
+        % candidate methods can be applied for post processing:
         %       (1) round the x components, so that flow processing demand is meet;
         %       (2) drop the items in x that violates the constraint;
         %       (3) recover those z components corresponding to violated constraints. This
         %           would result in more small components.
-        % NOTE: (2) and (3) cannot retain the feasibility of the solution, since it ignore
-        % small violations.
-        % To support post-processing, we return the index of violated-constriants.
+        % NOTE 1: (2) and (3) cannot retain the feasibility of the solution, since it
+        % ignore small violations.
         %
-        % NOTE: due to rounding to zero, the capacity constraints will not be violated.
+        % NOTE 2: due to rounding to zero, the capacity constraints will not be violated
+        % (assuming the original solution not violate the capacity constraints). 
+        % 
+        % NOTE 3: the optimization variables is continuous, discrete variables (due to the
+        % scheduling granularity) are not considered here.
         function [tf, vars] = postProcessing(this)
             global DEBUG INFO;
-            var_x = this.Variables.x;
-            var_z = this.Variables.z;
+            var_x = this.temp_vars.x;
+            var_z = this.temp_vars.z;
             tol_zero = this.Parent.options.NonzeroTolerance;
             var_x(var_x<tol_zero*max(var_x)) = 0;
-            var_z(var_z<tol_zero*max(var_z)) = 0;
+            var_z(var_z<tol_zero*max(var_z)) = 0;       % [min(var_z(var_z~=0)) max(var_z)]
             A1 = this.As_res(:,1:this.NumberPaths);
             A2 = this.As_res(:,(this.NumberPaths+1):end);
             v1 = A1*var_x;
             v2 = A2*var_z;
             index_violate = find(v1+v2>0);      % re = v1+v2
             if ~isempty(index_violate)
-                message = sprintf('%s: Maximal violation is %.4f.', calledby, full(max(v1+v2)));
+                message = sprintf('%s: Maximal violation is %.4f before processing.', calledby, full(max(v1+v2)));
                 if ~isempty(DEBUG) && DEBUG
                     warning(message); %#ok<SPWRN>
                 elseif ~isempty(INFO) && INFO
@@ -616,7 +618,7 @@ classdef Slice < VirtualNetwork & EventReceiver
                                 zidx = (1:this.NumberDataCenters)+ ...
                                     ((fidx(i)-1)*this.NumberDataCenters*NP + ...
                                     (pidx(i)-1)*this.NumberDataCenters);
-                                var_z(zidx) = this.temp_vars.z(zidx);
+                                var_z(zidx) = this.temp_vars.z(zidx);  % recover
                             end
                         else
                             pidx = unique(pidx);
@@ -649,6 +651,7 @@ classdef Slice < VirtualNetwork & EventReceiver
             else
                 ye = this.I_edge_path * path_vars;
             end
+            ye = full(ye);
         end
         
         %         function vn = getNodeLoad(this, node_vars)
@@ -680,7 +683,7 @@ classdef Slice < VirtualNetwork & EventReceiver
             end
             %%
             % |node_vars| is index by |(node,path,function)|.
-            v_n = this.Hrep*node_vars;
+            v_n = full(this.Hrep*node_vars);
             % node_load = sum(f, node_vars(:,:,f).*I_node_path).
             %             NC = this.NumberDataCenters;
             %             NP = this.NumberPaths;

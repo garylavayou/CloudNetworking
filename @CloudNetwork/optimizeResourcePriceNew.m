@@ -73,7 +73,7 @@ else
     node_price = t1* node_uc;
 end
 for i = 1:NS
-    slices{i}.VirtualLinks{:,'Price'} = 0;
+    slices{i}.VirtualLinks{:,'Price'} = 0;      % Reset it to make <isFinal()=false>.
     slices{i}.VirtualDataCenters{:,'Price'} = 0;
 end
 t0 = 10^-1;     % {1|0.1|0.01}
@@ -259,7 +259,7 @@ if k>1
     partial_link_violate = false(NL, 1);
     partial_node_violate = false(NC, 1);
     b_first = true;
-    while stop_cond1 && stop_cond2 && stop_cond3
+    while (stop_cond1 || stop_cond2) && stop_cond3
         number_iter = number_iter + 1;
         if ~isempty(DEBUG) && DEBUG
             disp('----link price    delta link price----')
@@ -369,6 +369,8 @@ end
             % |node_price| only contain the price of data center nodes.
             dc_id = sl.getDCPI;
             sl.prices.Node = node_price_t(dc_id);  
+            options.ResidualCapacity.Link = link_capacity(sl.VirtualLinks.PhysicalLink);
+            options.ResidualCapacity.Node = node_capacity(dc_id);
             if options.CountTime
                 tic;
             end

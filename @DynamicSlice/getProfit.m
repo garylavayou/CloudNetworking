@@ -25,7 +25,7 @@ if nargin == 1
     options = struct;
 end
 if this.invoke_method == 0
-    profit = getProfit@CloudNetwork(this, options);
+    profit = getProfit@Slice(this, options);
     return;
 end
 

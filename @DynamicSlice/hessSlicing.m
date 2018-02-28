@@ -19,7 +19,10 @@ else
     weight = this.weight*ones(this.NumberFlows, 1);  % for multiple slices
 end
 NP = this.NumberPaths;
-hs = spalloc(length(vars),length(vars), NP^2);
+ND = this.NumberDataCenters;
+NV = this.NumberVNFs;
+NL = this.NumberVirtualLinks;
+hs = spalloc(length(vars),length(vars), NP^2 + NL + NV*ND);
 var_path = vars(1:NP);
 for p = 1:NP
     i = this.path_owner(p);
@@ -30,9 +33,6 @@ end
 if nargin >= 4 && isfield(options, 'PricingPolicy')
     switch options.PricingPolicy
         case {'quadratic-price', 'quadratic'}
-            ND = this.NumberDataCenters;
-            NV = this.NumberVNFs;
-            NL = this.NumberVirtualLinks;
             var_v_index = (options.num_varx+options.num_varz) + (1:options.num_varv);
             node_load = sum(reshape(vars(var_v_index), ND, NV),2);
             var_c_index = (options.num_varx+options.num_varz+options.num_varv)*2 + (1:NL);

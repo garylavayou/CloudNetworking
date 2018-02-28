@@ -75,6 +75,13 @@ end
 num_perm_type = length(type.Permanent);
 for t = 1:num_perm_type
     slice_opt = PN.slice_template(type.Permanent(t));
+    if exist('user_opt', 'var')
+        if isfield(user_opt, 'NumberFlows')
+            slice_opt.Flow.ServiceInterval = slice_opt.Flow.ServiceInterval*...
+                (user_opt.NumberFlows/slice_opt.NumberFlows);
+        end
+        slice_opt = structmerge(slice_opt, user_opt);
+    end
     slice_opt.RandomSeed = seed_dynamic;        % |seed_dynamic| is provided in the configuration script.
     slice_opt.DuplicateFlow = true;
     seed_dynamic = seed_dynamic + 1;
