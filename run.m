@@ -65,8 +65,7 @@ end
 %% Optimize
 % * *Global optimization*
 disp('--------- Single Slice Optimization ----------')
-declare_info_level('Global', DisplayLevel.Off);
-% options.Method = 'single-function';
+% options.ReconfigMethod = 'single-function';
 tic;
 [output_optimal, ss] = PN.singleSliceOptimization(options);
 toc;
@@ -107,7 +106,6 @@ display(output_price.profit(end,:));
 fprintf('\tNetwork utilization ratio %f.\n\n',PN.utilizationRatio);
 %% 
 disp('--------- Optimization with Adjusting Resource Price (2) ----------')
-declare_info_level('Global', DisplayLevel.Off);
 tic
 [output_price2] = PN.optimizeResourcePrice2([], options);
 toc
@@ -120,7 +118,6 @@ display(output_price2.profit(end,:));
 fprintf('\tNetwork utilization ratio %f.\n\n',PN.utilizationRatio);
 %% 
 disp('--------- Optimization with Adjusting Resource Price (3) ----------')
-declare_info_level('Global', DisplayLevel.Off);
 tic
 [output_price3] = PN.optimizeResourcePrice3([], options);
 toc
@@ -135,7 +132,6 @@ fprintf('\tNetwork utilization ratio %f.\n\n',PN.utilizationRatio);
 %% 
 % * *Resource Partition*
 disp('--------- Optimization with Resource Partition ----------')
-declare_info_level('Global', DisplayLevel.Off);
 tic
 [output_part] = PN.resourcePartitionOptimization(partition_weight, options);
 % [output_part] = PN.resourcePartitionOptimization([], options);
@@ -151,7 +147,6 @@ fprintf('\tNetwork utilization ratio %f.\n\n',PN.utilizationRatio);
 %%
 % * *Price Adjustment Based on Resource Partition*
 disp('--------- Price Adjustment Based on Resource Partition ----------')
-declare_info_level('Global', DisplayLevel.Off);
 tic
 [output_partprice] = PN.partitionResourcePricing([], options);
 toc

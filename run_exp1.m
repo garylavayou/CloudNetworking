@@ -49,7 +49,6 @@ arrival.Interval = 0.25;     % Average of arrival interval.
 % options.WelfareType = {'Accurate', 'Approximate'};
 
 %% Control Variables
-declare_info_level('Global', DisplayLevel.Off);
 b_single_optimal = true;
 b_price_adjust = true;
 b_static_slice = true;

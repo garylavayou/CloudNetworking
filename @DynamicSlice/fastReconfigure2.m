@@ -27,6 +27,11 @@ NV = this.NumberVNFs;
 %%% Formulate input for convex optimization (fmincon).
 % The problem has multiple inequalities, and the lowerbounds for variables.
 As_res = this.As_res;        % update As_res
+%% Save the VNF capacity to the previous state, berfore optimization
+% 'FastReconfig2' reconfigure VNF instance. After the slice is created, |VNFCapacity| is recorded.
+% After each optimization, the |VNFCapacity| is updated.
+this.old_variables.v = this.Variables.v;  
+this.update_reconfig_costv();              % update reconfigure cost with scaler.
 %%
 % List of constraints:
 %   (1) flow processing requirement: NP*NV (this.num_lcon_res);
@@ -87,9 +92,11 @@ bs = [sparse(this.num_lcon_res+this.num_varv,1);
 var0 = [this.topts.old_variables_x;
     this.topts.old_variables_z;
     this.old_variables.v;
-    this.topts.old_variables_x;
-    this.topts.old_variables_z;
-    this.old_variables.v];
+    %     this.topts.old_variables_x;
+    %     this.topts.old_variables_z;
+    %     this.old_variables.v
+    zeros(this.num_vars+this.num_varv,1)
+    ];
 assert(this.checkFeasible(var0), 'error: infeasible start point.');
 
 %% Perform optimization
@@ -151,7 +158,7 @@ assert(this.checkFeasible(x,options), 'error: infeasible solution.');
 % objective function (reconfiguration cost) will force those variables to be zero.
 this.convert(x, 0);
 this.flow_rate = this.getFlowRate(this.temp_vars.x);
-this.postProcessing(struct('VNFCapacity',true));
+this.postProcessing();
 this.setPathBandwidth;
 this.FlowTable.Rate = this.getFlowRate;
 this.VirtualLinks.Load = this.getLinkLoad;

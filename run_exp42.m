@@ -2,7 +2,6 @@
 % using configuration on Sample-2, see also <run_test21>
 % TO BE REMOVED.
 clear link_opt node_opt options VNF_opt type ;
-clearvars -global InfoLevel; 
 if ~exist('debug_info', 'var') && exist('breakpoint.mat', 'file')
         load('breakpoint.mat');
         dbstop(debug_info);
@@ -54,11 +53,10 @@ options.DiffNonzeroTolerance = 10^-3;
 options.PostProcessing = 'round';
 
 %% Experiment Control
-declare_info_level({'Global', 'ClassDebug'}, [DisplayLevel.Notify, DisplayLevel.Notify]);
 warning('off', 'backtrace');
 warning('off', 'verbose');
 etas = linspace(1, 4, 30);  %etas = etas([11 12]);
-b_reconfig = true;
+b_baseline = true;
 b_fastconfig = true;
 b_fastconfig2 = true;
 SEED = 20170410;            % 20161231
@@ -67,7 +65,7 @@ NUM_EVENT = 100;            % {40|100|600};
 %% Run script
 % single slice reconfiguration
 NUM_TEST = length(etas);
-TOTAL_NUM= NUM_EVENT*(NUM_TEST*(b_fastconfig+b_fastconfig2)+b_reconfig);
+TOTAL_NUM= NUM_EVENT*(NUM_TEST*(b_fastconfig+b_fastconfig2)+b_baseline);
 global total_iter_num;
 total_iter_num = 0;
 if exist('progress_bar', 'var') && isvalid(progress_bar)
@@ -80,13 +78,13 @@ jframe.setAlwaysOnTop(1);
 % WindowAPI(progress_bar, 'topmost');
 %%
 if b_fastconfig
-    options.Method = 'fastconfig';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
+    options.ReconfigMethod = 'fastconfig';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
     progress_bar.Name = 'Fast Reconfiguration';
     pause(0.01);
     for i = 1:length(etas)
         clear functions; %#ok<CLFUNC>
         seed_dynamic = SEED;  %#ok<NASGU>
-        DynamicSlice.ETA(etas(i));
+        options.UnitReconfigureCost = etas(i);
         SingleSliceReconfiguration;
         if i == 1
             results.Fastconfig = {g_results};
@@ -98,13 +96,13 @@ end
 
 %%
 if b_fastconfig2
-    options.Method = 'fastconfig2';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
+    options.ReconfigMethod = 'fastconfig2';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
     progress_bar.Name = 'Fast Reconfiguration 2';
     pause(0.01);
     for i = 1:length(etas)
         clear functions; %#ok<CLFUNC>
         seed_dynamic = SEED;  %#ok<NASGU>
-        DynamicSlice.ETA(etas(i));
+        options.UnitReconfigureCost = etas(i);
         SingleSliceReconfiguration;
         if i == 1
             results.Fastconfig2 = {g_results};
@@ -115,17 +113,17 @@ if b_fastconfig2
 end
 
 %%
-if b_reconfig
+if b_baseline
     % Only need to compute once for different reconfiguration cost efficient, since the
     % optimization procedure is independent on the cosefficient, and the reconfiguration
     % cost with other coefficient can be derieved from the one results by using the
     % coefficient.
-    options.Method = 'reconfig';   
+    options.ReconfigMethod = 'reconfig';   
     progress_bar.Name = 'Reconfiguration';
     pause(0.01);
     clear functions; %#ok<CLFUNC>
     seed_dynamic = SEED;
-    DynamicSlice.ETA(1);
+    options.UnitReconfigureCost = 1;
     SingleSliceReconfiguration;
     results.Reconfig = g_results;
 end

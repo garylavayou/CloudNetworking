@@ -26,7 +26,6 @@ VNF_opt.Number = 6;            % number of VNF type
 VNF_opt.Model = VNFIntegrateModel.AllInOne;
 VNF_opt.RandomSeed = [20161101 0];    
 
-declare_info_level('Global', DisplayLevel.Off);
 net_opt.PricingFactor = 1;  % 0.125|0.25|0.5|1|2|4
 net_opt.AdmitPolicy = 'reject-flow';
 net_opt.Form = 'compact';
@@ -41,7 +40,7 @@ type.Fixed = [1; 2; 3];
 type.FixedCount = [3; 13; 27];      % Number of persistent slices: {1|2|3...}
 
 %% 
-net_opt.Method = 'single-normal';
+net_opt.SlicingMethod = 'single-normal';
 PN = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
 PN.slice_template = Slice.loadSliceTemplate(type.Index);
 link_capacity = PN.getLinkField('Capacity');

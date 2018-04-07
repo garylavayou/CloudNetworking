@@ -34,7 +34,6 @@ VNF_opt.Model = VNFIntegrateModel.AllInOne;
 VNF_opt.RandomSeed = [20161101 0];
 
 %% Algorithm options
-declare_info_level('Global', DisplayLevel.Off);
 options.Threshold = 'average';
 
 %% Slice arrival sequence confiuration
@@ -48,14 +47,13 @@ SEED = 20170410;   % 20161231
 NUM_EVENT = 150;             %600;
 
 %% Experiment Control
-declare_info_level('Global', DisplayLevel.Off);
 options.theta = 0.5;
-b_reconfig = true;
+b_baseline = true;
 b_fastconfig = true;
 
 %% Run script
 % single slice reconfiguration
-TOTAL_NUM= NUM_EVENT*(b_fastconfig+b_reconfig);
+TOTAL_NUM= NUM_EVENT*(b_fastconfig+b_baseline);
 global total_iter_num;
 total_iter_num = 0;
 if exist('progress_bar', 'var') && isvalid(progress_bar)
@@ -65,26 +63,26 @@ progress_bar = waitbar(total_iter_num/TOTAL_NUM, ...
     sprintf('Simulation Progress: %d/%d', total_iter_num, TOTAL_NUM));
 
 if b_fastconfig
-    options.Method = 'fastconfig';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
+    options.ReconfigMethod = 'fastconfig';    % {'reconfig', 'fastconfig', 'dimension', 'fastconfig2'}
     progress_bar.Name = 'Fast Reconfiguration';
     pause(0.01);
     clear functions; %#ok<CLFUNC>
     seed_dynamic = SEED; %#ok<NASGU>
-    DynamicSlice.ETA(options.theta);
+    options.UnitReconfigureCost = etas;
     SingleSliceReconfiguration;
     results.fastconfig = g_results;
 end
-if b_reconfig
+if b_baseline
     % Only need to compute once for different reconfiguration cost efficient, since the
     % optimization procedure is independent on the cosefficient, and the reconfiguration
     % cost with other coefficient can be derieved from the one results by using the
     % coefficient.
-    options.Method = 'reconfig';   
+    options.ReconfigMethod = 'reconfig';   
     progress_bar.Name = 'Reconfiguration';
     pause(0.01);
     clear functions; %#ok<CLFUNC>
     seed_dynamic = SEED;
-    DynamicSlice.ETA(options.theta);
+    options.UnitReconfigureCost = etas;
     SingleSliceReconfiguration;
     results.reconfig = g_results;
 end

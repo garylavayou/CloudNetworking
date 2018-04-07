@@ -1,12 +1,13 @@
 classdef DynamicSlice < Slice & EventSender
     %DynamicSlice Event-driven to dynamic configure slice.
     properties (Constant)
-        GLOBAL_OPTIONS = DynamicSliceStaticMember;
+        GLOBAL_OPTIONS = DynamicSliceStaticMember;    % TODO: remove, retrive eta from parent (network)
     end
     
     properties(Constant, Access = private)
-        NUM_MEAN_BETA = 10;
+        NUM_MEAN_BETA = 15;
         ENABLE_DYNAMIC_NORMALIZER = true;
+        GET_BETA_METHOD = 'Average';    % 'Average', 'ExponetialMovingAverage';
     end
     
     properties
@@ -16,7 +17,9 @@ classdef DynamicSlice < Slice & EventSender
         portion_adhoc_flows_threshold = 0.1;
         b_adhoc_flows = zeros(1000,1);  % only record a window of flows.
         num_total_arrive = 0;
-        old_beta;
+        raw_beta;
+        raw_cost;
+        raw_costv;
     end
     properties(Access={?DynamicSlice,?DynamicNetwork})
         b_ondepart = false;
@@ -30,7 +33,7 @@ classdef DynamicSlice < Slice & EventSender
         % variables (|this.Variables.v|, which might be larger than sum of |z_npf|, due to
         % reconfiguration cost).
         b_derive_vnf = true;
-        b_dim = false;      % reset each time before reconfigurtion.
+        b_dim = true;      % reset each time before reconfigurtion.
         old_net_state;
         net_changes = struct();
         vnf_reconfig_cost;
@@ -42,8 +45,8 @@ classdef DynamicSlice < Slice & EventSender
         % **node reassginement cost*,
         %
         % If a resource price is p, we assume that the reconfigruation cost
-        % coefficient of this resource is ¦Èp. If we adopt a varying pricing, like
-        % p=av+b, then the coeffcient is ¦È(av+b).
+        % coefficient of this resource is ï¿½ï¿½p. If we adopt a varying pricing, like
+        % p=av+b, then the coeffcient is ï¿½ï¿½(av+b).
         
         a = 0.8;        % a for the history, should have a larger weight (EMA)
         
@@ -53,8 +56,8 @@ classdef DynamicSlice < Slice & EventSender
         % 'alpha':
         % 'series_length'
         % 'trend_length'
-        sh_options = struct('omega_upper', 0.95, 'omega_lower', 0.75, ...
-            'alpha', 0.3, 'series_length', 20, 'trend_length', 10);
+        sh_options = struct('omega_upper', 0.97, 'omega_lower', 0.85, ...
+            'alpha', 0.3, 'series_length', 40, 'trend_length', 20);
         %% data for slice dimensioning schdule algorithm
         % 'omegas':
         % 'profits'
@@ -76,6 +79,8 @@ classdef DynamicSlice < Slice & EventSender
         topts;              % used in optimization, avoid passing extra arguments.
         reject_index;
         lower_bounds = struct([]);
+        upper_bounds = struct([]);
+        max_flow_rate;
     end
     properties(Dependent)
         UnitReconfigureCost;
@@ -173,7 +178,7 @@ classdef DynamicSlice < Slice & EventSender
                 end
             end
             this.time = struct('Current', 0, 'LastDimensioning', 0, ...
-                'DimensionInterval', 0, 'ConfigureInterval', 0);
+                'DimensionInterval', 0, 'ConfigureInterval', 0, 'DimensionIntervalModified', 0);
             % Now 'ConfigureInterval' is constant, yet it also can be updated via EMA.
             this.time.ConfigureInterval = 1/(2*this.FlowArrivalRate);
             this.event.RecentCount = 0;
@@ -184,15 +189,55 @@ classdef DynamicSlice < Slice & EventSender
                 'ignore'));
             this.options = structmerge(this.options, ...
                 getstructfields(slice_data, 'ReconfigMethod' , 'error'));
-            this.options = structmerge(this.options, ...
-                getstructfields(slice_data, {'bReserve','Reserve'}, 'default', {true, 0.9}));
+            switch this.options.ReconfigMethod 
+                case {ReconfigMethod.DimconfigReserve, ReconfigMethod.DimconfigReserve0,...
+                        ReconfigMethod.FastconfigReserve}
+                    this.options = structmerge(this.options, ...
+                        getstructfields(slice_data, 'bReserve', 'default', 2));
+                case ReconfigMethod.DimBaseline
+                    this.options = structmerge(this.options, ...
+                        getstructfields(slice_data, 'bReserve', 'default', 0));
+                    this.sh_options.omega_upper = 1;
+                    this.sh_options.omega_lower = 0.9;
+                case ReconfigMethod.Dimconfig
+                    this.options = structmerge(this.options, ...
+                        getstructfields(slice_data, 'bReserve', 'default', 0));
+                    this.sh_options.omega_upper = 1;
+                otherwise
+                    this.options = structmerge(this.options, ...
+                        getstructfields(slice_data, 'bReserve', 'default', 1));
+            end
+            switch this.options.ReconfigMethod
+                case {ReconfigMethod.DimBaseline, ReconfigMethod.Dimconfig}
+                    u = 0.2;
+                case ReconfigMethod.DimconfigReserve0
+                    u = 0.1;
+                otherwise
+                    u = 0;
+            end
+            if this.options.ReconfigMethod == ReconfigMethod.DimconfigReserve
+                this.sh_options = structmerge(this.sh_options, ...
+                    getstructfields(slice_data, 'UtilizationVariance', 'default', 0.05));
+            else
+                this.sh_options.UtilizationVariance = u;
+            end
+            if this.options.bReserve
+                if this.options.ReconfigMethod == ReconfigMethod.DimconfigReserve0
+                    this.options.Reserve = 0;
+                else
+                    this.options = structmerge(this.options, ...
+                        getstructfields(slice_data, 'Reserve','default', 0.9));
+                end
+            end
             if isfield(this.options, 'EventInterval')
                 this.time.DimensionInterval = this.options.EventInterval/(2*this.FlowArrivalRate); % both arrival and departure events
+                this.time.MinDimensionInterval = 1/5*this.time.DimensionInterval;
             elseif isfield(this.options, 'TimeInterval')
                 this.time.DimensionInterval = this.options.TimeInterval;
             elseif isfield(this.options, 'Trigger')
                 this.time.DimensionInterval = 10/this.FlowArrivalRate;
             end
+            this.time.DimensionIntervalModified = this.time.DimensionInterval;
             if ~DynamicSlice.ENABLE_DYNAMIC_NORMALIZER
                 if ~isfield(slice_data, 'ReconfigScaler')
                     this.options.ReconfigScaler = 1;
@@ -203,21 +248,25 @@ classdef DynamicSlice < Slice & EventSender
         end
         
         function finalize(this, node_price, link_price)
+            global DEBUG g_results;
             finalize@Slice(this, node_price, link_price);
-            if isfield(this.temp_vars,'c') && ~isempty(this.temp_vars.c)
-                this.VirtualLinks.Capacity = this.temp_vars.c;
-            end
             if isfield(this.temp_vars,'v') && ~isempty(this.temp_vars.v)
                 if this.NumberFlows > 0
-                    this.Variables.v = this.temp_vars.v;
-                    % (x,z) part has been processed in the base method, here we further
-                    % process the (v) part.
-                    this.postProcessing(struct('VNFCapacity', true, 'OnlyVNFCapacity', true))
                     % Override the capacity setting in the super class.
-                    this.VirtualDataCenters.Capacity = sum(reshape(this.VNFCapacity, ...
-                        this.NumberDataCenters,this.NumberVNFs),2);
+                    this.VirtualDataCenters.Capacity = full(sum(reshape(this.VNFCapacity, ...
+                        this.NumberDataCenters,this.NumberVNFs),2));
+                else
+                  warning('zero flow, Variables.v not initialized.');  
                 end
+            elseif this.NumberFlows > 0
+                this.Variables.v = this.getVNFCapacity;
+            else
+                warning('zero flow, Variables.v not initialized.');
             end
+            if isfield(this.temp_vars,'c') && ~isempty(this.temp_vars.c)
+                this.VirtualLinks.Capacity = full(this.temp_vars.c);
+            end
+
             %                 if strcmp(this.options.PricingPolicy, 'quadratic-price')
             %% Reconfiguration Cost
             % intra-slice reconfiguration: the flow reassignment cost and the VNF
@@ -253,6 +302,7 @@ classdef DynamicSlice < Slice & EventSender
                     repmat(this.VirtualDataCenters.ReconfigCost, this.NumberVNFs, 1);
                 this.old_variables = this.Variables;
                 this.get_state;
+                this.max_flow_rate = this.FlowTable.Rate;
                 if this.ENABLE_DYNAMIC_NORMALIZER
                     %% Initialize L1-approximation normalizer
                     % change of magnitude:
@@ -261,10 +311,24 @@ classdef DynamicSlice < Slice & EventSender
                     % we choose beta to be (1/2) of the magnitude.
                     field_names = {'x', 'z', 'v'};
                     cost_entries = {'x_reconfig_cost', 'z_reconfig_cost', 'vnf_reconfig_cost'} ;
-                    for i =1:3
-                        cost = dot(this.(cost_entries{i}), this.Variables.(field_names{i}))/2;
-                        cost0 = dot(this.(cost_entries{i}), this.Variables.(field_names{i})~=0);
-                        this.old_beta.(field_names{i}) = cost0/cost;
+                    if strcmpi(this.GET_BETA_METHOD, 'LeastSquare')
+                        for i = 1:2
+                            this.raw_cost.const.(field_names{i}) = ...
+                                dot(this.(cost_entries{i}), this.Variables.(field_names{i})~=0);
+                            this.raw_cost.linear.(field_names{i}) = ...
+                                dot(this.(cost_entries{i}), this.Variables.(field_names{i}))/2;
+                        end
+                        this.raw_costv.const = ...
+                            dot(this.vnf_reconfig_cost, this.Variables.v~=0);
+                        this.raw_costv.linear = ...
+                            dot(this.vnf_reconfig_cost, this.Variables.v)/4;
+                        this.raw_costv.bInit = true;
+                    else
+                        for i =1:3
+                            cost = dot(this.(cost_entries{i}), this.Variables.(field_names{i}))/2;
+                            cost0 = dot(this.(cost_entries{i}), this.Variables.(field_names{i})~=0);
+                            this.raw_beta.(field_names{i}) = cost0/cost;
+                        end
                     end
                 end
                 
@@ -275,10 +339,57 @@ classdef DynamicSlice < Slice & EventSender
                 stat.ReconfigType = ReconfigType.Dimensioning;
                 stat.ResourceCost = this.getSliceCost(options.PricingPolicy);   % _optimizeResourcePriceNew_ use 'quadratic-price'
                 stat.FairIndex = (sum(this.FlowTable.Rate))^2/(this.NumberFlows*sum(this.FlowTable.Rate.^2));
-                this.sh_data.profits = stat.Profit;
-                this.sh_data.omegas = stat.Utilization;
-                global g_results;       %#ok<TLEV>
+                if this.options.ReconfigMethod >= ReconfigMethod.Dimconfig
+                    this.sh_data.profits = stat.Profit;
+                    this.sh_data.omegas = stat.Utilization;
+                end
+                if ~isempty(DEBUG) && DEBUG
+                    disp(stat);
+                end
                 g_results = stat;       % The first event.
+                this.b_dim = 0;
+            else
+                if this.options.ReconfigMethod >= ReconfigMethod.Dimconfig && ...
+                        this.options.ReconfigMethod < ReconfigMethod.DimBaseline% && false
+                    this.temp_vars = rmstructfields(this.temp_vars, {'x','z','tx','tz'});
+                    this.update_reconfig_cost(this.sh_options.action);
+                    new_opt = struct;
+                    if this.options.ReconfigMethod == ReconfigMethod.DimconfigReserve
+                        new_opt.bEnforceReserve = true;
+                    end
+                    this.fastReconfigure(this.sh_options.action, new_opt);
+                end
+            end
+            [omega, sigma_o] = this.utilizationRatio();
+            if this.options.ReconfigMethod >= ReconfigMethod.Dimconfig
+                this.sh_options.sigma = sigma_o + var_sigma(omega);
+            end
+            %% Nest function: fiiting the variation of utilization
+            % fitting y = ax^2+bx+c
+            function s = var_sigma(omega, b) %#ok<INUSD>
+                %                 A = [1 1 1;
+                %                     0.9^2 0.9 1;
+                %                     0.8^2 0.8 1;
+                %                     0.5^2 0.5 1;
+                %                     0 0 1];
+                %                 if nargin == 1
+                %                     if this.NumberFlows <= 60
+                %                         b = [0.3; 0.2; 0.15; 0.1; 0.3];
+                %                     elseif this.NumberFlows <= 120
+                %                         b = [0.2; 0.14; 0.1; 0.05; 0.2];
+                %                     elseif this.NumberFlows <= 180
+                %                         b = [0.18; 0.12; 0.09; 0.04; 0.18];
+                %                     elseif this.NumberFlows <= 240
+                %                         b = [0.15; 0.1; 0.08; 0.03; 0.15];
+                %                     else
+                %                         b = [0.12; 0.09; 0.075; 0.025; 0.12];
+                %                     end
+                %                 end
+                %                 c = A\b;
+                %                 f = @(x) c(1)*x^2+c(2)*x+c(3);
+                %                 s = f(omega);
+                %%
+                s = 0.2*sqrt(100/this.NumberFlows);
             end
         end
         
@@ -321,7 +432,7 @@ classdef DynamicSlice < Slice & EventSender
                 c = this.VirtualLinks.Capacity;
             else
                 if this.invoke_method == 0
-                    c = getLinkCapacity@Slice(this, this.temp_vars.x);
+                    c = getLinkCapacity@Slice(this, isfinal);
                 else
                     c = this.temp_vars.c;
                 end
@@ -333,8 +444,10 @@ classdef DynamicSlice < Slice & EventSender
                 c = this.VirtualDataCenters.Capacity;
             else
                 if this.invoke_method == 0
-                    c = getNodeCapacity@Slice(this, this.temp_vars.z);
+                    c = getNodeCapacity@Slice(this, isfinal);
                 else
+                    % since we do not reconfigure VNF capacity through fast slice reconfiguration,
+                    % the sum of VNF capacity equals to the node capacity.
                     c = sum(reshape(this.temp_vars.v, ...
                         this.NumberDataCenters,this.NumberVNFs),2);
                 end
@@ -342,7 +455,13 @@ classdef DynamicSlice < Slice & EventSender
         end
         
         function c = get.VNFCapacity(this)
-            c = this.Variables.v;
+            if ~isfield(this.Variables, 'v') || isempty(this.Variables.v)
+                warning('VNF capacity not set, set to VNF load.');
+                c = this.getVNFCapacity;
+                this.Variables.v = c;
+            else
+                c = this.Variables.v;
+            end
         end
         
         function n = get.num_varv(this)
@@ -418,12 +537,33 @@ classdef DynamicSlice < Slice & EventSender
         
         function b = getbeta(this)
             field_names = {'x','z','v'};
-            for i=1:2
-                b.(field_names{i}) = mean(this.old_beta.(field_names{i}));
+            if strcmpi(this.GET_BETA_METHOD, 'LeastSquare')
+                for i=1:2
+                    b.(field_names{i}) = sum([this.raw_cost.const.(field_names{i})].*[this.raw_cost.linear.(field_names{i})])./ ...
+                        sum([this.raw_cost.linear.(field_names{i})].^2);
+                end
+                b.v = sum(this.raw_costv.const.*this.raw_costv.linear)./ ...
+                    sum(this.raw_costv.linear.^2);
+            else
+                if strcmpi(this.GET_BETA_METHOD, 'ExponentiaLMovingAverage')
+                    a0 = 0.25;
+                    for i=1:2
+                        %                 b.(field_names{i}) = mean(this.raw_beta.(field_names{i}));
+                        n = length(this.raw_beta.(field_names{i}));
+                        alpha = zeros(n,1);
+                        alpha(2:n) = a0 * (1-a0).^(n-2:-1:0);
+                        alpha(1) = (1-a0)^(n-1);
+                        b.(field_names{i}) = dot(alpha, this.raw_beta.(field_names{i}));
+                    end
+                else
+                    for i=1:2
+                        b.(field_names{i}) = mean(this.raw_beta.(field_names{i}));
+                    end
+                end
+                % v_nf >= sum_{p}{z_npf}
+                n_path = nnz(this.I_node_path)/this.NumberDataCenters;
+                b.v = b.z/n_path;
             end
-            % v_nf = sum_{p}{z_npf}
-            n_path = nnz(this.I_node_path)/this.NumberDataCenters/this.NumberVNFs;
-            b.v = b.z/n_path;
         end
     end
     
@@ -439,18 +579,22 @@ classdef DynamicSlice < Slice & EventSender
                     ds = this.diff_state;
                 end
                 return;
-            end
-
+            end            
+            
             % At the beginging, |old_variables| equals to |Variables|.
             % |old_variables| is still valid after adding/removing flows.
             % |old_variables| have more elements than |this.Variables.x| when removing
             % flows.
-            if length(this.old_variables.x) <= length(this.temp_vars.x)
+            if length(this.old_variables.x) <= length(this.temp_vars.x)  % only ==
                 if isfinal
                     new_x = this.Variables.x;
                 else
                     new_x = this.temp_vars.x;
                 end
+                %% 
+                % In the optimization, we ignore the reconfiguration cost of the new flow,
+                % while in the results, we should consider the new flow's reconfiguration
+                % cost. See also <update_reconfig_cost>. 
                 ds.tI_node_path = this.I_node_path;
                 % adding flow, |path| will increase, and |edge| might(might not) increase;
                 ds.tI_edge_path = this.I_edge_path;
@@ -461,14 +605,18 @@ classdef DynamicSlice < Slice & EventSender
                 else
                     new_x(~this.changed_index.x) = this.temp_vars.x;
                 end
+                %% The removed flow has been considered with the reconfguration cost
+                % The removed flow's reconfiguration cost is constant and does not appear
+                % in the optimization, see also <update_reconfig_cost>.
+                %
                 % removing flow: |path| will decrease, and |edge| might(might not) decrease;
                 ds.tI_node_path = this.old_state.I_node_path;
                 ds.tI_edge_path = this.old_state.I_edge_path;
             end
-            ds.diff_x = abs(new_x-this.old_variables.x);
+            ds.diff_x = sparse(new_x-this.old_variables.x);
             mid_x = 1/2*(abs(new_x)+abs(this.old_variables.x));
             nz_index_x = mid_x~=0;
-            ds.diff_x_norm = zeros(size(ds.diff_x));
+            ds.diff_x_norm = sparse(length(ds.diff_x),1);
             % Here, we assume that all tiny variables (smaller than NonzeroTolerance) have been
             % eleminated. So that the following operation can identify changes.
             ds.diff_x_norm(nz_index_x) = abs(ds.diff_x(nz_index_x)./mid_x(nz_index_x));
@@ -487,10 +635,10 @@ classdef DynamicSlice < Slice & EventSender
                     new_z(~this.changed_index.z) = this.temp_vars.z;
                 end
             end
-            ds.diff_z = abs(new_z-this.old_variables.z);
+            ds.diff_z = sparse(new_z-this.old_variables.z);
             mid_z = 1/2*(abs(new_z)+abs(this.old_variables.z));
             nz_index_z = mid_z~=0;
-            ds.diff_z_norm = zeros(size(ds.diff_z));
+            ds.diff_z_norm = sparse(length(ds.diff_z),1);
             ds.diff_z_norm(nz_index_z) = abs(ds.diff_z(nz_index_z)./mid_z(nz_index_z));
             %%%
             % Reconfiguration cost of VNF capacity.
@@ -510,10 +658,10 @@ classdef DynamicSlice < Slice & EventSender
                         new_vnf_capacity(~this.changed_index.v) = this.temp_vars.v;
                     end
                 end
-                ds.diff_v = abs(new_vnf_capacity-this.old_variables.v(:));
+                ds.diff_v = new_vnf_capacity-this.old_variables.v(:);
                 ds.mid_v = 1/2*(abs(new_vnf_capacity)+abs(this.old_variables.v(:)));
                 nz_index_v = ds.mid_v~=0;
-                ds.diff_v_norm = zeros(size(ds.diff_v));
+                ds.diff_v_norm = zeros(length(ds.diff_v),1);
                 ds.diff_v_norm(nz_index_v) = abs(ds.diff_v(nz_index_v)./ds.mid_v(nz_index_v));
             end
             if isfinal
@@ -536,7 +684,6 @@ classdef DynamicSlice < Slice & EventSender
             options = getstructfields(this.Parent.options, ...
                 {'DiffNonzeroTolerance', 'NonzeroTolerance'});
             tol_vec = options.DiffNonzeroTolerance;
-            
             s = this.diffstate(isfinal);
             
             if strcmpi(model, 'const')
@@ -547,10 +694,10 @@ classdef DynamicSlice < Slice & EventSender
                     reconfig_cost.v = dot(this.vnf_reconfig_cost, s.diff_v_norm>tol_vec);
                 end
             elseif strcmpi(model, 'linear')
-                reconfig_cost.x = dot(s.diff_x, this.x_reconfig_cost);
-                reconfig_cost.z = dot(s.diff_z, this.z_reconfig_cost);
+                reconfig_cost.x = dot(abs(s.diff_x), this.x_reconfig_cost);
+                reconfig_cost.z = dot(abs(s.diff_z), this.z_reconfig_cost);
                 if isfield(s, 'diff_v')
-                    reconfig_cost.v = dot(s.diff_v, this.vnf_reconfig_cost);
+                    reconfig_cost.v = dot(abs(s.diff_v), this.vnf_reconfig_cost);
                 end
                 % The linear cost coefficient (*_reconfig_cost) is the original
                 % one, which is not scaled. In orde to compute the scaled cost as the
@@ -639,7 +786,7 @@ classdef DynamicSlice < Slice & EventSender
                     nv = this.NumberVNFs;
                     nn = numel(s.diff_z_norm)/(nv*np);
                     diff_path = (s.diff_x_norm>tol_vec)' + ...
-                        sum(sum(reshape(s.diff_z_norm>tol_vec,nn,np,nv),3),1);
+                        sum(sum(reshape(full(s.diff_z_norm>tol_vec),nn,np,nv),3),1);
                     if length(this.path_owner) <= length(this.old_state.path_owner)
                         stat.NumberReconfigFlows = ...
                             numel(unique(this.old_state.path_owner(diff_path~=0)));
@@ -656,6 +803,13 @@ classdef DynamicSlice < Slice & EventSender
                 if contains(stat_names{i},{'All', 'FairIndex'},'IgnoreCase',true)
                     stat.FairIndex = (sum(this.FlowTable.Rate))^2/...
                         (this.NumberFlows*sum(this.FlowTable.Rate.^2));
+                end
+                if contains(stat_names{i},{'All', 'Interval'},'IgnoreCase',true)
+                    if this.b_dim
+                        stat.Interval = this.time.DimensionIntervalModified;
+                    else
+                        stat.Interval = this.time.ConfigureInterval;
+                    end
                 end
             end
         end
@@ -706,10 +860,9 @@ classdef DynamicSlice < Slice & EventSender
             this.As_res = this.old_state.As_res;
         end
         
-        %% Convert the optimizatio results to temporary variables and final variables
+        %% Convert the optimizatio results to temporary variables
         % temp variables might include: x,z,v,tx,tz,tv,c (see also
         % <Dynamic.priceOptimalFlowRate>);
-        % final variables include : x,z,v,c.
         function convert(this, x, ~)
             NP = this.NumberPaths;
             this.temp_vars.x = x(1:NP);
@@ -725,9 +878,9 @@ classdef DynamicSlice < Slice & EventSender
                 offset = offset + this.num_varv;
             end
             this.temp_vars.c = x(offset+(1:this.NumberVirtualLinks));
-            if nargin >= 3
-                this.Variables = getstructfields(this.temp_vars, {'x','z','v','c'}, 'ignore');
-            end
+            %             if nargin >= 3
+            %                 this.Variables = getstructfields(this.temp_vars, {'x','z','v','c'}, 'ignore');
+            %             end
         end
         function [profit, cost] = handle_zero_flow(this, new_opts)
             cost = this.getSliceCost(new_opts.PricingPolicy);
@@ -753,26 +906,80 @@ classdef DynamicSlice < Slice & EventSender
         function postl1normalizer(this)
             [~, cost] = this.get_reconfig_cost('const');
             [~, linear_cost] = this.get_reconfig_cost('linear', true);
-            if this.b_dim
-                field_names = {'x','z','v'};
-            else
-                field_names = {'x','z'};
-            end
-            for i = 1:length(field_names)
-                if isfield(cost, field_names{i}) && isfield(linear_cost, field_names{i})
-                    if cost.(field_names{i})<10^-6 || linear_cost.(field_names{i}) < 10^-6
-                        beta.(field_names{i}) = this.old_beta.(field_names{i})(end)/2;
+            field_names = {'const', 'linear'};
+            b = this.getbeta();
+            if strcmpi(this.GET_BETA_METHOD, 'LeastSquare')
+                arr_cost = [cost, linear_cost];
+                fn = fieldnames(arr_cost(2));
+                for j = 1:length(fn)
+                    arr_cost(2).(fn{j}) = arr_cost(2).(fn{j})/b.(fn{j});
+                end
+                for i = 1:2
+                    if length(this.raw_cost.(field_names{i})) < this.NUM_MEAN_BETA
+                        this.raw_cost.(field_names{i})(end+1) = ...
+                            getstructfields(arr_cost(i), {'x','z'});
                     else
-                        beta.(field_names{i}) = cost.(field_names{i})/linear_cost.(field_names{i});
+                        this.raw_cost.(field_names{i}) = ...
+                            [this.raw_cost.(field_names{i})(2:end), ...
+                            getstructfields(arr_cost(i), {'x','z'})];
                     end
-                    if length(this.old_beta.(field_names{i})) < this.NUM_MEAN_BETA
-                        this.old_beta.(field_names{i})(end+1) = beta.(field_names{i});
-                    else
-                        this.old_beta.(field_names{i}) = ...
-                            [this.old_beta.(field_names{i})(2:end), beta.(field_names{i})];
+                end
+                if isfield(arr_cost, 'v')   
+                    if arr_cost(1).v < 10^-3 || arr_cost(2).v < 10^-3
+                        return;
+                    end
+                    if this.raw_costv.bInit
+                        this.raw_costv.const = arr_cost(1).v;
+                        this.raw_costv.linear = arr_cost(2).v;
+                        this.raw_costv.bInit = false;
+                        return;
+                    end
+                    for i = 1:2
+                        if length(this.raw_costv.(field_names{i})) < this.NUM_MEAN_BETA
+                            this.raw_costv.(field_names{i})(end+1) = arr_cost(i).v;
+                        else
+                            this.raw_costv.(field_names{i}) = ...
+                                [this.raw_costv.(field_names{i})(2:end), arr_cost(i).v];
+                        end
+                    end
+                end                
+            else
+                if this.b_dim
+                    field_names = {'x','z','v'};
+                else
+                    field_names = {'x','z'};
+                end
+                for i = 1:length(field_names)
+                    if isfield(cost, field_names{i}) && isfield(linear_cost, field_names{i})
+                        if cost.(field_names{i})<10^-6
+                            %                         beta.(field_names{i}) = this.raw_beta.(field_names{i})(end)/2;
+                            continue;
+                        else
+                            f = cost.(field_names{i})/linear_cost.(field_names{i});
+                            if f > 2
+                                f = 2;
+                            elseif f<1/2
+                                f = 1/2;
+                            end
+                            beta.(field_names{i}) = b.(field_names{i})*(1+f)/2;
+                        end
+                        if length(this.raw_beta.(field_names{i})) < this.NUM_MEAN_BETA
+                            this.raw_beta.(field_names{i})(end+1) = beta.(field_names{i});
+                        else
+                            this.raw_beta.(field_names{i}) = ...
+                                [this.raw_beta.(field_names{i})(2:end), beta.(field_names{i})];
+                        end
                     end
                 end
             end
+
+            %             function [f,g] = fcn_optbeta(beta,cc,ca)
+            %                 f = (norm(beta*ca-cc,2))^2;
+            %                 g = sum(2*(beta*ca-cc).*ca);
+            %             end
+            %             function h = hess_optbeta(beta, lambda, ca) %#ok<INUSL>
+            %                 h = sum(2*ca.^2);
+            %             end
         end
     end
     
@@ -791,26 +998,30 @@ classdef DynamicSlice < Slice & EventSender
             if nargin <= 1
                 new_opts = struct;
             end
+            theta0 = 0.9999;
+            this.VirtualDataCenters.Capacity = theta0*this.VirtualDataCenters.Capacity;
+            this.VirtualLinks.Capacity = theta0*this.VirtualLinks.Capacity;
             if ~isfield(new_opts, 'CostModel') || ~strcmpi(new_opts.CostModel, 'fixcost')
                 [profit,cost] = optimalFlowRate@Slice( this, new_opts );
-                return;
+            else 
+                if this.NumberFlows == 0
+                    [profit, cost] = this.handle_zero_flow(new_opts);
+                else
+                    [profit, cost] = optimalFlowRate@Slice( this, new_opts );
+                    if isfield(new_opts, 'CostModel') && strcmpi(new_opts.CostModel, 'fixcost')
+                        profit = profit - cost;
+                    end
+                    if nargout >= 1
+                        % When output argument specified, we finalize the VNF capacity.
+                        % After reconfiguration VNF instance capcity has changed.
+                        v = this.getVNFCapacity;
+                        this.Variables.v = v(:);
+                    end
+                end   
+                profit = profit - this.get_reconfig_cost('const');
             end
-            
-            if this.NumberFlows == 0
-                [profit, cost] = this.handle_zero_flow(new_opts);
-            else
-                [profit, cost] = optimalFlowRate@Slice( this, new_opts );
-                if isfield(new_opts, 'CostModel') && strcmpi(new_opts.CostModel, 'fixcost')
-                    profit = profit - cost;
-                end
-                if nargout >= 1
-                    % When output argument specified, we finalize the VNF capacity.
-                    % After reconfiguration VNF instance capcity has changed.
-                    v = this.getVNFCapacity;
-                    this.Variables.v = v(:);
-                end
-            end
-            profit = profit - this.get_reconfig_cost('const');
+            this.VirtualDataCenters.Capacity = this.old_state.node_capacity;
+            this.VirtualLinks.Capacity = this.old_state.link_capacity;
         end
     end
     methods (Access = protected)
@@ -861,6 +1072,7 @@ classdef DynamicSlice < Slice & EventSender
             this.get_state; % if fail to adding flow, recover flow table
             
             this.FlowTable = [this.FlowTable; flows];
+            this.max_flow_rate = [this.max_flow_rate; inf*ones(num_new_flows,1)];
             changed_path_index((num_exist_paths+1):this.NumberPaths) = true;
             for fid = fidx
                 for p = 1:this.FlowTable{fid, 'Paths'}.Width
@@ -897,19 +1109,10 @@ classdef DynamicSlice < Slice & EventSender
             this.old_variables.z = zeros(this.num_varz,1);
             this.old_variables.x(~this.changed_index.x) = this.old_state.variables.x;
             this.old_variables.z(~this.changed_index.z) = this.old_state.variables.z;
-            this.x_reconfig_cost = (this.I_edge_path)' * this.VirtualLinks.ReconfigCost;
-            this.z_reconfig_cost = repmat(this.VirtualDataCenters.ReconfigCost, ...
-                this.NumberPaths*this.NumberVNFs, 1);
-            if this.ENABLE_DYNAMIC_NORMALIZER
-                beta = this.getbeta();
-                this.topts.x_reconfig_cost = beta.x*this.x_reconfig_cost;
-                this.topts.z_reconfig_cost = beta.z*this.z_reconfig_cost;
-            else
-                this.topts.x_reconfig_cost = this.options.ReconfigScaler*this.x_reconfig_cost;
-                this.topts.z_reconfig_cost = this.options.ReconfigScaler*this.z_reconfig_cost;
-            end
             this.topts.old_variables_x = this.old_variables.x;
             this.topts.old_variables_z = this.old_variables.z;
+            this.update_reconfig_cost('add');
+            this.sh_options.action = 'add';
             [ef, ~] = this.executeMethod('add');
             %% Failure handling
             % Zero-rate: now we leave it unhandled, the zero-rate flow will stay in
@@ -918,6 +1121,9 @@ classdef DynamicSlice < Slice & EventSender
             if ef < 0
                 fidx = [];
                 this.set_state();
+            else
+                this.max_flow_rate(this.max_flow_rate==inf) = 0;
+                this.max_flow_rate = max(this.FlowTable.Rate, this.max_flow_rate);
             end
         end
         
@@ -952,23 +1158,9 @@ classdef DynamicSlice < Slice & EventSender
             this.identify_change(changed_path_index);
             this.old_variables.x = this.old_state.variables.x;
             this.old_variables.z = this.old_state.variables.z;
-            this.x_reconfig_cost = (this.I_edge_path)' * this.VirtualLinks.ReconfigCost;
-            this.z_reconfig_cost = repmat(this.VirtualDataCenters.ReconfigCost, ...
-                this.NumberPaths*this.NumberVNFs, 1);
-            if this.ENABLE_DYNAMIC_NORMALIZER
-                beta = this.getbeta();
-                this.topts.x_reconfig_cost = ...
-                    beta.x*this.x_reconfig_cost(~this.changed_index.x);
-                this.topts.z_reconfig_cost = ...
-                    beta.z*this.z_reconfig_cost(~this.changed_index.z);
-            else
-                this.topts.x_reconfig_cost = ...
-                    this.options.ReconfigScaler*this.x_reconfig_cost(~this.changed_index.x);
-                this.topts.z_reconfig_cost = ...
-                    this.options.ReconfigScaler*this.z_reconfig_cost(~this.changed_index.z);
-            end
             this.topts.old_variables_x = this.old_variables.x(~this.changed_index.x);
             this.topts.old_variables_z = this.old_variables.z(~this.changed_index.z);
+            this.update_reconfig_cost('remove');
             % Before performing optimization, there is not situation that VNF instances
             % will be removed. So there is no need to copy the |old_variable.v| like x/z.
             
@@ -978,6 +1170,7 @@ classdef DynamicSlice < Slice & EventSender
             pid = this.FlowTable{flow_index(1), 'Paths'}.paths{1}.local_id-1;
             fidt = flow_index(1):(this.NumberFlows-length(flow_index));
             this.FlowTable(fidx,:) = [];
+            this.max_flow_rate(fidx) = [];
             this.path_owner(changed_path_index) = [];
             for fid = fidt
                 path_list = this.FlowTable{fid,{'Paths'}};
@@ -994,9 +1187,13 @@ classdef DynamicSlice < Slice & EventSender
             this.I_flow_path(:, changed_path_index) = [];
             this.I_flow_path(fidx, :) = [];
             
+            this.sh_options.action = 'remove';
             [ef,~] = this.executeMethod('remove');
             if ef < 0
                 this.set_state();
+            else
+                this.max_flow_rate = max(this.FlowTable.Rate, ...
+                    this.max_flow_rate);
             end
         end
         
@@ -1113,23 +1310,433 @@ classdef DynamicSlice < Slice & EventSender
             dc_node_index(b_removed_dcs) = [];
             this.VirtualNodes.DataCenter(dc_node_index) = 1:this.NumberDataCenters;
         end
-        
-        function [b, vars] = postProcessing(this, options)
-            if nargin >= 2 && isfield(options, 'VNFCapacity')
-                tol_zero = this.Parent.options.ConstraintTolerance;
-                this.Variables.v(this.Variables.v<tol_zero*max(this.Variables.v)) = 0;
-                % [TODO] May need post processing for VNF capacity constraint;
-                if isfield(options, 'OnlyVNFCapacity') && options.OnlyVNFCapacity
-                    return;
-                end
+        %% TODO postProcessing with reconfiguration examining
+        % Fist check constraint violation, then post-process the reconfiguration.
+        %   flow processing requirement;
+        %   link capacity constraint;
+        %   VNF capacity constraint;
+        % Resolve constraint violation by down-scaling, which might induce more
+        % reconfiguration. 
+        %    
+        % As a result, we currently ignore the violation, only focus on 
+        % how to remove unacessary reconfigurations.
+        function [b, vars] = postProcessing(this)
+%             % [TODO] May need post processing for VNF capacity constraint;            
+            %% post process reconfiguration
+            postProcessing@Slice(this);
+            options = getstructfields(this.Parent.options, ...
+                {'DiffNonzeroTolerance', 'NonzeroTolerance', 'ConstraintTolerance'});
+            if isfield(this.temp_vars, 'v')
+                tol_zero = this.Parent.options.NonzeroTolerance;
+                var_v = this.temp_vars.v;
+                var_v(var_v<tol_zero*max(var_v)) = 0;
+                this.Variables.v = var_v;
             end
-            if nargout <= 1
-                b = postProcessing@Slice(this);
-            else
-                [b, vars] = postProcessing@Slice(this);
+            %% Another simple method
+            % directly recover those little changes, which might cause constraint violation
+            tol_vec = options.DiffNonzeroTolerance;
+            if ~this.b_derive_vnf
+                s = this.diffstate(true);
+                if length(s.diff_x) > length(this.Variables.x)
+                    s.diff_x_norm = s.diff_x_norm(~this.changed_index.x);
+                    s.diff_z_norm = s.diff_z_norm(~this.changed_index.z);
+                    old_x = this.old_variables.x(~this.changed_index.x);
+                    old_z = this.old_variables.z(~this.changed_index.z);
+                else
+                    old_x = this.old_variables.x;
+                    old_z = this.old_variables.z;
+                end
+                b_diss_x = s.diff_x_norm < tol_vec;
+                this.Variables.x(b_diss_x) = old_x(b_diss_x);
+                b_diss_z =  s.diff_z_norm < tol_vec;
+                this.Variables.z(b_diss_z) = old_z(b_diss_z);
+                if isfield(this.temp_vars, 'v')
+                    if length(s.diff_v) > length(var_v)
+                        s.diff_v_norm = s.diff_v_norm(~this.changed_index.v);
+                        old_v = this.old_variables.v(~this.changed_index.v);
+                    else
+                        old_v = this.old_variables.v;
+                    end
+                    b_diss_v =  s.diff_v_norm < tol_vec;
+                    var_v(b_diss_v) = old_v(b_diss_v);
+                    this.Variables.v = var_v;
+                end
+                this.diff_state = struct([]);
+                b = true; vars = this.Variables;
+                return;
+                %{
+                find(this.As_res * [this.Variables.x; this.Variables.z]>0,1)
+                res = this.I_edge_path*this.Variables.x-this.VirtualLinks.Capacity;
+                find(res>0)
+                disp(res)
+                this.Hdiag*this.Variables.z-this.Variables.v>0
+                %}                
+            end
+            if ~this.b_derive_vnf
+                %% do processing to discard minor changes.
+                % When performing slice dimensioning, this only be performed after the
+                % final iteration. The intermediate iteration only use the linear
+                % approximated cost.
+                s = this.diffstate(true);
+                if length(s.diff_x) > length(this.Variables.x)
+                    s.diff_x = s.diff_x(~this.changed_index.x);
+                    s.diff_x_norm = s.diff_x_norm(~this.changed_index.x);
+                    s.diff_z = s.diff_z(~this.changed_index.z);
+                    s.diff_z_norm = s.diff_z_norm(~this.changed_index.z);
+                    old_x = this.old_variables.x(~this.changed_index.x);
+                    old_z = this.old_variables.z(~this.changed_index.z);
+                else
+                    old_x = this.old_variables.x;
+                    old_z = this.old_variables.z;
+                end
+                restore_x = this.Variables.x;
+                restore_z = this.Variables.z;
+                if isfield(this.temp_vars, 'v')
+                    restore_v = this.temp_vars.v;
+                    if length(s.diff_v) > length(restore_v)
+                        s.diff_v = s.diff_v(~this.changed_index.v);
+                        s.diff_v_norm = s.diff_v_norm(~this.changed_index.v);
+                        s.mid_v = s.mid_v(~this.changed_index.v);
+                        old_v = this.old_variables.v(~this.changed_index.v);
+                    else
+                        old_v = this.old_variables.v;
+                    end
+                    b_diss_v = (s.diff_v<0) & (s.diff_v_norm<tol_vec);
+                    restore_v(b_diss_v) = old_v(b_diss_v);
+                    s.diff_v_norm(b_diss_v) = 0;
+                    s.diff_v(b_diss_v) = 0;
+                else
+                    restore_v = this.Variables.v;
+                end
+%                 b_diss_z = (s.diff_z_norm>0) && (s.diff_z_norm<tol_vec) && s.diff_z>0;
+%                 if length(this.old_variables.x) <= length(this.temp_vars.x)
+%                     this.Variables.x(b_diss_x) = this.old_variables.x(b_diss_x);
+%                 else
+%                     
+%                 end
+                % separately process the two part of flows, firstly process the path's
+                % that might release some resource could improve the possibility to accept
+                % the second part of flows, which need a little more resources.
+                %%
+                % first case: |x| does not change or the increase amount less than
+                % |tol_vec|, try to restore these changes. 
+                b_diss_x1 = s.diff_x>=0;   % x might not change while z might still change
+                Ndc = this.NumberDataCenters;
+                Np = this.NumberPaths;
+                Nvnf = this.NumberVNFs;
+                af = this.Parent.VNFTable{this.VNFList, 'ProcessEfficiency'};
+                %% 1-1
+                for p = (find(b_diss_x1))'
+                    if s.diff_x_norm(p)<tol_vec
+                        % If x has significant change, usually z also has significant
+                        % change. But we cannot claim that all z components has
+                        % significant changes.
+                        restore_x(p) = old_x(p);
+                        s.diff_x_norm(p) = 0;
+                        s.diff_x(p) = 0;
+                    end
+                    check_z(1);
+                end
+                %% 1-2
+                delta_vnf = restore_v - this.Hdiag*restore_z;  % residual VNF capacity
+                for p = (find(b_diss_x1))'
+                    check_z(2);
+                end
+                %% 2-1
+                % second case: |x|'s decrease amount less than |tol_vec|, try to restore
+                % these changes.  
+                b_diss_x2 = s.diff_x<0;
+                % VirtualLinks.Capacity has been updated in <finalize>.
+                if isfield(this.temp_vars, 'c')
+                    link_capacity = this.temp_vars.c;
+                else
+                    link_capacity = this.VirtualLinks.Capacity;
+                end
+                delta_link = link_capacity - this.I_edge_path*restore_x; % residual link capacity
+                for p = (find(b_diss_x2))'
+                    if s.diff_x_norm(p)<tol_vec
+                        temp_delta_link = delta_link+this.I_edge_path(:,p).*s.diff_x(p);
+                        if isempty(find(temp_delta_link<0,1)) % check link capacity constraint
+                            temp_x = restore_x(p);
+                            restore_x(p) = old_x(p); % restore: up-scaling
+                            tf = check_z(1);
+                            if tf == false % up-scaling restore failed, recover current value.
+                                restore_x(p) = temp_x;
+                            else
+                                delta_link = temp_delta_link;
+                                s.diff_x_norm(p) = 0;
+                                s.diff_x(p) = 0;
+                            end
+                        end
+                    else
+                        check_z(1);
+                    end
+                end
+                %% 2-2
+                for p = (find(b_diss_x2))'
+                    if s.diff_x_norm(p)<tol_vec
+                        temp_delta_link = delta_link+this.I_edge_path(:,p).*s.diff_x(p);
+                        if isempty(find(temp_delta_link<0,1)) % check link capacity constraint
+                            temp_x = restore_x(p);
+                            restore_x(p) = old_x(p); % restore: up-scaling
+                            tf = check_z(2);
+                            if tf == false % up-scaling restore failed, recover current value.
+                                restore_x(p) = temp_x;
+                            else
+                                delta_link = temp_delta_link;
+                                s.diff_x_norm(p) = 0;
+                                s.diff_x(p) = 0;
+                            end
+                        end
+                    else
+                        check_z(2);
+                    end
+                end
+                %% 1-3
+                for p = (find(b_diss_x1))'
+                    check_z(3);
+                end
+                %% 2-3
+                for p = (find(b_diss_x2))'
+                    if s.diff_x_norm(p)<tol_vec
+                        temp_delta_link = delta_link+this.I_edge_path(:,p).*s.diff_x(p);
+                        if isempty(find(temp_delta_link<0,1)) % check link capacity constraint
+                            temp_x = restore_x(p);
+                            restore_x(p) = old_x(p); % restore: up-scaling
+                            tf = check_z(3);
+                            if tf == false % up-scaling restore failed, recover current value.
+                                restore_x(p) = temp_x;
+                            else
+                                delta_link = temp_delta_link;
+                                s.diff_x_norm(p) = 0;
+                                s.diff_x(p) = 0;
+                            end
+                        end
+                    else
+                        check_z(3);
+                    end
+                end
+                %% reover VNF capacity 
+                % must be performed after the flow assignement hast been done. Otherwise,
+                % there is no chance to restore VNF capacity. Due to the reconfiguration
+                % cost constraint, there is no redundant reconfiguration.
+                % Instead, after the flow has been restored, there might be redundancy of
+                % VNF capacity.
+                if isfield(this.temp_vars, 'v')
+                    b_diss_v = (s.diff_v>0) & (s.diff_v_norm<tol_vec);
+                    idv = this.Hdiag*restore_z<=old_v & b_diss_v; % if the old value satisfy the capacity constraint
+                    restore_v(idv) = old_v(idv);
+                    s.diff_v_norm(idv) = 0;
+                    s.diff_v(idv) = 0;
+                    
+%                     delta_dc = full(sum(reshape(this.Variables.v, Ndc, Nvnf),2)) -...
+%                         full(sum(reshape(restore_v, Ndc, Nvnf),2)); % residual node capacity
+%                     % all nodes can be check in parallel, with VNF varying
+%                     idv = 1:Ndc;
+%                     for v = 1:Nvnf
+%                         tv = restore_v(idv);
+%                         old_tv = old_v(idv);
+%                         idtv = (s.diff_v_norm(idv)>0) & (s.diff_v_norm(idv)<tol_vec) & s.diff_v(idv)<0;
+%                         tv(idtv) = old_tv(idtv);
+%                         temp_delta_dc = delta_dc + restore_v(idv) - tv;
+%                         fx = temp_delta_dc >= 0;
+%                         restore_v(idv(fx)) = tv(idv(fx));
+%                         delta_dc(fx) = temp_delta_dc(fx);
+%                         s.diff_v_norm(idv(fx)) = 0;
+%                         s.diff_v(idv(fx)) = 0;
+%                         idv = idv + Ndc;
+%                     end                    
+                    this.Variables.v = restore_v;
+                end
+                this.Variables.x = restore_x;
+                this.Variables.z = restore_z;
+                this.diff_state = struct([]);
+            end
+            b = true; vars = this.Variables;
+            
+            %% nest function: check z
+            function tf = check_z(t)
+                tf = true;
+                b_reset = false(Nvnf,1);
+                temp_z = zeros(Ndc, Nvnf);
+                temp_sz = zeros(Ndc, Nvnf);
+                temp_szn = zeros(Ndc, Nvnf);
+                delta_sum = zeros(Nvnf,1);
+                if t > 1
+                    temp_delta_vnf = zeros(Ndc, Nvnf);
+                end
+                
+                idz = (1:Ndc) + (p-1)*Ndc;
+                idn = 1:Ndc;                
+                for k = 1:Nvnf
+                    tz = restore_z(idz);
+                    temp_z(:,k) = tz;
+                    temp_sz(:,k) = s.diff_z(idz);
+                    temp_szn(:,k) = s.diff_z_norm(idz);
+                    if t > 1
+                        temp_delta_vnf(:,k) = delta_vnf(idn);
+                    end
+                    old_tz = old_z(idz);
+                    switch t
+                        case 1
+                            % try restore z(:,p,f) that should be restored by down-scaling;
+                            % make space for other requests.
+                            idtz = (s.diff_z(idz)>0) & (s.diff_z_norm(idz)<tol_vec);
+                        case 2
+                            %%% try restore z(:,p,f) that includes both up-sclaing and down-scaling;
+                            idtz = (s.diff_z_norm(idz)>0) & (s.diff_z_norm(idz)<tol_vec);
+                        case 3
+                            %%% try restore z(:,p,f) that only includes up-scaling;
+                            idtz = (s.diff_z(idz)<0) & (s.diff_z_norm(idz)<tol_vec);
+                    end
+                    if isempty(find(idtz,1))
+                        if nargout == 1 && dot(this.I_node_path(:,p), tz) < af(k)*restore_x(p)
+                            % when x increase, but z keeps unchange, so we need to check the processing
+                            % constraint.
+                            tf = false;
+                        end
+                        idz = idz + Np*Ndc;
+                        idn = idn + Ndc;
+                        continue;
+                    end
+                    tz(idtz) = old_tz(idtz);  % recover: down-scaling | down/up-scaling | up-scaling
+                    if t == 2 || t == 3
+                        delta_tz = restore_z(idz) - tz; % current - past
+                        t_delta_vnf = delta_vnf(idn)+this.I_node_path(:,p).*delta_tz;
+                    end
+                    if t == 1
+                        if dot(this.I_node_path(:,p), tz) >= af(k)*restore_x(p) % check processing constraint
+                            restore_z(idz) = tz;
+                            s.diff_z_norm(idz(idtz)) = 0;
+                            s.diff_z(idz(idtz)) = 0;
+                            delta_sum(k) = 0;
+                        else
+                            b_reset(k) = true;
+                        end
+                    end
+                    if t == 2
+                        if dot(this.I_node_path(:,p), tz) >= af(k)*restore_x(p) &&...
+                                isempty(find(t_delta_vnf<0,1))
+                            %% check both processing constraint and VNF capacity constraint
+                            restore_z(idz) = tz; % accept old value or keep current value.
+                            s.diff_z_norm(idz(idtz)) = 0;
+                            s.diff_z(idz(idtz)) = 0;
+                            delta_vnf(idn) = t_delta_vnf; % update residual capacity
+                            delta_sum(k) = sum(delta_tz);
+                        else
+                            b_reset(k) = true;
+                        end
+                    end
+                    if t == 3 
+                        if (nargout == 0 && isempty(find(t_delta_vnf<0,1))) || (nargout == 1 && isempty(find(t_delta_vnf<0,1)) && dot(this.I_node_path(:,p), tz) >= af(k)*restore_x(p))
+                            restore_z(idz) = tz; % accept old value or keep current value.
+                            s.diff_z_norm(idz(idtz)) = 0;
+                            s.diff_z(idz(idtz)) = 0;
+                            delta_vnf(idn) = t_delta_vnf; % update residual capacity
+                            delta_sum(k) = sum(delta_tz);
+                        else
+                            b_reset(k) = true;
+                        end
+                    end
+                    idz = idz + Np*Ndc;
+                    idn = idn + Ndc;
+                end
+                if ~isempty(find(b_reset,1))
+                    tf = false;
+                    idz = (1:Ndc) + (p-1)*Ndc;
+                    idn = 1:Ndc;
+                    for k = 1:Nvnf
+                        if ~b_reset(k) && delta_sum(k) < 0
+                            restore_z(idz) = temp_z(:,k);
+                            s.diff_z(idz) = temp_sz(:,k);
+                            s.diff_z_norm(idz) = temp_szn(:,k);
+                            if t > 1
+                                delta_vnf(idn) = temp_delta_vnf(:,k);
+                            end
+                        end
+                        idz = idz + Np*Ndc;
+                        idn = idn + Ndc;
+                    end
+                end
             end
         end
         
+        % update reconfiguration cost with scaler.
+        % If dimensioning is applied, the orginal cost is firstly updated.
+        function update_reconfig_costv(this)
+            this.vnf_reconfig_cost = this.Parent.options.VNFReconfigCoefficient * ...
+                repmat(this.VirtualDataCenters.ReconfigCost, this.NumberVNFs, 1);
+            if this.ENABLE_DYNAMIC_NORMALIZER
+                beta = this.getbeta();
+                this.topts.vnf_reconfig_cost = beta.v*this.vnf_reconfig_cost;
+            else
+                this.topts.vnf_reconfig_cost = ...
+                    this.options.ReconfigScaler*this.vnf_reconfig_cost;
+            end
+        end
+        
+        % update reconfiguration cost with scaler.
+        function update_reconfig_cost(this, action, bDim)
+            %% Period re-dimensioing
+            % The number of virtual nodes/links is not change in the slice, as well as the
+            % number of VNF instances.
+            % When performing re-dimensioning, the reconfiguration cost is larger than
+            % that of fast reconfiguration, so we need to update the reconfiguration cost.
+            if nargin >= 3 && bDim
+                this.Parent.updateRedimensionCost(this);
+                this.update_reconfig_costv();
+            end
+            if strcmpi(action, 'add')
+                this.x_reconfig_cost = (this.I_edge_path)' * this.VirtualLinks.ReconfigCost;
+                this.z_reconfig_cost = repmat(this.VirtualDataCenters.ReconfigCost, ...
+                    this.NumberPaths*this.NumberVNFs, 1);
+                %% Ignore the reconfiguration cost when adding flow
+                % The newly added flow's reconfiguration cost set to zero.
+                % This helps the new flow be admitted into the slice, when there is
+                % resource while the reconfiguration cost of the new flow is too high.
+                % This can be explained as: the reconfiguration cost of the first time can
+                % be treated as that it is distrbuted in the whole life time of the flow.
+                % As long as the flow's lifetime is long enough, the first time cost could
+                % be ignored.
+                %
+                % In the output, we still count the reconfiguration cost for the new flow,
+                % see also <diffstate> and <get_reconfig_cost>.
+                this.x_reconfig_cost(this.changed_index.x) = 0;
+                this.z_reconfig_cost(this.changed_index.z) = 0;
+                if this.ENABLE_DYNAMIC_NORMALIZER
+                    beta =this.getbeta();
+                    this.topts.x_reconfig_cost = beta.x*this.x_reconfig_cost;
+                    this.topts.z_reconfig_cost = beta.z*this.z_reconfig_cost;
+                else
+                    this.topts.x_reconfig_cost = this.options.ReconfigScaler*this.x_reconfig_cost;
+                    this.topts.z_reconfig_cost = this.options.ReconfigScaler*this.z_reconfig_cost;
+                end
+            else
+                %%
+                % Since we need maintain information of the deleted variables, we should use
+                % the old state to calculate the information.
+                this.x_reconfig_cost = ...
+                    (this.old_state.I_edge_path)' * this.VirtualLinks.ReconfigCost;
+                old_num_paths = length(this.old_state.path_owner);
+                this.z_reconfig_cost = repmat(this.VirtualDataCenters.ReconfigCost, ...
+                    old_num_paths*this.NumberVNFs, 1);
+                %%
+                % The removed flow's reconfiguration cost is not considered in the
+                % optimization, which is constant.
+                if this.ENABLE_DYNAMIC_NORMALIZER
+                    beta =this.getbeta();
+                    this.topts.x_reconfig_cost = ...
+                        beta.x*this.x_reconfig_cost(~this.changed_index.x);
+                    this.topts.z_reconfig_cost = ...
+                        beta.z*this.z_reconfig_cost(~this.changed_index.z);
+                else
+                    this.topts.x_reconfig_cost = ...
+                        this.options.ReconfigScaler*this.x_reconfig_cost(~this.changed_index.x);
+                    this.topts.z_reconfig_cost = ...
+                        this.options.ReconfigScaler*this.z_reconfig_cost(~this.changed_index.z);
+                end
+            end
+        end
     end
     
     methods(Static, Access = protected)
@@ -1152,34 +1759,36 @@ classdef DynamicSlice < Slice & EventSender
         %
         % NOTE: hession matrix of the objective is only has non-zero values for x
         % (super-linear). See also <fcnHessian>.
-        function [profit, grad] = fcnFastConfigProfit(vars, slice, options)
+        function [profit, grad] = fcnFastConfigProfit(vars, this, options)
             num_vars = length(vars);
             num_basic_vars = options.num_varx + options.num_varz;
             % |tx|,|tz| and |tv| are auxilliary variables to transform L1 norm to
             % linear constraints and objective part. The number of auxiliary variables
             % eqauls to the number of the main variables.
+            num_var_tx = length(this.topts.x_reconfig_cost);
+            num_var_tz = length(this.topts.z_reconfig_cost);
             if isfield(options, 'num_varv')  % for _fastReconfigure2_, including |v|, and |tv|
                 var_v_index = num_basic_vars + (1:options.num_varv);
                 num_basic_vars = num_basic_vars + options.num_varv;
-                var_tv_index = num_basic_vars + options.num_varx + options.num_varz + ...
-                    (1:options.num_varv);
+                num_var_tv = length(this.topts.vnf_reconfig_cost);
+                var_tv_index = num_basic_vars + num_var_tx + num_var_tz + (1:num_var_tv);
                 var_tv = vars(var_tv_index);
             end
             var_x = vars(1:options.num_varx);
-            var_tx_index = num_basic_vars+(1:options.num_varx); 
+            var_tx_index = num_basic_vars+(1:num_var_tx); 
             var_tx = vars(var_tx_index);
-            var_tz_index = num_basic_vars+options.num_varx+(1:options.num_varz);
+            var_tz_index = num_basic_vars+num_var_tx+(1:num_var_tz);
             var_tz = vars(var_tz_index);
-            flow_rate = slice.getFlowRate(var_x);
+            flow_rate = this.getFlowRate(var_x);
             %% objective value
-            profit = -slice.weight*sum(fcnUtility(flow_rate));
+            profit = -this.weight*sum(fcnUtility(flow_rate));
             %%%
             % calculate reconfiguration cost by |tx| and |tz| (L1 approximation),
             % which is similar to calculating by |x-x0| and |z-z0|.
-            profit = profit + dot(var_tx, slice.topts.x_reconfig_cost) + ...
-                dot(var_tz, slice.topts.z_reconfig_cost);
+            profit = profit + dot(var_tx, this.topts.x_reconfig_cost) + ...
+                dot(var_tz, this.topts.z_reconfig_cost);
             if isfield(options, 'num_varv') % for _fastConfigure2_
-                profit = profit + dot(var_tv, slice.topts.vnf_reconfig_cost);
+                profit = profit + dot(var_tv, this.topts.vnf_reconfig_cost);
             end
             % If there is only one output argument, return the real profit (positive)
             if isfield(options, 'bFinal') && options.bFinal
@@ -1192,17 +1801,17 @@ classdef DynamicSlice < Slice & EventSender
                 % The partial derivatives of x
                 grad = spalloc(num_vars, 1, num_vars-options.num_varz);
                 for p = 1:options.num_varx
-                    i = slice.path_owner(p);
-                    grad(p) = -slice.weight/(1+slice.I_flow_path(i,:)*var_x); %#ok<SPRIX>
+                    i = this.path_owner(p);
+                    grad(p) = -this.weight/(1+this.I_flow_path(i,:)*var_x); %#ok<SPRIX>
                 end
                 %%%
                 % The partial derivatives of t_x is the vector |x_reconfig_cost|;
                 % The partial derivatives of t_z is duplicaton of |z_reconfig_cost|,
                 % since the node reconfiguration cost is only depend on node.
-                grad(var_tx_index) = slice.topts.x_reconfig_cost;
-                grad(var_tz_index) = slice.topts.z_reconfig_cost;
+                grad(var_tx_index) = this.topts.x_reconfig_cost;
+                grad(var_tz_index) = this.topts.z_reconfig_cost;
                 if isfield(options, 'num_varv')
-                    grad(var_v_index) = slice.topts.vnf_reconfig_cost;
+                    grad(var_v_index) = this.topts.vnf_reconfig_cost;
                 end
             end
         end

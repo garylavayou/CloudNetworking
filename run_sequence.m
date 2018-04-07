@@ -22,12 +22,12 @@ pause(0.01);
 % Initialize substrate network
 % if b_single_optimal || b_price_adjust1 || b_price_adjust2 || b_dual_decomp || ...
 %         b_resource_part || b_part_price
-net_opt.Method = 'single-normal';
+net_opt.SlicingMethod = 'single-normal';
 PN = instantiateclass(net_opt.ClassName, node_opt, link_opt, VNF_opt, net_opt);
 PN.slice_template = Slice.loadSliceTemplate(type.Index);
 
 if b_static_slice
-    net_opt.Method = 'static-price';
+    net_opt.SlicingMethod = 'static-price';
     PN_static = instantiateclass(net_opt.ClassName, node_opt, link_opt, VNF_opt, net_opt);
     PN_static.slice_template = Slice.loadSliceTemplate(type.Index);
     link_price = PN_static.getLinkCost * (1 + net_opt.PricingFactor);
@@ -213,7 +213,7 @@ for i = 1:num_events
     end
     
     if b_single_optimal
-        PN.setOptions('Method', 'single-normal');
+        PN.setOptions('SlicingMethod', 'single-normal');
         [output_optimal, rt] = PN.singleSliceOptimization(struct('bCompact', true));
         [tb, stbs] = PN.saveStatTable(output_optimal, rt, type.Index, 'optimal-spp');
         stat_optimal(i, tb.Properties.VariableNames) = tb;
@@ -227,7 +227,7 @@ for i = 1:num_events
     
     if b_dual_decomp
         tic;
-        PN.setOptions('Method', 'dual');
+        PN.setOptions('SlicingMethod', 'dual');
         output_dual = PN.optimizeNetSocialWelfare1(options);
         rt = toc;
         [tb, stbs] = saveStatTable(PN, output_dual, rt, type.Index, ...
@@ -242,7 +242,7 @@ for i = 1:num_events
     end
     
     if b_price_adjust
-        PN.setOptions('Method', 'price-adjust');
+        PN.setOptions('SlicingMethod', 'price-adjust');
         [output_price, rt] = PN.optimizeResourcePriceNew();
         [tb, stbs] = PN.saveStatTable(output_price, rt, type.Index, 'dynamic-price');
         stat_price(i, tb.Properties.VariableNames) = tb;
@@ -255,7 +255,7 @@ for i = 1:num_events
     end
     
     if b_price_adjust2
-        PN.setOptions('Method', 'price-adjust');
+        PN.setOptions('SlicingMethod', 'price-adjust');
         [output_price, rt] = PN.optimizeResourcePrice();
         [tb, stbs] = PN.saveStatTable(output_price, rt, type.Index, 'dynamic-price');
         stat_price2(i, tb.Properties.VariableNames) = tb;
@@ -268,7 +268,7 @@ for i = 1:num_events
     end
     
     if b_resource_part
-        PN.setOptions('Method', 'resource-part');
+        PN.setOptions('SlicingMethod', 'resource-part');
         tic;
         [output_part] = PN.resourcePartitionOptimization();
         rt = toc;
@@ -283,7 +283,7 @@ for i = 1:num_events
     end
     
     if b_part_price
-        PN.setOptions('Method', 'partition-price');
+        PN.setOptions('SlicingMethod', 'partition-price');
         tic;
         [output_partprice] = PN.partitionResourcePricing();
         rt = toc;

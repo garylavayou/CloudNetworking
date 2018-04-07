@@ -42,7 +42,7 @@ type.PermanentCount = 1;      % Number of persistent slices: {1|2|3...}
 options.PricingFactor = 1;      % 1 | 2 | 3 ,
 options.Threshold = 'min';
 options.Form = 'compact';       % {'compact'|'normal'}
-options.NonzeroTolerance = 10^-4;
+options.NonzeroTolerance = 10^-3;
 options.ConstraintTolerance = 10^-3;
 options.DiffNonzeroTolerance = 10^-3;
 options.PostProcessing = 'round';
@@ -50,11 +50,13 @@ options.PostProcessing = 'round';
 %% Experiment Control
 warning('off', 'backtrace');
 warning('off', 'verbose');
-b_reconfig = true;
+b_baseline = true;
+b_dimbaseline = true;
+b_fastconfig0 = true;
 b_fastconfig = true;
-b_fastconfig2 = false;
 b_dimconfig = true;
+b_dimconfig0 = true;
 b_dimconfig1 = false;
+b_fastconfig2 = false;
 b_dimconfig2 = false;
-b_dimconfig0 = false;
 SEED = 20170410;            % 20161231

@@ -341,8 +341,6 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
         end
     end
     
-    methods(Static, Access = protected)
-    end
     methods(Access=protected)
         % overide the default action.
         % (1) simulate flows originating from un-covered stations, which triggers resource
@@ -497,7 +495,7 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 slice.net_changes.DCIndex = false(slice.NumberDataCenters,1);
                 slice.net_changes.DCIndex(new_dc_index) = true;
                 
-                this.updateRedimensionCost(slice);
+%                 this.updateRedimensionCost(slice);
             end
             %%
             % update paths
@@ -531,16 +529,26 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 link_id(zero_load_link_id)) * (1/20);
             node_load(zero_load_node_id) = this.getNodeField('Capacity', ...
                 node_id(zero_load_node_id)) * (1/20);
-            link_price = this.getLinkField('Price', link_id);
-            node_price = this.getNodeField('Price', node_id);
+            if ~isempty(slice.prices)
+                link_price = min(slice.prices.Link,this.getLinkField('Price', link_id));
+                node_price = min(slice.prices.Node, this.getNodeField('Price', node_id));
+            else
+                link_price = this.getLinkField('Price', link_id);
+                node_price = this.getNodeField('Price', node_id);
+            end
+            %% ISSUE: HOW TO DETERMINE RECONFIG COST
             [~, slice.VirtualLinks.ReconfigCost] = ...
                 slice.fcnLinkPricing(link_price, link_load);
+            num_config = slice.time.DimensionInterval/slice.time.ConfigureInterval;
+            MIN_NUM_CONFIG = 10;
+            num_config = max(MIN_NUM_CONFIG, num_config/4);
+            slice.time.DimensionIntervalModified = slice.time.ConfigureInterval*num_config;
             slice.VirtualLinks.ReconfigCost = ...
-                (DynamicSlice.GLOBAL_OPTIONS.eta/slice.time.DimensionInterval) * slice.VirtualLinks.ReconfigCost;
+                (DynamicSlice.GLOBAL_OPTIONS.eta/num_config) * slice.VirtualLinks.ReconfigCost;
             [~, slice.VirtualDataCenters.ReconfigCost] = ...
                 slice.fcnNodePricing(node_price, node_load);
             slice.VirtualDataCenters.ReconfigCost = ...
-                (DynamicSlice.GLOBAL_OPTIONS.eta/slice.time.DimensionInterval) * slice.VirtualDataCenters.ReconfigCost;
+                (DynamicSlice.GLOBAL_OPTIONS.eta/num_config) * slice.VirtualDataCenters.ReconfigCost;
         end
         %         function [link_reconfig_cost, node_reconfig_cost] = ...
         %                 updateRedimensionCost(this, slice, link_id, node_id)

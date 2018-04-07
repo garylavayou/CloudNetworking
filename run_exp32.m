@@ -42,7 +42,6 @@ slice_config.RatioSet = {[1;1;1],[4; 1; 1],[1; 4; 1], [1; 1; 4]};
 slice_config.Count = 4:4:36;
 
 %% Experiment Control
-declare_info_level('Global', DisplayLevel.Off);
 b_single_optimal = true;
 b_price_adjust1 = false;
 b_price_adjust2 = true;
@@ -89,7 +88,7 @@ for exp_id = 1:num_config
     if b_static_slice
         [stat_static, slice_stat_static] = ...
             CloudNetwork.createStatTable(num_point, num_type, 'static');         
-        net_opt.Method = 'static-price';
+        net_opt.SlicingMethod = 'static-price';
         PN_static = instantiateclass(net_opt.ClassName, ...
             node_opt, link_opt, VNF_opt, net_opt);
         PN_static.slice_template = Slice.loadSliceTemplate(slice_config.Type);
@@ -210,7 +209,7 @@ for exp_id = 1:num_config
         %%
         if b_single_optimal
             fprintf('(%s)Global SPP.\n', datestr(now));
-            PN.setOptions('Method', 'single-normal');
+            PN.setOptions('SlicingMethod', 'single-normal');
             [output_optimal, rt] = PN.singleSliceOptimization(net_opt);
             [tb, stbs] = saveStatTable(PN, output_optimal, rt, slice_config.Type, ...
                 'optimal-spp');
@@ -225,7 +224,7 @@ for exp_id = 1:num_config
         %%
         if b_price_adjust1
             fprintf('(%s)Pricing-1.\n', datestr(now));
-            PN.setOptions('Method', 'price-adjust');
+            PN.setOptions('SlicingMethod', 'price-adjust');
             [output_price, rt] = PN.optimizeResourcePrice([], net_opt);
             [tb, stbs] = saveStatTable(PN, output_price, rt, slice_config.Type, ...
                 'dynamic-price');
@@ -240,7 +239,7 @@ for exp_id = 1:num_config
         %%
         if b_price_adjust2
             fprintf('(%s)Pricing-2.\n', datestr(now));
-            PN.setOptions('Method', 'price-adjust');
+            PN.setOptions('SlicingMethod', 'price-adjust');
             [output_price, rt] = PN.optimizeResourcePriceNew();
             [tb, stbs] = saveStatTable(PN, output_price, rt, slice_config.Type, ...
                 'dynamic-price');

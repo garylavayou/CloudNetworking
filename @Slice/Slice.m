@@ -558,14 +558,14 @@ classdef Slice < VirtualNetwork & EventReceiver
                     case 'round'
                         b_violate = false(size(v1));
                         b_violate(index_violate) = true;
-                        pid = 1:NP:((NV-1)*NP+1);
+                        pid_offset = 0:NP:((NV-1)*NP);
                         for i = 1:NP
+                            pid = pid_offset + i;
                             p_violate = find(b_violate(pid));
                             if ~isempty(p_violate)
                                 t = v1(pid(p_violate))./abs(v2(pid(p_violate)));
                                 var_x(i) = var_x(i) ./ max(t);
                             end
-                            pid = pid + 1;
                         end
                         % The rounding error may still leads to postive error, therefore
                         % we set a relatively small tolerance, i.e. 1e-10. 

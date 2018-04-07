@@ -5,3 +5,4 @@
 *.pdf
 TestArrivalDeparture.m
 TestArrivalDeparture2.m
+.vscode/settings.json

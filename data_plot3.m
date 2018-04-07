@@ -43,7 +43,7 @@ for i = 1:length(etas)
     ylim(hl(1).Parent, [0, ylimmax]);
     yyaxis right;
     ylim(hr.Parent, [0, ylimmax]);
-    pause(0.1);
+    pause(1);
 end
 
 %% Ratio of Reconfiguration
@@ -94,7 +94,7 @@ for i = 1:length(etas)
     ylim([0,1]);
     legend(legend_label, 'Location', 'best', 'Orientation', 'vertical');
     title(sprintf('\\eta=%.2f', etas(i)));
-    pause(0.1);
+    pause(1);
 end
 %% Cost of Reconfiguration
 if exist('fig_cost_reconfig', 'var') && fig_cost_reconfig.isvalid
@@ -122,7 +122,7 @@ for i = 1:length(etas)
     xlabel('Experiment Time');
     legend(legend_label, 'Location', 'northwest');
     title(sprintf('\\eta=%.2f', etas(i)));
-    pause(0.1);
+    pause(1);
 end
 
 %% Number of Reconfigured Flows
@@ -163,7 +163,7 @@ for i = 1:length(etas)
     xlabel('Experiment Time');
     legend([legend_label,{'Flows #'}], 'Location', 'northwest');
     title(sprintf('\\eta=%.2f', etas(i)));
-    pause(0.1);
+    pause(1);
 end
 
 %% Profit
@@ -200,6 +200,6 @@ for i = 1:length(etas)
     ylabel('Number of Flows');
     legend([legend_label, {'Flow #'}], 'Location', 'northwest');
     title(sprintf('\\eta=%.2f', etas(i)));
-    pause(0.1);
+    pause(1);
     % pause;
 end

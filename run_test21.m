@@ -45,8 +45,6 @@ net_opt.AdmitPolicy = 'reject-flow';
 net_opt.PricingFactor = 1;      % used for static_slicing and single slice optimization
 net_opt.Form = 'compact';       % 'compact'|'normal'
 
-declare_info_level('Global', DisplayLevel.Off);
-
 %% Construct Network
 % Initialize substrate network
 % add network slices
@@ -60,7 +58,7 @@ b_repeat = true;
 
 %% 
 if b_optimal
-    net_opt.Method = 'single-normal';
+    net_opt.SlicingMethod = 'single-normal';
     PN = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
     PN.slice_template = Slice.loadSliceTemplate(slice_type);
     link_capacity = PN.getLinkField('Capacity');
@@ -101,7 +99,7 @@ if b_optimal
 end
 %%
 if b_static
-    net_opt.Method = 'static-price';
+    net_opt.SlicingMethod = 'static-price';
     PN_static = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
     PN_static.slice_template = Slice.loadSliceTemplate(slice_type);
     link_capacity = PN_static.getLinkField('Capacity');

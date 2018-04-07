@@ -46,7 +46,6 @@ arrival.Number = 100;
 arrival.Interval = 1/6;     % Average of arrival interval.  
 
 %% Control Variables
-declare_info_level('Global', DisplayLevel.Off);
 b_single_optimal = true;
 b_price_adjust = true;
 b_static_slice = true;

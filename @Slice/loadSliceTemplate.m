@@ -155,7 +155,7 @@ for i = 1:length(type_index)
             % is an absolute value to serve as the normalizer. We can set this value by
             % first optimizing without normalization, and then computing the ratio between
             % the original reconfiguration cost and the L1 Approximation.
-            slice_template(i).Weight = 25;
+            slice_template(i).Weight = 10;
             slice_template(i).NumberPaths = 1;
             slice_template(i).VNFList = [1,2,3];
             slice_template(i).ArrivalRate = 1/(3600*24);   % 1 arrivals/24 hour => 3600 sec/arrival
@@ -166,6 +166,7 @@ for i = 1:length(type_index)
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
             slice_template(i).ReconfigScaler = 2;       % beta
             slice_template(i).PricingPolicy = 'quadratic';
+            slice_template(i).UtilizationVariance = 0.10;
         case 54
             %% Type-2 for experiment 4-2: DynamicNetwork
             % Type-2 is a middle term service, e.g. inter-data centers communications (1
@@ -189,6 +190,7 @@ for i = 1:length(type_index)
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
             slice_template(i).ReconfigScaler = 2.4;
             slice_template(i).PricingPolicy = 'quadratic';
+            slice_template(i).UtilizationVariance = 0.15;
         case 64 
             %% Type-3 for experiment 4-2: DynamicNetwork
             % Type-3 is a middle term service with high QoS-demand (10 arrivals/hour, 1
@@ -199,8 +201,8 @@ for i = 1:length(type_index)
             %
             % Those flows always arrive at the creation of the slice and depart when the
             % slice is released. Thus the arrival rate of flow is relatively lower. Flow
-            % arrival rate is set to 225 sec/arrival, i.e., 8 arrivals/hour, while  
-            % the service interval is set to 1800s(30min), so that the average number of
+            % arrival rate is set to 225 sec/arrival, i.e., 16 arrivals/hour, while  
+            % the service interval is set to 900(15min), so that the average number of
             % flows stays at 4. 
             slice_template(i).Weight = 300;
             slice_template(i).NumberPaths = 3;
@@ -208,11 +210,12 @@ for i = 1:length(type_index)
             slice_template(i).ArrivalRate = 10/3600;   % 4 arrivals/hour
             slice_template(i).ServiceInterval = 3600;
             slice_template(i).NumberFlows = 4;
-            slice_template(i).Flow.ArrivalRate = 8/1800; % 8 arrivals/hour  
+            slice_template(i).Flow.ArrivalRate = 8/1800; % 16 arrivals/hour  
             slice_template(i).Flow.ServiceInterval = 900; 
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
             slice_template(i).ReconfigScaler = 0.5;
             slice_template(i).PricingPolicy = 'quadratic';
+            slice_template(i).UtilizationVariance = 0.20;
         case 74
             %%
             % similar to type 44, but with
@@ -228,6 +231,7 @@ for i = 1:length(type_index)
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
             slice_template(i).ReconfigScaler = 2;       % beta
             slice_template(i).PricingPolicy = 'quadratic';
+            slice_template(i).UtilizationVariance = 0.05;   % be replaced by a function handle 'var_sigma'
         case 84
             %%
             % similar to type 44, but with
@@ -237,12 +241,13 @@ for i = 1:length(type_index)
             slice_template(i).VNFList = [1,2,3];
             slice_template(i).ArrivalRate = 1/(3600*24);   % 1 arrivals/24 hour => 3600 sec/arrival
             slice_template(i).ServiceInterval = 3600*24*7;
-            slice_template(i).NumberFlows = 150;
+            slice_template(i).NumberFlows = 300;
             slice_template(i).Flow.ArrivalRate = 3600/3600; 
             slice_template(i).Flow.ServiceInterval = 300; 
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
             slice_template(i).ReconfigScaler = 2;       % beta
             slice_template(i).PricingPolicy = 'quadratic';
+            slice_template(i).UtilizationVariance = 0.03;
         otherwise
             error('error: unrecognized slice type (%d).', type_index(i));
     end
@@ -253,15 +258,15 @@ for i = 1:length(type_index)
             slice_template(i).Trigger = 'EventBased';
             switch mod(type_index(i),100)
                 case 44
-                    slice_template(i).EventInterval = 30;       % {50}
+                    slice_template(i).EventInterval = 40;       % {50}
                 case 54
                     slice_template(i).EventInterval = 20;
                 case 64
                     slice_template(i).EventInterval = 6;
                 case 74
-                    slice_template(i).EventInterval = 40;
+                    slice_template(i).EventInterval = 60;
                 case 84
-                    slice_template(i).EventInterval = 40;
+                    slice_template(i).EventInterval = 60;
                 otherwise
                     error('error: unrecognized slice type (%d).', type_index(i));
             end
@@ -269,15 +274,15 @@ for i = 1:length(type_index)
             slice_template(i).Trigger = 'TimeBased';
             switch mod(type_index(i),100)
                 case 44
-                    slice_template(i).TimeInterval = 60;
+                    slice_template(i).TimeInterval = 80;
                 case 54
                     slice_template(i).TimeInterval = 300;
                 case 64
                     slice_template(i).TimeInterval = 900;
                 case 74
-                    slice_template(i).TimeInterval = 40;
+                    slice_template(i).TimeInterval = 60;
                 case 84
-                    slice_template(i).TimeInterval = 20;
+                    slice_template(i).TimeInterval = 30;
                 otherwise
                     error('error: unrecognized slice type (%d).', type_index(i));
             end

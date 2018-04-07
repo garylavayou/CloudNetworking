@@ -8,25 +8,21 @@ fidx = [];
 this.getAs_res;         % TODO, incremental upate of As_res, Hrep, and Hdiag.
 this.getHrep;
 this.getHdiag;
-if ~strcmpi(this.options.ReconfigMethod, 'fastconfig')
-    this.vnf_reconfig_cost = this.Parent.options.VNFReconfigCoefficient * ...
-        repmat(this.VirtualDataCenters.ReconfigCost, this.NumberVNFs, 1);
-    if this.ENABLE_DYNAMIC_NORMALIZER
-        beta = this.getbeta();
-        this.topts.vnf_reconfig_cost = beta.v*this.vnf_reconfig_cost;
-    else
-        this.topts.vnf_reconfig_cost = this.options.ReconfigScaler*this.vnf_reconfig_cost;
-    end
-    %% Save the VNF capacity to the previous state, berfore optimization
-    % After the slice is created, |VNFCapacity| is recorded. After each optimization, the
-    % |VNFCapacity| is updated.
-    % When perform 'dimconfig' or 'dimconfig2', if the topology is augmented with new data
-    % centers, |this.old_variables.v| will be modified to match the size of the new
-    % vector (See <DimensioningReconfigure>).
-    this.old_variables.v = this.VNFCapacity(:);
-end
+% if this.options.ReconfigMethod >= ReconfigMethod.Dimconfig
+%     this.vnf_reconfig_cost = this.Parent.options.VNFReconfigCoefficient * ...
+%         repmat(this.VirtualDataCenters.ReconfigCost, this.NumberVNFs, 1);
+%     if this.ENABLE_DYNAMIC_NORMALIZER
+%         beta = this.getbeta();
+%         this.topts.vnf_reconfig_cost = beta.v*this.vnf_reconfig_cost;
+%     else
+%         this.topts.vnf_reconfig_cost = this.options.ReconfigScaler*this.vnf_reconfig_cost;
+%     end
+%     this.old_variables.v = this.VNFCapacity(:);
+% end
+tic
+t1 = tic;
 switch this.options.ReconfigMethod
-    case 'reconfig'
+    case ReconfigMethod.Baseline
         % provide 'method' and 'model' to customize the <optimalFlowRate>
         % Since we adopt |FixedCost| model, the resource cost that is a
         % constant, is not include in the objective value |profit|. So, we
@@ -37,18 +33,20 @@ switch this.options.ReconfigMethod
         this.prices.Link = this.VirtualLinks.Price;
         this.prices.Node = this.VirtualDataCenters.Price;
         profit = this.optimalFlowRate(options);
-    case 'fastconfig'
+    case {ReconfigMethod.Fastconfig,ReconfigMethod.FastconfigReserve}
         profit = this.fastReconfigure(action);
-    case 'fastconfig2'
+    case {ReconfigMethod.Fastconfig2, ReconfigMethod.Fastconfig2Reserve}
         profit = this.fastReconfigure2(action);
-    case {'dimconfig', 'dimconfig1', 'dimconfig2', 'dimconfig0'}
+    case {ReconfigMethod.Dimconfig, ReconfigMethod.DimconfigReserve, ...
+            ReconfigMethod.DimBaseline}
         profit = this.DimensioningReconfigure(action);
     otherwise
         error('NetworkSlicing:UnsupportedMethod', ...
             'error: unsupported method (%s) for network slicing.', ...
-            this.options.ReconfigMethod) ;
+            this.options.ReconfigMethod.char) ;
 end
-if contains(this.options.ReconfigMethod, {'dimconfig', 'dimconfig1', 'dimconfig2'}) && isempty(profit)
+t2 = toc(t1);
+if this.options.ReconfigMethod>=ReconfigMethod.Dimconfig && isempty(profit)
     exitflag = -1;
     return;
 end
@@ -61,17 +59,19 @@ mean_link_util = mean(link_util);
 %}
 
 % stat.Solution = this.Variables;
-if this.ENABLE_DYNAMIC_NORMALIZER
-    this.postl1normalizer();
-end
 stat = this.get_reconfig_stat();
 stat.Profit = profit;
+if ~isempty(DEBUG) && DEBUG 
+    disp(stat);
+    fprintf('%s elapsed time: %ds\n',this.options.ReconfigMethod.char, t2);
+end
 switch this.options.ReconfigMethod
-    case 'reconfig'
+    case ReconfigMethod.Baseline
         stat.ReconfigType = ReconfigType.Reconfigure;
-    case {'fastconfig','fastconfig2'}
+    case {ReconfigMethod.Fastconfig,ReconfigMethod.FastconfigReserve,...
+            ReconfigMethod.Fastconfig2, ReconfigMethod.Fastconfig2Reserve}
         stat.ReconfigType = ReconfigType.FastReconfigure;
-    case{'dimconfig', 'dimconfig1', 'dimconfig2'}
+    case {ReconfigMethod.Dimconfig, ReconfigMethod.DimconfigReserve}
         stat.ReconfigType = ReconfigType.Dimensioning;
         if ~this.b_dim
             stat.ReconfigType = ReconfigType.FastReconfigure;
@@ -80,8 +80,8 @@ switch this.options.ReconfigMethod
             % decriptors for the slice.
             this.release_resource_description();
         end
-    case {'dimconfig0'}
-        if this.b_dim
+    case ReconfigMethod.DimBaseline
+        if this.b_dim.char
             if this.getOption('Adhoc')
                 this.release_resource_description();
             end
@@ -89,6 +89,12 @@ switch this.options.ReconfigMethod
         else
             stat.ReconfigType = ReconfigType.Reconfigure;
         end
+end
+if this.ENABLE_DYNAMIC_NORMALIZER
+    this.postl1normalizer();
+    if ~isempty(DEBUG) && DEBUG
+        disp(this.getbeta);
+    end
 end
 g_results(event_num,:) = stat;
 

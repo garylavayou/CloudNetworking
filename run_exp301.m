@@ -41,7 +41,6 @@ options.ProfitType = {'ApproximatePrice','AccuratePrice'};
 options.WelfareType = {'Accurate', 'Approximate'};
 
 %% Experiment Control
-declare_info_level('Global', DisplayLevel.Off);
 b_single_optimal = true;
 b_price_adjust1 = true;
 b_price_adjust2 = true;
@@ -147,7 +146,7 @@ for exp_id = 1:num_config
         stat.number_part_reject = zeros(num_point,3);
         stat.number_slices_static = zeros(num_point,3);
         static_opts = options;
-        static_opts.Method = 'slice-price';
+        static_opts.SlicingMethod = 'slice-price';
     end
     %%
     slice_sequence = zeros(slice_config.Count(end),1);
@@ -205,7 +204,7 @@ for exp_id = 1:num_config
         %     end
         
         if b_static_slice
-            net_opt.Method = 'static-price';
+            net_opt.SlicingMethod = 'static-price';
             PN = instantiateclass(net_opt.ClassName, ...
                 node_opt, link_opt, VNF_opt, net_opt);
             PN.slice_template = Slice.loadSliceTemplate(slice_config.Type);
@@ -272,7 +271,7 @@ for exp_id = 1:num_config
         %%
         if b_single_optimal
             fprintf('(%s)Global SPP.\n', datestr(now));
-            PN.setOptions('Method', 'single-normal');
+            PN.setOptions('SlicingMethod', 'single-normal');
             [output_optimal, rt] = PN.singleSliceOptimization(options);
             runtime.optimal(point_id,2) = rt.Serial;
             runtime.optimal(point_id,1) = rt.Parallel;
@@ -299,7 +298,7 @@ for exp_id = 1:num_config
         %%
         if b_price_adjust1
             fprintf('(%s)Pricing-1.\n', datestr(now));
-            PN.setOptions('Method', 'price-adjust');
+            PN.setOptions('SlicingMethod', 'price-adjust');
             [output_price, rt] = PN.optimizeResourcePrice();
             runtime.price1(point_id,2) = rt.Serial;
             runtime.price1(point_id,1) = rt.Parallel;
@@ -324,7 +323,7 @@ for exp_id = 1:num_config
         %%
         if b_price_adjust2
             fprintf('(%s)Pricing-2.\n', datestr(now));
-            PN.setOptions('Method', 'price-adjust');
+            PN.setOptions('SlicingMethod', 'price-adjust');
             [output_price, rt] = PN.optimizeResourcePriceNew();
             runtime.price2(point_id,2) = rt.Serial;
             runtime.price2(point_id,1) = rt.Parallel;

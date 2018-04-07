@@ -1,9 +1,16 @@
+%% Single plot of time-variant quantity.
 %%
 line_width = [1 1 1 1 0.5];
 color_set = [Color.Black; Color.MildGreen; Color.Purple; Color.MildBlue; Color.Red];
-legend_label = {'Benchmark', 'RFFV', 'RFEV', 'Hybrid-1', 'Hybrid-2'};
-i = 1;
+legend_label = {'FSR0', 'FSR', 'HSR0', 'HSR', 'Baseline'};
+i = 6;
+if strcmpi(mode, 'var-eta')
+    j = 1;
+else
+    j = i;
+end
 tx = 1:NUM_EVENT;
+t = results.DimBaseline{j}.Time(tx);
 
 %% Number of Reconfiguration
 if exist('fig_num_reconfig', 'var') && fig_num_reconfig.isvalid
@@ -14,11 +21,11 @@ end
 xlabel('Experiment Time');
 % fig_num_reconfig.OuterPosition = [100 400 400 380];
 yyaxis('left');
-hl = plot(tx, results.Reconfig{tx,'NumberReconfigVariables'}, '-.', ...
-    tx, results.Fastconfig{i}{tx,'NumberReconfigVariables'}, ':',...
-    tx, results.Fastconfig2{i}{tx,'NumberReconfigVariables'}, '.',...
+hl = plot(tx, results.Fastconfig{i}{tx,'NumberReconfigVariables'}, ':',...
+    tx, results.FastconfigReserve{i}{tx,'NumberReconfigVariables'}, '.',...
     tx, results.Dimconfig{i}{tx,'NumberReconfigVariables'},'-',...
-    tx, results.Dimconfig2{i}{tx,'NumberReconfigVariables'},'+');
+    tx, results.DimconfigReserve{i}{tx,'NumberReconfigVariables'},'+',...
+    tx, results.DimBaseline{j}{tx,'NumberReconfigVariables'}, '-.');
 for k=1:length(hl)
     hl(k).Color = color_set(k).RGB;
     hl(k).LineWidth = line_width(k);
@@ -26,7 +33,7 @@ end
 ylabel('Number of Reconfiguration');
 ylimmax = hl(1).Parent.YLim(2);
 yyaxis right
-hr = plot(tx, results.Reconfig{tx,'NumberVariables'}, '--');
+hr = plot(tx, results.DimBaseline{j}{tx,'NumberVariables'}, '--');
 hr(1).Color = Color.Red.RGB;
 hr(1).LineWidth = 1;
 ylabel('Number of Variables');
@@ -47,16 +54,16 @@ else
 end
 % fig_num_reconfig.OuterPosition = [100 400 400 380];
 % yyaxis left;
-ratio_reconfig = results.Reconfig{tx,'NumberReconfigVariables'}./...
-    results.Reconfig{tx,'NumberVariables'};
+ratio_reconfig = results.DimBaseline{j}{tx,'NumberReconfigVariables'}./...
+    results.DimBaseline{j}{tx,'NumberVariables'};
 ratio_fastconfig = results.Fastconfig{i}{tx,'NumberReconfigVariables'}./...
     results.Fastconfig{i}{tx,'NumberVariables'};
-ratio_fastconfig2 = results.Fastconfig2{i}{tx,'NumberReconfigVariables'}./...
-    results.Fastconfig2{i}{tx,'NumberVariables'};
+ratio_fastconfig2 = results.FastconfigReserve{i}{tx,'NumberReconfigVariables'}./...
+    results.FastconfigReserve{i}{tx,'NumberVariables'};
 ratio_dimconfig = results.Dimconfig{i}{tx,'NumberReconfigVariables'}./...
     results.Dimconfig{i}{tx,'NumberVariables'};
-ratio_dimconfig2 = results.Dimconfig2{i}{tx,'NumberReconfigVariables'}./...
-    results.Dimconfig2{i}{tx,'NumberVariables'};
+ratio_dimconfig2 = results.DimconfigReserve{i}{tx,'NumberReconfigVariables'}./...
+    results.DimconfigReserve{i}{tx,'NumberVariables'};
 hl = plot(tx, ratio_reconfig, '-.', ...
     tx, ratio_fastconfig, ':',...
     tx, ratio_fastconfig2, '.',...
@@ -87,11 +94,17 @@ if exist('fig_cost_reconfig', 'var') && fig_cost_reconfig.isvalid
 else
     fig_cost_reconfig = figure('Name', 'Cost of Reconfiguration');
 end
-hl = plot(tx, results.Reconfig{tx,'Cost'}*etas(i), '-.', ...
-    tx, results.Fastconfig{i}{tx,'Cost'}, ':', ...
-    tx, results.Fastconfig2{i}{tx,'Cost'}, '.', ...
+if strcmpi(mode, 'var-eta')
+    baseline_cost = results.DimBaseline{1}{tx,'Cost'}*etas(i);
+else
+    baseline_cost = results.DimBaseline{j}{tx,'Cost'};
+end
+hl = plot(tx, results.Fastconfig{i}{tx,'Cost'}, ':', ...
+    tx, results.FastconfigReserve{i}{tx,'Cost'}, '.', ...
     tx, results.Dimconfig{i}{tx,'Cost'}, '-', ...
-    tx, results.Dimconfig2{i}{tx,'Cost'}, '+');
+    tx, results.DimconfigReserve{i}{tx,'Cost'}, '+',...
+    tx, baseline_cost, '-.');
+
 for k=1:length(hl)
     hl(k).Color = color_set(k).RGB;
     hl(k).LineWidth = line_width(k);
@@ -112,11 +125,11 @@ if exist('fig_flow_reconfig', 'var') && fig_flow_reconfig.isvalid
 else
     fig_flow_reconfig = figure('Name', 'Number of Reconfigured Flows');
 end
-hl = plot(tx, results.Reconfig{tx,'NumberReconfigFlows'}, '-.', ...
+hl = plot(tx, results.DimBaseline{j}{tx,'NumberReconfigFlows'}, '-.', ...
     tx, results.Fastconfig{i}{tx,'NumberReconfigFlows'}, ':', ...
-    tx, results.Fastconfig2{i}{tx,'NumberReconfigFlows'}, '.', ...
+    tx, results.FastconfigReserve{i}{tx,'NumberReconfigFlows'}, '.', ...
     tx, results.Dimconfig{i}{tx,'NumberReconfigFlows'}, '-', ...
-    tx, results.Dimconfig2{i}{tx,'NumberReconfigFlows'}, '+');
+    tx, results.DimconfigReserve{i}{tx,'NumberReconfigFlows'}, '+');
 for k=1:length(hl)
     hl(k).Color = color_set(k).RGB;
     hl(k).LineWidth = line_width(k);
@@ -124,7 +137,7 @@ end
 ylabel('Number of Reconfigured Flows');
 ylimmax(1) = hl(1).Parent.YLim(2);
 yyaxis right;
-hr = plot(tx, results.Reconfig{tx,'NumberFlows'});
+hr = plot(tx, results.DimBaseline{j}{tx,'NumberFlows'});
 hr(1).Color = Color.Red.RGB;
 hr(1).LineWidth = 1;
 ylimmax(2) = hr(1).Parent.YLim(2);
@@ -146,12 +159,16 @@ end
 % fig_profit_reconfig.OuterPosition = [100 400 400 380];
 xlabel('Experiment Time');
 yyaxis left;
-profit = results.Reconfig{tx,'Profit'} + (1-etas(i))*results.Reconfig{tx,'Cost'};
-hl = plot(tx, profit, '-.', ...
-    tx, results.Fastconfig{i}{tx,'Profit'}, ':',...
-    tx, results.Fastconfig2{i}{tx,'Profit'}, '.',...
+if strcmpi(mode, 'var-eta')
+    profit = results.DimBaseline{1}{tx,'Profit'} + (1-etas(i))*results.DimBaseline{1}{tx,'Cost'};
+else
+    profit = results.DimBaseline{j}{tx,'Profit'};
+end
+hl = plot(tx, results.Fastconfig{i}{tx,'Profit'}, ':',...
+    tx, results.FastconfigReserve{i}{tx,'Profit'}, '.',...
     tx, results.Dimconfig{i}{tx,'Profit'}, '-',...
-    tx, results.Dimconfig2{i}{tx,'Profit'}, '+');
+    tx, results.DimconfigReserve{i}{tx,'Profit'}, '+',...
+    tx, profit, '-.');
 for k=1:length(hl)
     hl(k).Color = color_set(k).RGB;
     hl(k).LineWidth = line_width(k);
@@ -159,7 +176,7 @@ end
 %     hl(1).Parent.YLim(1) = 0;
 ylabel('Profit');
 yyaxis right;
-hr = plot(tx, results.Reconfig{tx,'NumberFlows'}, '--');
+hr = plot(tx, results.DimBaseline{j}{tx,'NumberFlows'}, '--');
 hr.Color = Color.Orange.RGB;
 hr.Parent.YLim(1) = 0;
 hr.Parent.YLim(2) = hr.Parent.YLim(2)+2;

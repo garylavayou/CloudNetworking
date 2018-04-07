@@ -12,7 +12,7 @@ classdef DynamicSliceTest < DynamicSlice
             this.saved_options = this.options;
             this.options = structmerge(this.options, ...
                 getstructfields(slice_data, 'NumberEventWarmUp','default-ignore', 50));
-            this.options.ReconfigMethod = 'dimconfig';
+            this.options.ReconfigMethod = ReconfigMethod.Dimconfig;
         end
     end
     

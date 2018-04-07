@@ -7,7 +7,7 @@ new_opts.PricingPolicy = 'quadratic-price';
 new_opts = structmerge(new_opts, ...
     getstructfields(this.Parent.options, 'PricingPolicy', 'ignore'));
 
-%% 
+%% Slice Dimensioning Scheduling
 [omega, sigma_o] = this.utilizationRatio();
 this.sh_data.index = this.sh_data.index + 1;
 a = this.sh_options.alpha;
@@ -26,23 +26,52 @@ for i = 1:2
         struct('value', omega_new, 'index', this.sh_data.index), ...
         struct('trend', trend{i}, 'length', SL));
 end
-this.b_dim = false;
-this.options.Reserve = 1;
-if omega > this.sh_options.omega_upper && ...
-        (length(this.sh_data.omega_trend.ascend)>TL ||...
-        length(this.sh_data.profit_trend.ascend)>TL)
-    this.b_dim = true;
-    this.options.Reserve = this.sh_options.omega_lower+0.1;
-elseif omega < this.sh_options.omega_lower && ...
-        (length(this.sh_data.omega_trend.descend)>TL ||...
-        length(this.sh_data.profit_trend.descend)>TL)
-    this.b_dim = true;
-    this.options.Reserve = this.sh_options.omega_upper-0.05;
-else
-    this.options.Reserve = omega;
-    if sigma_o > 0.25 || ~isempty(fieldnames(this.net_changes))
+if this.options.bReserve
+    %% How to set the current utilization constraint
+    % General principles applied to 'remove' flow: the target utilization ratio shoull be
+    % greater than the current value. The greater value of 'omega' could help utilize
+    % redundant resources.
+    % (a) conservative: omega;
+    % (b) bound-trend: max(omega, omega_new);
+    % (c) bound: a*omega+(1-a)*omega_upper;
+    % For 'add' flow: it is dependent on the fast reconfiguration method how to reserve idle
+    % resources.
+    omega_m = mean([this.sh_options.omega_upper,this.sh_options.omega_lower]);
+    if omega < omega_m
+        % when resource utilization ratio is low, set the target ratio higher to use idle
+        % resources.
+        this.options.Reserve = omega_m + (omega_m - omega);
+    else
+        this.options.Reserve = omega;
+    end
+end
+if isempty(fieldnames(this.net_changes))
+    this.b_dim = false;
+    if omega > this.sh_options.omega_upper && ...
+            (length(this.sh_data.omega_trend.ascend)>TL ||...
+            length(this.sh_data.profit_trend.ascend)>TL)
         this.b_dim = true;
-    else 
+        if this.options.bReserve
+            this.options.Reserve = 0.5*this.sh_options.omega_lower+...
+                0.5*this.sh_options.omega_upper;     % reserve resources for future traffic rising
+        end
+    elseif omega < this.sh_options.omega_lower && ...
+            (length(this.sh_data.omega_trend.descend)>TL ||...
+            length(this.sh_data.profit_trend.descend)>TL)
+        this.b_dim = true;
+        if this.options.bReserve
+            this.options.Reserve = 0.75*this.sh_options.omega_upper+...
+                0.25*this.sh_options.omega_lower;     % release redundant resources due to traffic decline
+        end
+    else
+        if~isempty(DEBUG) && DEBUG
+            disp([sigma_o this.sh_options.sigma]);
+        end
+        if sigma_o > this.sh_options.sigma
+            this.b_dim = true;
+        end
+    end
+    if ~this.b_dim
         switch this.getOption('Trigger')
             case 'TimeBased'
                 if this.time.Current - this.time.LastDimensioning >= this.options.TimeInterval
@@ -64,29 +93,27 @@ else
             % <DynamicCloudNetwork.optimizeResourcePriceNew>
             this.b_dim = true;
         end
-        if isfield(new_opts, 'b_dim') && new_opts.b_dim == true
-            this.b_dim = true;
-        end
-        if this.b_dim
-            update_reconfig_cost;
-        end
     end
+%     if this.b_dim
+%         this.update_reconfig_cost(action, true);
+%     end
+else
+    this.b_dim = true;
 end
-
-if ~this.b_dim
+if ~this.b_dim 
     switch this.options.ReconfigMethod
-        case {'dimconfig', 'dimconfig1'}
+        case {ReconfigMethod.Dimconfig, ReconfigMethod.DimconfigReserve, ReconfigMethod.Dimconfig1}
             [profit,cost] = this.fastReconfigure(action, new_opts);
-        case {'dimconfig2'}
+        case ReconfigMethod.Dimconfig2
             [profit,cost] = this.fastReconfigure2(action, new_opts);
-        case {'dimconfig0'}
+        case ReconfigMethod.DimBaseline
             new_opts.CostModel = 'fixcost';
             new_opts.SlicingMethod = 'slice-price';
             this.prices.Link = this.VirtualLinks.Price;
             this.prices.Node = this.VirtualDataCenters.Price;
             [profit,cost] = this.optimalFlowRate(new_opts);
-            return;
         otherwise
+            error('%s: invalid reconfiguration method.', calledby);
     end
     
     fidx = find(this.FlowTable.Rate<=0.1*median(this.FlowTable.Rate));
@@ -120,9 +147,15 @@ if ~this.b_dim
                 end
             end
             this.b_dim = true;
-            update_reconfig_cost;
-            this.sh_data.reserve_dev = this.sh_data.reserve_dev + 1;
-            this.options.Reserve = this.options.Reserve - this.sh_data.reserve_dev*0.02;
+%             this.update_reconfig_cost(action, true);
+            this.temp_vars = struct();
+            this.diff_state = struct([]);
+            this.prices.Link = [];
+            this.prices.Node = [];      
+            if this.options.bReserve
+                this.sh_data.reserve_dev = this.sh_data.reserve_dev + 1;
+                this.options.Reserve = this.options.Reserve - this.sh_data.reserve_dev*0.02;
+            end
         end
     end
     this.reject_index = this.FlowTable.Identifier(fidx);
@@ -147,6 +180,8 @@ end
 % <OnAddingFlow> and <OnRemovingFlow>. 
 if this.b_dim
     if isfield(this.changed_index, 'v')
+        % If the topology is augmented with new data centers, |this.old_variables.v| will be
+        % modified to match the size of the new vector.
         % vnf instance will change only when adding new adhoc flows.
         % when removing flow, the vnf instance might be released after slice dimensioning
         num_vnfs = length(this.changed_index.v);
@@ -157,40 +192,58 @@ if this.b_dim
         this.old_variables.v = this.Variables.v;
     end
     %% Resource Reservation
-    % [optional function]: when we perform slice dimensioning, the slice will try to release
-    %   all idle resources to lower the operational cost. However, certain amount of redundant
-    %   resources can accomodate the traffic dynamics and reduce the reconfiguration cost.
+    % [optional function]: when we perform slice dimensioning, the slice will try to
+    % release all idle resources to lower the operational cost. However, certain amount of
+    % redundant resources can accomodate the traffic dynamics and reduce the
+    % reconfiguration cost. 
     %   Therefore, we should not release all idle resources at dimensioning, unless the
     %   utilization of a resource is lower than the specified threshold.
     %
     % We will calculate the lower bound of resource reservation, given the threshold 'th'.
-    %   1. If a resource's utilization ratio 'u=0': the low-bound as c/2;
+    %   1. If a resource's utilization ratio 'u<=th/2': the low-bound as c/2;
     %   2. Else if a resource's utilization ratio 'u' is low than 'th':
-    %       we set the lower-bound as 'uc/[(1+th)/2]';
+    %       we set the lower-bound as 'uc/th';
     %   3. Otherwise, the lower-bound is 'c'.
-    %
+    % We set 'th=(omega_upper+omega_lower)/2', that is, 
+    %   If a single resource utilization is higher than the overall utilization, we
+    %   reserve all its current resources and more capacity might be added to this
+    %   resource;   
+    %   If the utilization is lower than 'omega' but higher than 'omega/2', then partial
+    %   capacity could be released.
+    %   Otherwise, if the utilization is lower than 'omega/2', we half its capacity (not
+    %   so rapidly release as (2)).
     % * Computing Resource Reservation *
-    % With 'dimconfig', we cannot reconfigure the VNF instance capacity after dimensioning.
+    % With 'dimconfig1', we cannot reconfigure the VNF instance capacity after dimensioning.
     % Therefore, we need to reserve resource for VNF instances. On the other hand, with
     % 'dimconfig2' and 'dimconfig0', we only need reserved resources for the nodes.
+    % With 'DimconfigReserve', can we both reserve for individual VNF instances or nodes?
     %% TODO differentiate dimconfig0 from other reconfiguration methods
-    if isfield(this.options, 'bReserve') && this.options.bReserve
+    if this.options.bReserve
         this.lower_bounds = struct;
-        this.lower_bounds.link = setlowerbounds(...
-            this.old_state.link_load, this.old_state.link_capacity, 0.7);
+        this.upper_bounds = struct;
+        [this.lower_bounds.link,  this.upper_bounds.link] = setbounds(...
+            this.old_state.link_load, this.old_state.link_capacity, this.options.Reserve);
         switch this.options.ReconfigMethod
-            case {'dimconfig1'}
-                this.lower_bounds.VNF = setlowerbounds(...
-                    this.old_state.vnf_load, this.old_state.vnf_capacity, 0.7);       % getVNFCapacity should be renamed as this.getVNFLoad.
-            case {'dimconfig', 'dimconfig0', 'dimconfig2'}
-                this.lower_bounds.node = setlowerbounds(...
-                    this.old_state.node_load, this.old_state.node_capacity, 0.7);
+            case ReconfigMethod.Dimconfig1
+                [this.lower_bounds.VNF, this.upper_bounds.VNF] = setbounds(...
+                    this.old_state.vnf_load, this.old_state.vnf_capacity, this.options.Reserve);       % getVNFCapacity should be renamed as this.getVNFLoad.
+            case {ReconfigMethod.DimconfigReserve, ReconfigMethod.Dimconfig, ReconfigMethod.Dimconfig2}
+                if this.options.bReserve == 3
+                    [this.lower_bounds.VNF, this.upper_bounds.VNF] = setbounds(...
+                        this.old_state.vnf_load, this.old_state.vnf_capacity, this.options.Reserve);       % getVNFCapacity should be renamed as this.getVNFLoad.
+                else
+                    [this.lower_bounds.node, this.upper_bounds.node] = setbounds(...
+                        this.old_state.node_load, this.old_state.node_capacity, this.options.Reserve);
+                end
         end
     else
         this.lower_bounds = struct([]);
+        this.upper_bounds = struct([]);
     end
     % dimensioning will be perform by <DynamicCloudNetwork>
-    this.b_derive_vnf = false;      % VNF capapcity is derived from variables v, instead of z.
+    %     if isfield(this.options, 'Reserve') && this.options.Reserve>0
+    %         this.options.Reserve = -this.options.Reserve;
+    %     end
     notify(this, 'RequestDimensioning', EventData());
     
     if this.Results.Value == 0
@@ -207,7 +260,9 @@ if this.b_dim
     end
     %% Reset statistics
     % update the period for performing dimensioning by exponential moving average
-    this.time.DimensionInterval = this.time.DimensionInterval * this.a + (this.time.Current-this.time.LastDimensioning)*(1-this.a);
+    new_dim_interval = this.time.DimensionInterval * this.a + ...
+        (this.time.Current-this.time.LastDimensioning)*(1-this.a);
+    this.time.DimensionInterval = max(this.time.MinDimensionInterval, new_dim_interval);
     this.time.LastDimensioning = this.time.Current;
     this.event.RecentCount = 0;
     this.lower_bounds = struct([]);
@@ -215,7 +270,7 @@ end
 
 %% update trend
 profit_new = a*this.sh_data.profits(end) + (1-a)*profit;
-if length(this.sh_data.profits) < this.sh_options.series_length
+if length(this.sh_data.profits) < SL
     this.sh_data.profits(end+1) = profit_new;
 else
     this.sh_data.profits = [this.sh_data.profits(2:end), profit_new];
@@ -225,7 +280,7 @@ for i = 1:2
     this.sh_data.profit_trend.(trend{i})= ...
         update_trend(this.sh_data.profit_trend.(trend{i}), ...
         struct('value', profit_new, 'index', this.sh_data.index), ...
-        struct('trend', trend{i}, 'length', this.sh_options.series_length));
+        struct('trend', trend{i}, 'length', SL));
 end
 if this.sh_data.index == intmax
     idx_offset = min([this.sh_data.omega_trend.ascend(1).index,...
@@ -243,77 +298,27 @@ if this.sh_data.index == intmax
         end
     end
 end
+omega_new = this.utilizationRatio();
 if this.b_dim
     for i = 1:2
         for j = 1:2
-            if this.options.Reserve ~= omega
-                [this.sh_data.(type{j}).(trend{i})] = this.sh_data.(type{j}).(trend{i})(end);
-            else
+            if abs(omega_new-omega) < 0.05
                 [this.sh_data.(type{j}).(trend{i})] = ...
                     update_trend(this.sh_data.(type{j}).(trend{i}), ...
-                    this.sh_options.trend_length, struct('bPurge', true));
+                    TL, struct('bPurge', true));
+            else
+                [this.sh_data.(type{j}).(trend{i})] = this.sh_data.(type{j}).(trend{i})(end);
             end
         end
     end
 end
 
-%% inline
-    function update_reconfig_cost()
-        %% Period re-dimensioing
-        % The number of virtual nodes/links is not change in the slice, as well as the
-        % number of VNF instances.
-        % When performing re-dimensioning, the reconfiguration cost is larger than that of
-        % fast reconfiguration, so we need to update the reconfiguration cost.
-        this.Parent.updateRedimensionCost(this);
-        if strcmpi(action, 'add')
-            this.x_reconfig_cost = (this.I_edge_path)' * this.VirtualLinks.ReconfigCost;
-            this.z_reconfig_cost = repmat(this.VirtualDataCenters.ReconfigCost, ...
-                this.NumberPaths*this.NumberVNFs, 1);
-            if this.ENABLE_DYNAMIC_NORMALIZER
-                beta =this.getbeta();
-                this.topts.x_reconfig_cost = beta.x*this.x_reconfig_cost;
-                this.topts.z_reconfig_cost = beta.z*this.z_reconfig_cost;
-            else
-                this.topts.x_reconfig_cost = this.options.ReconfigScaler*this.x_reconfig_cost;
-                this.topts.z_reconfig_cost = this.options.ReconfigScaler*this.z_reconfig_cost;
-            end
-        else
-            %%
-            % Since we need maintain information of the deleted variables, we should use
-            % the old state to calculate the information.
-            this.x_reconfig_cost = ...
-                (this.old_state.I_edge_path)' * this.VirtualLinks.ReconfigCost;
-            old_num_paths = length(this.old_state.path_owner);
-            this.z_reconfig_cost = repmat(this.VirtualDataCenters.ReconfigCost, ...
-                old_num_paths*this.NumberVNFs, 1);
-            if this.ENABLE_DYNAMIC_NORMALIZER
-                beta =this.getbeta();
-                this.topts.x_reconfig_cost = ...
-                    beta.x*this.x_reconfig_cost(~this.changed_index.x);
-                this.topts.z_reconfig_cost = ...
-                    beta.z*this.z_reconfig_cost(~this.changed_index.z);
-            else
-                this.topts.x_reconfig_cost = ...
-                    this.options.ReconfigScaler*this.x_reconfig_cost(~this.changed_index.x);
-                this.topts.z_reconfig_cost = ...
-                    this.options.ReconfigScaler*this.z_reconfig_cost(~this.changed_index.z);
-            end
-        end
-        this.vnf_reconfig_cost = this.Parent.options.VNFReconfigCoefficient * ...
-            repmat(this.VirtualDataCenters.ReconfigCost, this.NumberVNFs, 1);
-        if this.ENABLE_DYNAMIC_NORMALIZER
-            beta = this.getbeta();
-            this.topts.vnf_reconfig_cost = beta.v*this.vnf_reconfig_cost;
-        else
-            this.topts.vnf_reconfig_cost = ...
-                this.options.ReconfigScaler*this.vnf_reconfig_cost;
-        end
-    end
-
 end
 
-function lbs = setlowerbounds(load, capacity, threshold)
+
+function [lbs, ubs] = setbounds(load, capacity, threshold)
     lbs = zeros(size(load));
+    ubs = zeros(size(load));
     idx = find(capacity~=0);
     util = load(idx)./capacity(idx);
     idx1 = idx(util<=threshold/2);
@@ -322,4 +327,5 @@ function lbs = setlowerbounds(load, capacity, threshold)
     lbs(idx1) = capacity(idx1)/2;
     lbs(idx2) = load(idx2)/(threshold);
     lbs(idx3) = capacity(idx3);
+    ubs(idx1) = (capacity(idx1)+lbs(idx1))/2;
 end

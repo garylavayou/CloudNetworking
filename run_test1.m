@@ -31,7 +31,6 @@ VNF_opt.Number = 4;            % number of VNF type
 VNF_opt.Model = VNFIntegrateModel.AllInOne;
 VNF_opt.RandomSeed = [20161101 20161031];
 
-declare_info_level({'Global', 'Class'}, [DisplayLevel.Off DisplayLevel.Notify]);
 net_opt.PricingFactor = 2;  % {1, when |CostUnit=(150,500)|}
 net_opt.AdmitPolicy = 'reject-flow';
 net_opt.Form = 'compact';
@@ -49,7 +48,7 @@ b_repeat = true;
 
 %% 
 if b_optimal
-    net_opt.Method = 'single-normal';
+    net_opt.SlicingMethod = 'single-normal';
     PN = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
     PN.slice_template = Slice.loadSliceTemplate(slice_type);
     link_capacity = PN.getLinkField('Capacity');
@@ -90,7 +89,7 @@ if b_optimal
 end
 %%
 if b_static
-    net_opt.Method = 'static-price';
+    net_opt.SlicingMethod = 'static-price';
     PN_static = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
     PN_static.slice_template = Slice.loadSliceTemplate(slice_type);
     link_capacity = PN_static.getLinkField('Capacity');

@@ -40,7 +40,6 @@ arrival.StopTime = 250;
 
 %% Algorithm options
 %% Control Variables
-declare_info_level('Global', DisplayLevel.Off);
 b_single_optimal = true;
 b_price_adjust = true;
 b_static_slice = true;

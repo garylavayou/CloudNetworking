@@ -2,7 +2,7 @@
 % single slice reconfiguration: a warm-up phase is reused.
 NUM_TEST = length(etas);
 TOTAL_NUM= options.NumberEventWarmUp*NUM_TEST + ...
-    NUM_EVENT*(NUM_TEST*(b_fastconfig+b_fastconfig2+b_dimconfig+b_dimconfig2)+b_reconfig);
+    NUM_EVENT*(NUM_TEST*(b_fastconfig+b_fastconfig2+b_dimconfig+b_dimconfig1+b_dimconfig2)+b_baseline);
 global total_iter_num;
 total_iter_num = 0;
 if exist('progress_bar', 'var') && isvalid(progress_bar)
@@ -89,7 +89,7 @@ if b_fastconfig2
 end
 
 %%
-if b_reconfig
+if b_baseline
     % Only need to compute once for different reconfiguration cost efficient, since the
     % optimization procedure is independent on the cosefficient, and the reconfiguration
     % cost with other coefficient can be derieved from the one results by using the
@@ -120,6 +120,25 @@ if b_dimconfig
             results.Dimconfig = {g_results};
         else
             results.Dimconfig{i,1} = g_results;
+        end
+    end
+end
+
+%%
+if b_dimconfig1
+    options.ReconfigMethod = 'dimconfig1';
+    progress_bar.Name = horzcat(EXPNAME, ' - ', 'Hybrid Slicing Scheme 1');
+    pause(0.01);
+    for i = 1:length(etas)
+        global_state(i).Restore();
+        PN = PNs(i).copy;
+        SFED = Dispachers(i).copy;
+        options.UnitReconfigureCost = etas(i);
+        RepeatSliceReconfiguration;
+        if i == 1
+            results.Dimconfig1 = {g_results};
+        else
+            results.Dimconfig1{i,1} = g_results;
         end
     end
 end
