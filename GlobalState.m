@@ -15,28 +15,18 @@ classdef GlobalState < matlab.mixin.Copyable
             this.rand_state = rng;
         end
         function Save(this)
-            global builder_id entity_id slice_id eid;
-            if ~isempty(builder_id)
-                this.builder_id = builder_id;
-            end
-            if ~isempty(entity_id)
-                this.entity_id = entity_id;
-            end
-            if ~isempty(slice_id)
-                this.slice_id = slice_id;
-            end
-            if ~isempty(eid)
-                this.event_id = eid;
-            end
+            this.builder_id = EntityBuilder.getGlobalBuilderId();
+            this.entity_id = Entity.getGlobalEntityId();
+            this.slice_id = SliceEntity.getGlobalSliceId();
+            this.event_id = Event.getGlobalEventId();
             this.rand_state = rng;
         end
         
         function Restore(this)
-            global builder_id entity_id slice_id eid;
-            builder_id = this.builder_id;
-            entity_id = this.entity_id;
-            slice_id = this.slice_id;
-            eid = this.event_id;
+            EntityBuilder.setGlobalBuilderId(this.builder_id);
+            Entity.setGlobalEntityId(this.entity_id);
+            SliceEntity.setGlobalSliceId(this.slice_id);
+            Event.setGlobalEventId(this.event_id);
             rng(this.rand_state);
         end
         
@@ -50,11 +40,10 @@ classdef GlobalState < matlab.mixin.Copyable
     
     methods (Static)
         function Initialize()
-            global builder_id entity_id slice_id eid;
-            builder_id = 0;
-            entity_id = 0;
-            slice_id = 0;
-            eid = 0;
+            EntityBuilder.setGlobalBuilderId(0);
+            Entity.setGlobalEntityId(0);
+            SliceEntity.setGlobalSliceId(0);
+            Event.setGlobalEventId(0);
         end
     end
 end

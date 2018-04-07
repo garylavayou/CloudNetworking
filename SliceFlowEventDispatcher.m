@@ -29,13 +29,13 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
                     if sl.isDynamicFlow
                         flow_entity_builder = ...
                             FlowEntityBuilder(sl.FlowArrivalRate, sl.FlowServiceInterval, eventData.entity);
-                        for i = 1:sl.NumberFlows
-                            fe = flow_entity_builder.Build(this.CurrentTime, ...
-                                this.randtime(flow_entity_builder.ServiceInterval),...
-                                sl.FlowTable{i, 'Identifier'});
-                            %%%
-                            this.AddEntity(fe);
-                        end
+                        tic;
+                        fes = flow_entity_builder.Build(this.CurrentTime, ...
+                            this.randtime(flow_entity_builder.ServiceInterval, height(sl.FlowTable)),...
+                            sl.FlowTable{:, 'Identifier'});
+                        this.AddEntity(fes);
+                        t = toc;
+                        fprintf('SliceFlowEventDispatcher: Adding flow entries ... Elapsed time is %f seconds.\n', t);
                         this.AddEntityBuilder(flow_entity_builder);
                     end
                 case 'AddSliceFailed'
@@ -104,16 +104,20 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
         % # Add permanent slice entities
         function AddEntity(this, et)
             et = this.entities.Add(et);
-            if et.isPermanent
+            idx = et.isPermanent;
+            if ~isempty(find(idx,1))
                 % Permanent slice or flow
-                this.event_queue.PushBack(Event(this.CurrentTime,EventType.Arrive,et));
-            elseif this.CurrentTime >= et.ArriveTime
-                % the flow events with slice arrival, these flow arrival events have been
-                % processed together with the slice arrival events.
-                this.event_queue.PushBack(Event(et.DepartTime,EventType.Depart,et));
-            else
-                this.event_queue.PushBack(Event(et.ArriveTime,EventType.Arrive,et));
-                this.event_queue.PushBack(Event(et.DepartTime,EventType.Depart,et));
+                this.event_queue.PushBack(Event(this.CurrentTime,EventType.Arrive,et(idx)));
+            end
+            et = et(~idx);
+            idx = this.CurrentTime >= [et.ArriveTime];
+            if ~isempty(idx)
+                this.event_queue.PushBack(Event([et.DepartTime],EventType.Depart,et(idx)));
+            end
+            et = et(~idx);
+            if ~isempty(et)
+                this.event_queue.PushBack(Event([et.ArriveTime],EventType.Arrive,et));
+                this.event_queue.PushBack(Event([et.DepartTime],EventType.Depart,et));
             end
         end
         
@@ -240,20 +244,11 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
             service_time = exprnd(this.entity_builder(ei).ServiceInterval);
             e = this.entity_builder(ei).Build(arrive_time, service_time);
             this.entities.Add(e);
-            %             this.last_arrive_pos = ...
-            this.event_queue.PushBack(...
-                Event(arrive_time, EventType.Arrive, this.entities(end)), 'front');
+            this.event_queue.PushFront(...
+                Event(arrive_time, EventType.Arrive, this.entities(end)));
             
-            %             depart_pos = ...
             this.event_queue.PushBack(...
                 Event(e.DepartTime, EventType.Depart, this.entities(end)));
-            %             if depart_pos < this.next_depart_pos
-            %                 this.next_depart_pos = depart_pos;
-            %             end
-%             if e.DepartTime < this.nextdeparttime
-%                 this.nextdeparttime = e.DepartTime;
-%             end
-%             this.current_arrive_time = arrive_time;
         end
     end
     

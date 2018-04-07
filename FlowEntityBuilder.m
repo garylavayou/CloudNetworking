@@ -51,13 +51,13 @@ classdef FlowEntityBuilder < EntityBuilder
             t = EntityType.Flow;
         end
         function entity = Build(this, time_arrive, time_serve, flow_id)
-            % build the entity
-            entity = FlowEntity(time_arrive, time_serve, this);
-            entity.LocalIdentifier = this.local_flow_identifier.next;
-            if nargin >= 4
-                % might be unset when construct the entity.
-                entity.GlobalIdentifier = flow_id;
+            % build the entity         
+            if nargin == 3
+                flow_id = [];
             end
+            max_len = max([length(time_serve), length(time_arrive), length(flow_id)]);
+            local_id = this.local_flow_identifier.next(max_len);
+            entity = FlowEntity(time_arrive, time_serve, this, local_id, flow_id);
         end
     end
     

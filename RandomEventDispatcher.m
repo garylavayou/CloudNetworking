@@ -299,9 +299,12 @@ classdef RandomEventDispatcher < matlab.mixin.Copyable
             %             this.current_arrive_time = arrive_time;
         end
         
-        function t = randtime(this, mean_time)
+        function t = randtime(this, mean_time, n)
             rng(this.rand_state);
-            t = exprnd(mean_time);
+            if nargin <= 2
+                n = 1;
+            end
+            t = exprnd(mean_time, n, 1);
             this.rand_state = rng;
         end
     end

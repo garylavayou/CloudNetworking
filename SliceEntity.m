@@ -3,8 +3,16 @@ classdef SliceEntity < Entity
     %   Detailed explanation goes here
     
     properties(SetAccess = ?SliceEntityBuilder)
-        SliceIdentifier;
+        SliceIdentifier uint64;
     end
+    
+    properties (Constant, Access = private)
+        ssn = SerialNumber;  
+        % NOTE: Each type of class need to define their own serial number;
+        % If a serieral number is shared among multiple classes, we can define a common
+        % super class for them.
+    end
+    
     properties (Access = protected)
         seed;
     end
@@ -23,6 +31,10 @@ classdef SliceEntity < Entity
             end
             %
             % The identifier can be update in the constructor.
+            id = SliceEntity.ssn.next(length(this));
+            for i = length(this):-1:1
+                this(i).SliceIdentifier = id(i);
+            end
         end
     end
     
@@ -45,6 +57,16 @@ classdef SliceEntity < Entity
             if ~isempty(et.Child)
                 this.Child = et.Child.empty();
             end
+        end
+    end
+    
+    methods(Static)
+        function n = getGlobalSliceId()
+            n = SliceEntity.ssn.ID;
+        end
+        function setGlobalSliceId(value)
+            h = SliceEntity.ssn;
+            h.ID = value;
         end
     end
 end
