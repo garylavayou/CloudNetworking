@@ -544,7 +544,8 @@ classdef Slice < VirtualNetwork & EventReceiver
             v2 = A2*var_z;
             index_violate = find(v1+v2>0);      % re = v1+v2
             if ~isempty(index_violate)
-                message = sprintf('%s: Maximal violation is %.4f before processing.', calledby, full(max(v1+v2)));
+                message = sprintf('%s: Maximal violation is %.4f before processing.', ...
+                    calledby, full(max(v1+v2)));
                 if ~isempty(DEBUG) && DEBUG
                     warning(message); %#ok<SPWRN>
                 elseif ~isempty(INFO) && INFO

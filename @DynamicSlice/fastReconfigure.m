@@ -7,7 +7,7 @@ function [profit, cost] = fastReconfigure(this, action, new_opts)
 if nargin <= 2
     new_opts = struct;
 end
-theta0 = 0.9999;
+theta0 = 0.999;
 options = structmerge(new_opts, ...
     getstructfields(this.Parent.options, 'Form'), ...
     getstructfields(this.options, 'PricingPolicy', 'default', 'quadratic'), ...
@@ -92,17 +92,17 @@ As(row_offset+(1:Ndc*Nvnf), (1:this.num_varz)+Np) = this.Hdiag;
 row_offset = row_offset + Ndc*Nvnf;
 As(row_offset+(1:Nl), 1:Np) = this.I_edge_path;
 row_offset = row_offset + Nl;
-As(row_offset+(1:Np), 1:Np) = eye(Np);
-As(row_offset+(1:Np), this.num_vars+(1:Np)) = -eye(Np);
+As(row_offset+(1:Np), 1:Np) = speye(Np);
+As(row_offset+(1:Np), this.num_vars+(1:Np)) = -speye(Np);
 row_offset = row_offset + Np;
-As(row_offset+(1:Np), 1:Np) = -eye(Np);
-As(row_offset+(1:Np), this.num_vars+(1:Np)) = -eye(Np);
+As(row_offset+(1:Np), 1:Np) = -speye(Np);
+As(row_offset+(1:Np), this.num_vars+(1:Np)) = -speye(Np);
 row_offset = row_offset + Np;
-As(row_offset+(1:this.num_varz), (Np+1):this.num_vars) = eye(this.num_varz);
-As(row_offset+(1:this.num_varz), (this.num_vars+Np+1):end) = -eye(this.num_varz);
+As(row_offset+(1:this.num_varz), (Np+1):this.num_vars) = speye(this.num_varz);
+As(row_offset+(1:this.num_varz), (this.num_vars+Np+1):end) = -speye(this.num_varz);
 row_offset = row_offset + this.num_varz;
-As(row_offset+(1:this.num_varz), (Np+1):this.num_vars) = -eye(this.num_varz);
-As(row_offset+(1:this.num_varz), (this.num_vars+Np+1):end) = -eye(this.num_varz);
+As(row_offset+(1:this.num_varz), (Np+1):this.num_vars) = -speye(this.num_varz);
+As(row_offset+(1:this.num_varz), (this.num_vars+Np+1):end) = -speye(this.num_varz);
 row_offset = row_offset + this.num_varz;
 idx_empty = [];
 if this.options.bReserve
@@ -209,11 +209,7 @@ fmincon_opt.Display = 'notify';
 % fmincon_opt.CheckGradients = true;
 % fmincon_opt.FiniteDifferenceType = 'central';
 if options.bDistributed
-    num_process = 100;
-%     if isempty(gcp('nocreate'))
-%         parpool(num_process);
-%     end
-    [x, fval] = distribute_optimization(num_process);
+    [x, fval] = distribute_optimization();
 else
     if strcmpi(options.Form, 'compact')
         %% get the compact formulation
@@ -320,7 +316,7 @@ end
     function [x, fval] = distribute_optimization(num_process, r, ~)
         %% parameters
         if nargin <1
-            num_process = min(8,Nf);
+            num_process = min(200,Nf);
         else
             num_process = min(num_process, Nf);
         end
@@ -329,8 +325,8 @@ end
             r = 5;
         end
         if nargin <= 2
-            tol_fval = 10^-4;
-            tol_optimal = 10^-3;
+            eps_abs = 10^-6;
+            eps_rel = 10^-3;
         end
         if license('test', 'Distrib_Computing_Toolbox')
             p = gcp('nocreate');
@@ -443,47 +439,50 @@ end
         fprintf('Dual-ADMM: distributing data ... Elapsed time is %f seconds.\n', t2);
         lambda_k = zeros(num_dual, num_process);
         q_k = 10*ones(num_dual, num_process); % Dual variables for the dual ADMM formulation.
-        fval_k = zeros(num_process,1);
+        fval_lambda_k = zeros(num_process,1);
+        fval_gamma_k = 0;
         exitflag_k = zeros(num_process,1);
         output_k = cell(num_process,1);
         fcnObjective = @fcnAugmentedPrimalBasic;
         hessDual = @hessDualBasic;
         
-        k = 0;
+        k = 1;
         t1 = tic;
         while true
             gamma_k = (sum(lambda_k,2) - sum(q_k,2)/r)/num_process;
-            fval_kminus = fval_k;
+            fval_lambda_kminus = fval_lambda_k;
+            fval_gamma_kminus = fval_gamma_k;
             parfor (j = 1:num_process,M)
                 fminopt = fmincon_opt;
                 xk = distr_xk{j};
                 fminopt.HessianFcn = @(x,lambda) ...
                     hessDual(x,lambda,gamma_k,q_k(:,j),r,distr_params(j));
-                [xk, fval_k(j), exitflag_k(j), output_k{j}] = ...
+                % dual_k is not the true dual function value, since the constant part of
+                % the objective function has been omitted.
+                [xk, fval_lambda_k(j), exitflag_k(j), output_k{j}] = ...
                     fmincon(@(x) fcnObjective(x,gamma_k,q_k(:,j),r,distr_params(j)), ...
                     xk, distr_params(j).A, distr_params(j).b, [], [], distr_params(j).lb, [], [], fminopt); %#ok<PFOUS>
                 lambda_k(:,j) = max(0,...
                     gamma_k+1/r*(q_k(:,j)+distr_params(j).cl*xk-distr_params(j).cr));
                 distr_xk{j} = xk;
             end
+            fval_gamma_k = sum(q_k'*gamma_k);  % the L2-norm part is counted when computin lambda
             q_k = q_k + r*(gamma_k-lambda_k);
-            k = k + 1;
-            dist = lambda_k - gamma_k;
-            for i = num_process:-1:1
-                dist_norm(i,1) = norm(dist(:,i));
-            end
-            fprintf('iteration: %2d, step: %.2f, objective-gap: %8.6G, optimality-gap:%10.6G.\n',...
-                k, r, abs(sum(fval_k)-sum(fval_kminus)), max(dist_norm));
-            b_stop = true;
-            if max(dist_norm) >= tol_optimal*norm(gamma_k)
-                b_stop = false;
-            end
-            if ~b_stop && k >= 2 && abs(sum(fval_k)-sum(fval_kminus)) < tol_fval*max(abs(sum(fval_k)), abs(sum(fval_k)))
+            re = lambda_k - gamma_k;
+            re_norm = norm(re(:));
+            tol_dual = eps_abs*sqrt(num_dual) + ...
+                eps_rel*max(num_process*norm(gamma_k), norm(lambda_k(:)));
+            fval_change = abs(sum(fval_lambda_k)-sum(fval_lambda_kminus)+fval_gamma_k-fval_gamma_kminus);
+            fprintf('iteration: %2d, step: %.2f, dual-change: %8.6G, optimality:%10.6G, tolerance:%10.6G.\n',...
+                k, r, fval_change, re_norm, tol_dual);
+            b_stop = false;
+            if re_norm < tol_dual
                 b_stop = true;
             end
-            if b_stop || k>30
+            if b_stop || k>=30
                 break;
             end
+            k = k + 1;
         end
         t2 = toc(t1);
         fprintf('Dual-ADMM: elapsed time: %d\n', t2);

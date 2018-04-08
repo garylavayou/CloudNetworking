@@ -4,14 +4,14 @@
 *.pdf
 TestArrivalDeparture.m
 TestArrivalDeparture2.m
-.vscode/settings.json
 runexp_4221.m
 runexp_4211.m
 EventDispatcher.m
 EntityType.m
-@SliceEx/fcnSocialWelfare.m
 runexp_42x4.m
 runexp_42x1.m
 runexp_4231.m
 runexp_4222.m
 runexp_4212.m
+.vscode/settings.json
+@SliceEx/fcnSocialWelfare.m

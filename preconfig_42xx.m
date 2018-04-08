@@ -50,12 +50,12 @@ options.PostProcessing = 'round';
 %% Experiment Control
 warning('off', 'backtrace');
 warning('off', 'verbose');
-b_baseline = true;
-b_dimbaseline = true;
-b_fastconfig0 = true;
-b_fastconfig = true;
-b_dimconfig = true;
-b_dimconfig0 = true;
+b_baseline = false;
+b_dimbaseline = false;
+b_fastconfig0 = false;
+b_fastconfig = false;
+b_dimconfig = false;
+b_dimconfig0 = false;
 b_dimconfig1 = false;
 b_fastconfig2 = false;
 b_dimconfig2 = false;
