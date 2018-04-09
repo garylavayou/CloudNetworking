@@ -4,6 +4,7 @@
 % Since the two vector has different number of elements, we should comparing
 % it accordingly, and set aside the variables of new arriving/departing flow.
 function [profit, cost] = fastReconfigure(this, action, new_opts)
+global computime ITER_LIMIT event_num;
 if nargin <= 2
     new_opts = struct;
 end
@@ -16,9 +17,12 @@ options = structmerge(new_opts, ...
 if ~isfield(options, 'bEnforceReserve')
     options.bEnforceReserve = false;
 end
-if ~isfield(options, 'bDistributed')
+if isfield(this.options, 'penalty') && ~isempty(this.options)
     options.bDistributed = true;
+elseif ~isfield(options, 'bDistributed') || isempty(options.bDistributed)
+    options.bDistributed = false;
 end
+    
 Nf = this.NumberFlows;
 if Nf == 0
     [profit, cost] = this.handle_zero_flow(options);
@@ -199,7 +203,7 @@ var0 = [this.topts.old_variables_x/2;
     ];
 assert(this.checkFeasible(var0), 'error: infeasible solution.');
 t2 = toc(t1);
-fprintf('%s: initilizing arguements ... Elapsed time is %f seconds.\n', calledby, t2);
+fprintf('%s: initilizing arguements ... Elapsed time is %f seconds.\n', calledby(0), t2);
 
 %% Perform optimization
 fmincon_opt = optimoptions(@fmincon);
@@ -208,6 +212,7 @@ fmincon_opt.SpecifyObjectiveGradient = true;
 fmincon_opt.Display = 'notify';
 % fmincon_opt.CheckGradients = true;
 % fmincon_opt.FiniteDifferenceType = 'central';
+t1 = tic;
 if options.bDistributed
     [x, fval] = distribute_optimization();
 else
@@ -270,6 +275,10 @@ else
     % x is a local solution to the problem when exitflag is positive.
     this.interpretExitflag(exitflag, output.message);
 end
+t2 = toc;
+if exist('computime', 'var') && ~isempty(computime)
+    computime(event_num-1) = t2;
+end
 
 options.Action = action;    % This might be used when check feasible solution.
 options.ConstraintTolerance = fmincon_opt.ConstraintTolerance;
@@ -316,17 +325,21 @@ end
     function [x, fval] = distribute_optimization(num_process, r, ~)
         %% parameters
         if nargin <1
-            num_process = min(200,Nf);
+            num_process = floor(Nf/3);
         else
-            num_process = min(num_process, Nf);
+            num_process = min(num_process, floor(Nf/3));
         end
         % num_process <= NF
         if nargin <= 1
-            r = 5;
+            if isfield(this.options, 'penalty')
+                r = this.options.penalty;
+            else
+                r = 2;
+            end
         end
         if nargin <= 2
             eps_abs = 10^-6;
-            eps_rel = 10^-3;
+            eps_rel = 0.5*10^-3;
         end
         if license('test', 'Distrib_Computing_Toolbox')
             p = gcp('nocreate');
@@ -479,7 +492,7 @@ end
             if re_norm < tol_dual
                 b_stop = true;
             end
-            if b_stop || k>=30
+            if b_stop || k>=ITER_LIMIT
                 break;
             end
             k = k + 1;

@@ -245,6 +245,9 @@ classdef DynamicSlice < Slice & EventSender
                     this.options.ReconfigScaler = slice_data.ReconfigScaler;
                 end
             end
+            if isfield(slice_data, 'penalty')
+                this.options.penalty = slice_data.penalty;
+            end
         end
         
         function finalize(this, node_price, link_price)

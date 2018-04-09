@@ -10,18 +10,21 @@
 % # This experiment has no warm-up phase (1).
 preconfig_42xx;
 global DEBUG;
+global computime ITER_LIMIT;
 DEBUG = true;
 type.Index = [144; 154; 164; 174; 184];
 type.Permanent = 4;
 type.Static = [1; 2; 3];
 type.StaticCount = [1; 2; 2];
 type.StaticClass = {'Slice'};
-mode = 'var-eta'; etas = 1; numberflow = 1000; weight = 10;
+mode = 'var-penalty'; etas = 1; numberflow = 100; weight = 30; penalty = [1;2;4;8;12;16];   % [1;2;4;8;12;16]
 b_dimconfig0 = true;        % HSR
-NUM_EVENT = 10;           
+NUM_EVENT = 11;           
 idx = 1:NUM_EVENT;
+computime = zeros(max(length(penalty),1),1);
+ITER_LIMIT = inf;    % 20
 EXPNAME = sprintf('EXP6');
-if license('test', 'Distrib_Computing_Toolbox') 
+if exist('penalty', 'var') && ~isempty(penalty) && license('test', 'Distrib_Computing_Toolbox') 
     p = gcp;
     if isempty(p)
         warning('Parallel computing is disabled.');
@@ -31,6 +34,13 @@ if license('test', 'Distrib_Computing_Toolbox')
 end
 runexp04xxx;
 
+if isempty(penalty)
+    runtime.normal = computime;
+elseif ITER_LIMIT == inf
+    runtime.admm = computime;
+else
+    runtime.admm_limit = computime;
+end
 %% Output
 % # plot figure
 %{

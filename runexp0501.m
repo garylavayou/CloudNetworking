@@ -16,17 +16,17 @@ type.Permanent = 4;
 type.Static = [1; 2; 3];
 type.StaticCount = [1; 2; 2];
 type.StaticClass = {'Slice'};
-mode = 'var-eta'; etas = 1; numberflow = 200; weight = 10;
+% mode = 'var-eta'; etas = 1; numberflow = 100; weight = 30;
 % mode = 'var-eta'; etas = [1/32 1/16 1/8 1/4 1/2 1 2 4 8]; numberflow = 100; weight = 10;
 % mode = 'var-weight'; weight = 10:10:80; etas = 1;  numberflow = 100;
-% mode = 'var-number'; numberflow = 30:30:240; etas = 1; weight = 10;
-b_dimbaseline = false;      % Baseline
-b_dimconfig0 = true;        % HSR
+mode = 'var-number'; numberflow = 30:30:240; etas = 1; weight = 10;
+b_dimbaseline = true;        % Baseline
+b_dimconfig0 = false;        % HSR
 b_dimconfig = false;         % HSR-RSV
 b_baseline = false;
 b_fastconfig = false;
-b_fastconfig0 = false;
-NUM_EVENT = 400;            % the trigger-interval is set to 50. {200}
+b_fastconfig0 = true;
+NUM_EVENT = 51;            % {200,400} the trigger-interval is set to 50. 
 idx = 1:NUM_EVENT;
 EXPNAME = sprintf('EXP5');
 runexp04xxx;

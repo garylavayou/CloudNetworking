@@ -13,6 +13,12 @@ switch mode
         num_vars = length(etas);
     case 'var-number'
         num_vars = length(numberflow);
+    case 'var-penalty'
+        if isempty(penalty)
+            num_vars = 1;
+        else
+            num_vars = length(penalty);
+        end
 end
 TOTAL_NUM = 0;
 %% Fast Reconfiguration with Resource Reservation
@@ -91,6 +97,9 @@ end
 if ~strcmpi(mode, 'var-number') && exist('numberflow', 'var') && ~isscalar(numberflow)
     warning('%s: ''numberflow'' is not a scalar.', calledby);
 end
+if ~strcmpi(mode, 'var-penalty') && exist('penalty', 'var') && ~isscalar(numberflow)
+    warning('%s: ''penalty'' is not a scalar.', calledby);
+end
 for j = 1:length(invoke_methods)
     options.ReconfigMethod = invoke_methods(j);
     progress_bar.Name = horzcat(EXPNAME, ' - ', title_names{j});
@@ -123,6 +132,19 @@ for j = 1:length(invoke_methods)
                     user_opt.NumberFlows = numberflow(1);
                 end
                 options.UnitReconfigureCost = etas(i);
+            case 'var-penalty'
+                if ~isempty(penalty)
+                    user_opt.penalty = penalty(i);
+                end
+                if exist('weight', 'var')
+                    user_opt.Weight = weight(1);
+                end
+                if exist('numberflow', 'var')
+                    user_opt.NumberFlows = numberflow(1);
+                end
+                if exist('etas', 'var')
+                    options.UnitReconfigureCost = etas(1);
+                end
         end
         SingleSliceReconfiguration;
         if i == 1

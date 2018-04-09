@@ -81,7 +81,7 @@ switch this.options.ReconfigMethod
             this.release_resource_description();
         end
     case ReconfigMethod.DimBaseline
-        if this.b_dim.char
+        if this.b_dim
             if this.getOption('Adhoc')
                 this.release_resource_description();
             end
