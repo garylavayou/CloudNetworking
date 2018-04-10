@@ -17,7 +17,7 @@ type.Permanent = 4;
 type.Static = [1; 2; 3];
 type.StaticCount = [1; 2; 2];
 type.StaticClass = {'Slice'};
-mode = 'var-penalty'; etas = 1; numberflow = 100; weight = 30; penalty = [1;2;4;8;12;16];   % [1;2;4;8;12;16]
+mode = 'var-penalty'; etas = 1; numberflow = 100; weight = 30; penalty = [1;2;4;8;12;16;20];   % [1;2;4;8;12;16]
 b_dimconfig0 = true;        % HSR
 NUM_EVENT = 11;           
 idx = 1:NUM_EVENT;
@@ -34,13 +34,7 @@ if exist('penalty', 'var') && ~isempty(penalty) && license('test', 'Distrib_Comp
 end
 runexp04xxx;
 
-if isempty(penalty)
-    runtime.normal = computime;
-elseif ITER_LIMIT == inf
-    runtime.admm = computime;
-else
-    runtime.admm_limit = computime;
-end
+
 %% Output
 % # plot figure
 %{

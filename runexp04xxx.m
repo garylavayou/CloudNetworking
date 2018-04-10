@@ -157,6 +157,23 @@ for j = 1:length(invoke_methods)
                 invoke_methods(j)==ReconfigMethod.DimBaseline)
             break;
         end
+        if strcmpi(mode, 'var-penalty')
+            if isempty(penalty)
+                runtime.normal = computime;
+            elseif ITER_LIMIT == inf
+                if i == 1
+                    runtime.admm = {computime};
+                else
+                    runtime.admm{i} = computime;
+                end
+            else
+                if i == 1
+                    runtime.admm_limit = {computime};
+                else
+                    runtime.admm_limit{i} = computime;
+                end
+            end
+        end
     end
 end
 

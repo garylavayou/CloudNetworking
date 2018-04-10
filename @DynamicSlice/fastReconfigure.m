@@ -334,7 +334,7 @@ end
             if isfield(this.options, 'penalty')
                 r = this.options.penalty;
             else
-                r = 2;
+                r = 5;
             end
         end
         if nargin <= 2
@@ -484,7 +484,7 @@ end
             re = lambda_k - gamma_k;
             re_norm = norm(re(:));
             tol_dual = eps_abs*sqrt(num_dual) + ...
-                eps_rel*max(num_process*norm(gamma_k), norm(lambda_k(:)));
+                eps_rel*max(sqrt(num_process)*norm(gamma_k), norm(lambda_k(:)));
             fval_change = abs(sum(fval_lambda_k)-sum(fval_lambda_kminus)+fval_gamma_k-fval_gamma_kminus);
             fprintf('iteration: %2d, step: %.2f, dual-change: %8.6G, optimality:%10.6G, tolerance:%10.6G.\n',...
                 k, r, fval_change, re_norm, tol_dual);
