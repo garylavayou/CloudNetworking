@@ -17,7 +17,7 @@ type.Permanent = 4;
 type.Static = [1; 2; 3];
 type.StaticCount = [1; 2; 2];
 type.StaticClass = {'Slice'};
-mode = 'var-penalty'; etas = 1; numberflow = 100; weight = 30; penalty = [1;2;4;8;12;16;20];   % [1;2;4;8;12;16]
+mode = 'var-penalty'; etas = 1; numberflow = 1000; weight = 30; penalty = [2;4;8;12;16;20];   % [1;2;4;8;12;16]
 b_dimconfig0 = true;        % HSR
 NUM_EVENT = 11;           
 idx = 1:NUM_EVENT;
@@ -29,7 +29,7 @@ if exist('penalty', 'var') && ~isempty(penalty) && license('test', 'Distrib_Comp
     if isempty(p)
         warning('Parallel computing is disabled.');
     else
-        fprintf('Start up parallel computing pool, number of workers: %d.\n', p.NumWorkers);
+        fprintf('Starting up parallel computing pool, number of workers: %d.\n', p.NumWorkers);
     end
 end
 runexp04xxx;
@@ -74,4 +74,10 @@ save(output_name, 'description', 'results', 'NUM_EVENT', 'etas', ...
 i = 5;
 x = (1:height(results.Dimconfig{i}));
 plot(x,ema(results.Dimconfig2{i}.Profit,0.3), x,results.Dimconfig2{i}.Profit)
+%}
+%{
+for i = length(runtime.admm):-1:1
+    mean_time(i) = mean(runtime.admm{i})/;
+end
+plot(penalty, mean_time);
 %}

@@ -339,7 +339,7 @@ end
         end
         if nargin <= 2
             eps_abs = 10^-6;
-            eps_rel = 0.5*10^-3;
+            eps_rel = 10^-3;
         end
         if license('test', 'Distrib_Computing_Toolbox')
             p = gcp('nocreate');
@@ -438,7 +438,8 @@ end
                 %                     if options.bEnforceReserve
                 %                     end
                 %                 end
-                distr_params(i).A = distr_params(i).A(distr_params(i).active_rows,distr_params(i).I_active_variables);
+                distr_params(i).A = distr_params(i).A(distr_params(i).active_rows,...
+                    distr_params(i).I_active_variables);
                 distr_params(i).b = distr_params(i).b(distr_params(i).active_rows);
                 distr_xk{i} = distr_xk{i}(distr_params(i).I_active_variables);
                 distr_params(i).cl = distr_params(i).cl(:,distr_params(i).I_active_variables);
@@ -450,7 +451,7 @@ end
         end
         t2 = toc(t1);
         fprintf('Dual-ADMM: distributing data ... Elapsed time is %f seconds.\n', t2);
-        lambda_k = zeros(num_dual, num_process);
+        lambda_k = zeros(num_dual, num_process); % auxiliary variables to gamma.
         q_k = 10*ones(num_dual, num_process); % Dual variables for the dual ADMM formulation.
         fval_lambda_k = zeros(num_process,1);
         fval_gamma_k = 0;
@@ -483,13 +484,13 @@ end
             q_k = q_k + r*(gamma_k-lambda_k);
             re = lambda_k - gamma_k;
             re_norm = norm(re(:));
-            tol_dual = eps_abs*sqrt(num_dual) + ...
+            tol_primal = eps_abs*sqrt(num_dual*num_process) + ...
                 eps_rel*max(sqrt(num_process)*norm(gamma_k), norm(lambda_k(:)));
             fval_change = abs(sum(fval_lambda_k)-sum(fval_lambda_kminus)+fval_gamma_k-fval_gamma_kminus);
             fprintf('iteration: %2d, step: %.2f, dual-change: %8.6G, optimality:%10.6G, tolerance:%10.6G.\n',...
-                k, r, fval_change, re_norm, tol_dual);
+                k, r, fval_change, re_norm, tol_primal);
             b_stop = false;
-            if re_norm < tol_dual
+            if re_norm < tol_primal
                 b_stop = true;
             end
             if b_stop || k>=ITER_LIMIT
