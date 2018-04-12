@@ -37,7 +37,7 @@ Np = this.NumberPaths;
 % The problem has multiple inequalities, and the lowerbounds for variables.
 %%
 % List of constaints:
-%   (1) flow processing requirement: NP*NV (this.num_lcon_res);
+%   (1) flow processing requirement: Np*Nvnf (this.num_lcon_res);
 %   (2) VNF instance capacity constraint: NV*Ndc (this.num_varv);
 %   (3) Link capacity constraint: NL;
 %   (4) link reconfiguration cost constraint: 2*NP;
@@ -325,9 +325,9 @@ end
     function [x, fval] = distribute_optimization(num_process, r, ~)
         %% parameters
         if nargin <1
-            num_process = floor(Nf/3);
+            num_process = floor(Nf);
         else
-            num_process = min(num_process, floor(Nf/3));
+            num_process = min(num_process, floor(Nf));
         end
         % num_process <= NF
         if nargin <= 1
@@ -354,10 +354,10 @@ end
         %% Initialization
         % Number of flows in sub-problem: depending on how many thread is created. The flows are
         % evenly partitioned to each sub-problem.
-        num_flows = zeros(num_process,1);
-        num_flows(1:end) = floor(Nf/num_process);
+        num_flows = floor(Nf/num_process)*ones(num_process,1);
         num_rem_flows = mod(Nf,num_process);
-        num_flows(end-(num_rem_flows-1):end) = num_flows(1:num_rem_flows) + 1;
+        num_flows(end-(num_rem_flows-1):end) = num_flows(1) + 1;
+        assert(Nf==sum(num_flows));
         flow_idx_offset = cumsum([0; num_flows(1:end-1)]);
         % Number of dual variables (for basic scheme), corresponding to the VNF instance and link
         % capacity constraints.
@@ -389,8 +389,9 @@ end
         end
         t1 = tic;
         parfor (i = 1:num_process,M)
+        %for i = 1:num_process   % DEBUG
             flow_indices = flow_idx_offset(i) + (1:num_flows(i));
-            path_indices = (find(sum(I_flow_path(flow_indices,:),1)))';
+            path_indices = (find(sum(I_flow_path(flow_indices,:),1)))'; %#ok<PFBNS>
             num_paths = length(path_indices);
             dup_path_idx = path_indices+(0:Np:(Nvnf-1)*Np);
             constr_indices = dup_path_idx(:);
@@ -407,30 +408,29 @@ end
             var_indices{i} = [path_indices; Np+dup_z_idx; Np+num_varz+path_indices;...
                 Np*2+num_varz+dup_z_idx];
             distr_num_vars(i) = length(var_indices{i});
-            distr_xk{i} = var0(var_indices{i});      % Primal variables
-            distr_params(i).lb = sparse(length(var_indices{i}),1);
-            distr_params(i).A = As(constr_indices, var_indices{i});
-            distr_params(i).b = bs(constr_indices);
+            distr_xk{i} = var0(var_indices{i});      %#ok<PFBNS> % Primal variables
+            distr_params(i).lb = sparse(distr_num_vars(i),1);
+            distr_params(i).A = As(constr_indices, var_indices{i}); %#ok<PFBNS>
+            distr_params(i).b = bs(constr_indices); %#ok<PFBNS>
             distr_params(i).cl = As(num_lcon_res+(1:num_dual), var_indices{i});
             distr_params(i).cr = bs(num_lcon_res+(1:num_dual))*(num_paths/Np);
             distr_params(i).num_varx = num_paths;
             distr_params(i).num_varz = length(dup_z_idx);
             distr_params(i).pidx = path_indices;
             distr_params(i).fidx = flow_indices;
-            distr_params(i).x_reconfig_cost = topts.x_reconfig_cost(path_indices);
+            distr_params(i).x_reconfig_cost = topts.x_reconfig_cost(path_indices); %#ok<PFBNS>
             distr_params(i).z_reconfig_cost = topts.z_reconfig_cost(dup_z_idx);
             distr_params(i).weight = weight;
             distr_params(i).I_flow_path = I_flow_path(flow_indices, path_indices);
-            distr_params(i).path_owner = path_owner(path_indices);
+            distr_params(i).path_owner = path_owner(path_indices); %#ok<PFBNS>
             if bCompact
-                distr_node_path = I_node_path(:,distr_params(i).pidx);
-                distr_z_filter = sparse(repmat(logical(distr_node_path(:)), Nvnf,1));
-                distr_tx_filter = true(numel(distr_params(i).x_reconfig_cost),1);
+                distr_node_path = I_node_path(:,path_indices); %#ok<PFBNS>
+                distr_z_filter = repmat(logical(distr_node_path(:)), Nvnf,1);
+                distr_tx_filter = true(num_paths,1);
                 distr_tz_filter = distr_z_filter;
-                distr_params(i).I_active_variables = [true(distr_params(i).num_varx,1);  ...
+                distr_params(i).I_active_variables = [true(num_paths,1);  ...
                     distr_z_filter; distr_tx_filter; distr_tz_filter];
-                distr_row_offset = distr_params(i).num_varx*Nvnf;
-                distr_params(i).active_rows = [true(distr_row_offset,1); ...
+                distr_params(i).active_rows = [true(num_paths*Nvnf,1); ...
                     distr_tx_filter; distr_tx_filter; distr_tz_filter; distr_tz_filter];
                 %                 if this.options.bReserve
                 %                     if ~options.bEnforceReserve
@@ -466,7 +466,9 @@ end
             gamma_k = (sum(lambda_k,2) - sum(q_k,2)/r)/num_process;
             fval_lambda_kminus = fval_lambda_k;
             fval_gamma_kminus = fval_gamma_k;
+            lambda_kminus = lambda_k;
             parfor (j = 1:num_process,M)
+            %for j = 1:num_process
                 fminopt = fmincon_opt;
                 xk = distr_xk{j};
                 fminopt.HessianFcn = @(x,lambda) ...
@@ -484,13 +486,33 @@ end
             q_k = q_k + r*(gamma_k-lambda_k);
             re = lambda_k - gamma_k;
             re_norm = norm(re(:));
+            se = r*(lambda_k-lambda_kminus);
+            se_norm = norm(se(:));
+            %% Stop Condition
+            % Number of primal variables: in the dual-ADMM formulation, the primal
+            %   variables include: (a) the dual variables of the original problems, (b)
+            %   the auxiliary variables used to construct the equality system $λ-γi=0$.
+            %   The size of primal variables thus is |num_dual+num_dual*num_process|;
+            % Number of dual variables: the dual variables are the multipliers
+            %   corresponding to the equality constraints $λ-γi=0$. Thus the size is 
+            %   |num_dual*num_process|;
             tol_primal = eps_abs*sqrt(num_dual*num_process) + ...
                 eps_rel*max(sqrt(num_process)*norm(gamma_k), norm(lambda_k(:)));
-            fval_change = abs(sum(fval_lambda_k)-sum(fval_lambda_kminus)+fval_gamma_k-fval_gamma_kminus);
-            fprintf('iteration: %2d, step: %.2f, dual-change: %8.6G, optimality:%10.6G, tolerance:%10.6G.\n',...
-                k, r, fval_change, re_norm, tol_primal);
+            tol_dual = eps_abs*sqrt(num_dual*(num_process+1)) + ...
+                eps_rel*norm(q_k(:));
+            fval_change = (sum(fval_lambda_k)+fval_gamma_k)-(sum(fval_lambda_kminus)+fval_gamma_kminus);
+            if mod(k,10) == 1
+            fprintf('Iteration Step-length Dual-change Primal-optimality Tolerance Dual-optimality Tolerance\n');
+            cprintf('*text',...
+                    '！！！！！！！！！ ！！！！！！！！！！！ ！！！！！！！！！！！ ！！！！！！！！！！！！！！！！！ ！！！！！！！！！ ！！！！！！！！！！！！！！！ ！！！！！！！！！\n');
+            end
+            fprintf('%9d %11.2f %11.6G %17.6G %9.6G %15.6G %9.6G\n',...
+                k, r, fval_change, re_norm, tol_primal, se_norm, tol_dual);
+            if mod(k,10) == 0
+                printf('\n');
+            end
             b_stop = false;
-            if re_norm < tol_primal
+            if re_norm < tol_primal && se_norm < tol_dual
                 b_stop = true;
             end
             if b_stop || k>=ITER_LIMIT
@@ -542,10 +564,10 @@ profit = profit + r/2*sum((max(0, gamma+1/r*(q+params.cl*vars-params.cr))).^2);
 
 % Gradient
 if nargout >= 2
-    grad = spalloc(num_vars, 1, num_vars-params.num_varz);
+    grad = zeros(num_vars, 1);
     for p = 1:params.num_varx
         i = params.path_owner(p) - params.fidx(1) + 1;
-        grad(p) = -params.weight/(1+params.I_flow_path(i,:)*var_x); %#ok<SPRIX>
+        grad(p) = -params.weight/(1+params.I_flow_path(i,:)*var_x); 
     end
     grad(var_tx_index) = params.x_reconfig_cost;
     grad(var_tz_index) = params.z_reconfig_cost;
@@ -570,11 +592,11 @@ end
 function h = hessDualBasic(vars, lambda, gamma, q, r, params) %#ok<INUSL>
 var_x = vars(1:params.num_varx);
 num_vars = length(vars);
-h = spalloc(num_vars, num_vars, params.num_varx^2);   % non-zero elements less than | options.num_varx^2|
+h = zeros(num_vars, num_vars); 
 for p = 1:params.num_varx
     i = params.path_owner(p) - params.fidx(1) + 1;
     h(p,1:params.num_varx) = params.weight *...
-        params.I_flow_path(i,:)/(1+(params.I_flow_path(i,:)*var_x))^2; %#ok<SPRIX>
+        params.I_flow_path(i,:)/(1+(params.I_flow_path(i,:)*var_x))^2; 
 end
 
 z_k = gamma+1/r*(q+params.cl*vars-params.cr);
