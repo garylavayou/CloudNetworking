@@ -491,10 +491,10 @@ end
             %% Stop Condition
             % Number of primal variables: in the dual-ADMM formulation, the primal
             %   variables include: (a) the dual variables of the original problems, (b)
-            %   the auxiliary variables used to construct the equality system $¦Ë-¦Ãi=0$.
+            %   the auxiliary variables used to construct the equality system $Î»-Î³i=0$.
             %   The size of primal variables thus is |num_dual+num_dual*num_process|;
             % Number of dual variables: the dual variables are the multipliers
-            %   corresponding to the equality constraints $¦Ë-¦Ãi=0$. Thus the size is 
+            %   corresponding to the equality constraints $Î»-Î³i=0$. Thus the size is 
             %   |num_dual*num_process|;
             tol_primal = eps_abs*sqrt(num_dual*num_process) + ...
                 eps_rel*max(sqrt(num_process)*norm(gamma_k), norm(lambda_k(:)));
@@ -504,12 +504,12 @@ end
             if mod(k,10) == 1
             fprintf('Iteration Step-length Dual-change Primal-optimality Tolerance Dual-optimality Tolerance\n');
             cprintf('*text',...
-                    '¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª ¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª ¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª ¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª ¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª ¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª ¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª¡ª\n');
+                    'â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”\n');
             end
             fprintf('%9d %11.2f %11.6G %17.6G %9.6G %15.6G %9.6G\n',...
                 k, r, fval_change, re_norm, tol_primal, se_norm, tol_dual);
             if mod(k,10) == 0
-                printf('\n');
+                fprintf('\n');
             end
             b_stop = false;
             if re_norm < tol_primal && se_norm < tol_dual
