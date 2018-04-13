@@ -499,7 +499,7 @@ end
             tol_primal = eps_abs*sqrt(num_dual*num_process) + ...
                 eps_rel*max(sqrt(num_process)*norm(gamma_k), norm(lambda_k(:)));
             tol_dual = eps_abs*sqrt(num_dual*(num_process+1)) + ...
-                eps_rel*norm(q_k(:));
+                eps_rel*norm(sum(q_k,2));       % eps_rel*|A'*y|_2
             fval_change = (sum(fval_lambda_k)+fval_gamma_k)-(sum(fval_lambda_kminus)+fval_gamma_kminus);
             if mod(k,10) == 1
             fprintf('Iteration Step-length Dual-change Primal-optimality Tolerance Dual-optimality Tolerance\n');
