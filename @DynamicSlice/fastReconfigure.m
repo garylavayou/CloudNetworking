@@ -486,8 +486,8 @@ end
             q_k = q_k + r*(gamma_k-lambda_k);
             re = lambda_k - gamma_k;
             re_norm = norm(re(:));
-            se = r*(lambda_k-lambda_kminus);
-            se_norm = norm(se(:));
+            se = r*sum(lambda_k-lambda_kminus,2);
+            se_norm = norm(se);
             %% Stop Condition
             % Number of primal variables: in the dual-ADMM formulation, the primal
             %   variables include: (a) the dual variables of the original problems, (b)
@@ -502,11 +502,12 @@ end
                 eps_rel*norm(sum(q_k,2));       % eps_rel*|A'*y|_2
             fval_change = (sum(fval_lambda_k)+fval_gamma_k)-(sum(fval_lambda_kminus)+fval_gamma_kminus);
             if mod(k,10) == 1
-            fprintf('Iteration Step-length Dual-change Primal-optimality Tolerance Dual-optimality Tolerance\n');
+            fprintf('                                   Primal-                  Dual-\n');                
+            fprintf('Iteration Step-length Dual-change  optimality   Tolerance   optimality   Tolerance \n');
             cprintf('*text',...
-                    '————————— ——————————— ——————————— ————————————————— ————————— ——————————————— —————————\n');
+                    '————————— ——————————— ——————————— ———————————— ——————————— ———————————— ———————————\n');
             end
-            fprintf('%9d %11.2f %11.6G %17.6G %9.6G %15.6G %9.6G\n',...
+            fprintf('%9d %11.2f %11G %12G %11G %15G %11G\n',...
                 k, r, fval_change, re_norm, tol_primal, se_norm, tol_dual);
             if mod(k,10) == 0
                 fprintf('\n');
