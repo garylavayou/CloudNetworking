@@ -9,16 +9,20 @@ end
 switch mode
     case 'var-weight'
         num_vars = length(weight);
+        mode_name = 'varweight';
     case 'var-eta'
         num_vars = length(etas);
+        mode_name = 'vareta';
     case 'var-number'
         num_vars = length(numberflow);
+        mode_name = 'varsize';
     case 'var-penalty'
         if isempty(penalty)
             num_vars = 1;
         else
             num_vars = length(penalty);
         end
+        mode_name = 'varpenalty';
 end
 TOTAL_NUM = 0;
 %% Fast Reconfiguration with Resource Reservation
@@ -152,27 +156,24 @@ for j = 1:length(invoke_methods)
         else
             results.(invoke_methods(j).char){i,1} = g_results;
         end
+        if exist('computime', 'var') && ~isempty(computime)
+            if isempty(penalty)
+                str_method_name = 'normal';
+            elseif ITER_LIMIT == inf
+                str_method_name = 'admm';
+            else
+                str_method_name = 'admm_limit';
+            end
+            if i == 1
+                runtime.(mode_name).(str_method_name) = computime;
+            else
+                runtime.(mode_name)(i).(str_method_name) = computime;
+            end
+        end
         if strcmpi(mode, 'var-eta') && ...
                 (invoke_methods(j)==ReconfigMethod.Baseline || ...
                 invoke_methods(j)==ReconfigMethod.DimBaseline)
             break;
-        end
-        if strcmpi(mode, 'var-penalty')
-            if isempty(penalty)
-                runtime.normal = computime;
-            elseif ITER_LIMIT == inf
-                if i == 1
-                    runtime.admm = {computime};
-                else
-                    runtime.admm{i} = computime;
-                end
-            else
-                if i == 1
-                    runtime.admm_limit = {computime};
-                else
-                    runtime.admm_limit{i} = computime;
-                end
-            end
         end
     end
 end

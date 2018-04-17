@@ -17,11 +17,16 @@ type.Permanent = 4;
 type.Static = [1; 2; 3];
 type.StaticCount = [1; 2; 2];
 type.StaticClass = {'Slice'};
-mode = 'var-penalty'; etas = 1; numberflow = 1000; weight = 30; penalty = [2;4;8;12;16;20];   % [1;2;4;8;12;16]
+mode = 'var-penalty'; etas = 1; numberflow = 1000; weight = 30; penalty = [2;4;8;12;16;20;24;32];
+% mode = 'var-number'; etas = 1; numberflow = 100:100:1000; weight = 30; penalty = 12;
 b_dimconfig0 = true;        % HSR
 NUM_EVENT = 11;           
 idx = 1:NUM_EVENT;
-computime = zeros(max(length(penalty),1),1);
+if strcmpi(mode, 'var-penalty') || strcmpi(mode, 'var-number')
+    computime = zeros(NUM_EVENT-1,1);
+else
+    clear computime;
+end
 ITER_LIMIT = inf;    % 20
 EXPNAME = sprintf('EXP6');
 if exist('penalty', 'var') && ~isempty(penalty) && license('test', 'Distrib_Computing_Toolbox') 
@@ -33,7 +38,6 @@ if exist('penalty', 'var') && ~isempty(penalty) && license('test', 'Distrib_Comp
     end
 end
 runexp04xxx;
-
 
 %% Output
 % # plot figure
@@ -77,7 +81,14 @@ plot(x,ema(results.Dimconfig2{i}.Profit,0.3), x,results.Dimconfig2{i}.Profit)
 %}
 %{
 for i = length(runtime.admm):-1:1
-    mean_time(i) = mean(runtime.admm{i})/;
+    mean_time(i) = mean(runtime.admm{i});
 end
 plot(penalty, mean_time);
+%}
+% var penalty
+%{
+for i = length(runtime.varpenalty):-1:1
+    mean_time(i) = mean(runtime.varpenalty(i).admm);
+end
+plot(penalty,mean_time);
 %}

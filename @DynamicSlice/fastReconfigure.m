@@ -452,7 +452,7 @@ end
         t2 = toc(t1);
         fprintf('Dual-ADMM: distributing data ... Elapsed time is %f seconds.\n', t2);
         lambda_k = zeros(num_dual, num_process); % auxiliary variables to gamma.
-        q_k = 10*ones(num_dual, num_process); % Dual variables for the dual ADMM formulation.
+        q_k = ones(num_dual, num_process); % Dual variables for the dual ADMM formulation.
         fval_lambda_k = zeros(num_process,1);
         fval_gamma_k = 0;
         exitflag_k = zeros(num_process,1);
@@ -504,16 +504,16 @@ end
             if mod(k,10) == 1
             fprintf('                                   Primal-                  Dual-\n');                
             fprintf('Iteration Step-length Dual-change  optimality   Tolerance   optimality   Tolerance \n');
-            cprintf('*text',...
+            cprintf('*text', ...
                     '————————— ——————————— ——————————— ———————————— ——————————— ———————————— ———————————\n');
             end
-            fprintf('%9d %11.2f %11G %12G %11G %15G %11G\n',...
+            fprintf('%9d %11.2f %11G %12G %11G %12G %11G\n',...
                 k, r, fval_change, re_norm, tol_primal, se_norm, tol_dual);
             if mod(k,10) == 0
                 fprintf('\n');
             end
             b_stop = false;
-            if re_norm < tol_primal && se_norm < tol_dual
+            if re_norm < tol_primal %&& se_norm < tol_dual
                 b_stop = true;
             end
             if b_stop || k>=ITER_LIMIT
