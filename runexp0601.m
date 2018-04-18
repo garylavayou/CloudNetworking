@@ -17,9 +17,9 @@ type.Permanent = 4;
 type.Static = [1; 2; 3];
 type.StaticCount = [1; 2; 2];
 type.StaticClass = {'Slice'};
-mode = 'var-penalty'; etas = 1; numberflow = 1000; weight = 30; penalty = [2;4;8;12;16;20;24;32];
-% mode = 'var-number'; etas = 1; numberflow = 100:100:1000; weight = 30; penalty = 12;
-b_dimconfig0 = true;        % HSR
+% mode = 'var-penalty'; etas = 1; numberflow = 1000; weight = 30; penalty = [1;2;4;8;12;16;20];   % (24,32) is too large to obtain accurate results.
+% mode = 'var-number'; etas = 1; numberflow = 100:100:1000; weight = 30; penalty = 2;
+b_fastconfig0 = true;        % FSR
 NUM_EVENT = 11;           
 idx = 1:NUM_EVENT;
 if strcmpi(mode, 'var-penalty') || strcmpi(mode, 'var-number')
@@ -60,18 +60,6 @@ output_name = sprintf('Results/EXP5001_var%s.mat', varname);
 save(output_name, 'description', 'results', 'EXPNAME', 'mode', 'etas', 'numberflow', 'weight', ...
     'options', 'node_opt', 'link_opt', 'VNF_opt', 'slice_opt', 'type', 'NUM_EVENT');
 %}
-% Single experiment.
-%{
-description = sprintf('%s\n%s\n%s\n%s\n%s',...
-    sprintf('Experiment 42%d1: Fast slice reconfiguration scheme and Hybrid slicing schemes.', type.Permanent),...
-    'Topology=Sample-2.',...
-    'Experiment without warm-up phase.',...
-    sprintf('Slice Type %d (disable ad-hoc mode, enable dimension-trigger).', type.Index(type.Permanent))...
-    );
-output_name = sprintf('Results/singles/EXP4_OUTPUT2%d1s%04d.mat', type.Permanent, round(etas(1)*100));
-save(output_name, 'description', 'results', 'NUM_EVENT', 'etas', ...
-    'options', 'node_opt', 'link_opt', 'VNF_opt', 'slice_opt', 'type', 'idx', 'EXPNAME');
-%}
 
 %% Test
 %{
@@ -85,10 +73,21 @@ for i = length(runtime.admm):-1:1
 end
 plot(penalty, mean_time);
 %}
-% var penalty
+%% var penalty
+% plot
 %{
 for i = length(runtime.varpenalty):-1:1
     mean_time(i) = mean(runtime.varpenalty(i).admm);
 end
 plot(penalty,mean_time);
 %}
+% save results
+%{
+description = ['Experiment 6001: running time of dual ADMM and the normal method',...
+    'varying penalty factor'];
+output_name = 'Results/singles/EXP6001.mat';
+save(output_name, 'description', 'results', 'runtime', 'penalty');
+%}
+% NOTE: penalty factor should not be too large, _i.e._, $r<=2$ will be fine; otherwise the
+%   results will be inaccurate. On the other hand the penalty should not be too small,
+%   otherwise the number of iteration will be large and the convergence rate is slow.
