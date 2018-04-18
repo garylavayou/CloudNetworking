@@ -12,6 +12,9 @@ classdef StaticProperties < handle
         function v = get(this, field)
             v = this.props.(field);
         end
+        
+        % TODO 
+        % implement .() operator
     end
 end
 

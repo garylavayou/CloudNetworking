@@ -128,6 +128,9 @@ for j = 1:length(invoke_methods)
                 if exist('etas', 'var')
                     options.UnitReconfigureCost = etas(1);
                 end
+                if ~isempty(penalty)
+                    user_opt.penalty = penalty(1);
+                end
             case 'var-eta'
                 if exist('weight', 'var')
                     user_opt.Weight = weight(1);

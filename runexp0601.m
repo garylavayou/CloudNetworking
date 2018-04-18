@@ -18,7 +18,7 @@ type.Static = [1; 2; 3];
 type.StaticCount = [1; 2; 2];
 type.StaticClass = {'Slice'};
 % mode = 'var-penalty'; etas = 1; numberflow = 1000; weight = 30; penalty = [1;2;4;8;12;16;20];   % (24,32) is too large to obtain accurate results.
-% mode = 'var-number'; etas = 1; numberflow = 100:100:1000; weight = 30; penalty = 2;
+% mode = 'var-number'; etas = 1; numberflow = 100:100:1000; weight = 30; penalty = 2;   % penalty = [] for normal method.
 b_fastconfig0 = true;        % FSR
 NUM_EVENT = 11;           
 idx = 1:NUM_EVENT;
@@ -91,3 +91,19 @@ save(output_name, 'description', 'results', 'runtime', 'penalty');
 % NOTE: penalty factor should not be too large, _i.e._, $r<=2$ will be fine; otherwise the
 %   results will be inaccurate. On the other hand the penalty should not be too small,
 %   otherwise the number of iteration will be large and the convergence rate is slow.
+
+%% var size
+% plot
+%{
+for i = length(runtime.varsize):-1:1
+    mean_time(i) = mean(runtime.varsize(i).admm);
+end
+plot(numberflow,mean_time);
+%}
+% save results
+%{
+description = ['Experiment 6002: running time of dual ADMM and the normal method',...
+    'varying slice size (number of flows)'];
+output_name = 'Results/singles/EXP6002.mat';
+save(output_name, 'description', 'results', 'runtime', 'penalty', 'numberflow');
+%}
