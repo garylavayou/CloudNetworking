@@ -27,8 +27,7 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                     getstructfields(varargin{4}, ...
                     {'VNFReconfigCoefficient', 'DiffNonzeroTolerance', 'UnitReconfigureCost'},...
                     'default', {5, 10^-4, 1}));
-                h = DynamicSlice.GLOBAL_OPTIONS;
-                h.eta = this.options.UnitReconfigureCost; % assert(isempty(h.eta) || isempty(this.options.UnitReconfigureCost))
+                DynamicSlice.GLOBAL_OPTIONS.set('eta', this.options.UnitReconfigureCost); % assert(isempty(h.eta) || isempty(this.options.UnitReconfigureCost))
                 this.options = structmerge(this.options, ...
                     getstructfields(varargin{4}, 'ReconfigMethod'));
             end

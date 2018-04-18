@@ -1,7 +1,7 @@
 classdef DynamicSlice < Slice & EventSender
     %DynamicSlice Event-driven to dynamic configure slice.
     properties (Constant)
-        GLOBAL_OPTIONS = DynamicSliceStaticMember;    % TODO: remove, retrive eta from parent (network)
+        GLOBAL_OPTIONS = StaticProperties;
     end
     
     properties(Constant, Access = private)
@@ -280,13 +280,14 @@ classdef DynamicSlice < Slice & EventSender
             if this.NumberFlows > 0
                 [~, this.VirtualLinks.ReconfigCost] = this.fcnLinkPricing(...
                     this.VirtualLinks.Price, this.VirtualLinks.Capacity);
+                eta = DynamicSlice.GLOBAL_OPTIONS.get('eta');
                 this.VirtualLinks.ReconfigCost = ...
-                    (DynamicSlice.GLOBAL_OPTIONS.eta/this.time.ConfigureInterval) * this.VirtualLinks.ReconfigCost;
+                    (eta/this.time.ConfigureInterval) * this.VirtualLinks.ReconfigCost;
                 % here the |node_price| is the price of all data centers.
                 [~, this.VirtualDataCenters.ReconfigCost] = this.fcnNodePricing(...
                     this.VirtualDataCenters.Price, this.VirtualDataCenters.Capacity);
                 this.VirtualDataCenters.ReconfigCost = ...
-                    (DynamicSlice.GLOBAL_OPTIONS.eta/this.time.ConfigureInterval) * this.VirtualDataCenters.ReconfigCost;
+                    (eta/this.time.ConfigureInterval) * this.VirtualDataCenters.ReconfigCost;
             end
             %                 else
             %                 end

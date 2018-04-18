@@ -543,12 +543,13 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             MIN_NUM_CONFIG = 10;
             num_config = max(MIN_NUM_CONFIG, num_config/4);
             slice.time.DimensionIntervalModified = slice.time.ConfigureInterval*num_config;
+            eta = DynamicSlice.GLOBAL_OPTIONS.get('eta');
             slice.VirtualLinks.ReconfigCost = ...
-                (DynamicSlice.GLOBAL_OPTIONS.eta/num_config) * slice.VirtualLinks.ReconfigCost;
+                (eta/num_config) * slice.VirtualLinks.ReconfigCost;
             [~, slice.VirtualDataCenters.ReconfigCost] = ...
                 slice.fcnNodePricing(node_price, node_load);
             slice.VirtualDataCenters.ReconfigCost = ...
-                (DynamicSlice.GLOBAL_OPTIONS.eta/num_config) * slice.VirtualDataCenters.ReconfigCost;
+                (eta/num_config) * slice.VirtualDataCenters.ReconfigCost;
         end
         %         function [link_reconfig_cost, node_reconfig_cost] = ...
         %                 updateRedimensionCost(this, slice, link_id, node_id)
