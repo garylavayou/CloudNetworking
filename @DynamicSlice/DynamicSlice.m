@@ -81,6 +81,8 @@ classdef DynamicSlice < Slice & EventSender
         lower_bounds = struct([]);
         upper_bounds = struct([]);
         max_flow_rate;
+        init_lambda_k;
+        init_q_k; 
     end
     properties(Dependent)
         UnitReconfigureCost;
@@ -199,7 +201,7 @@ classdef DynamicSlice < Slice & EventSender
                         getstructfields(slice_data, 'bReserve', 'default', 0));
                     this.sh_options.omega_upper = 1;
                     this.sh_options.omega_lower = 0.9;
-                case ReconfigMethod.Dimconfig
+                case {ReconfigMethod.Dimconfig,ReconfigMethod.Fastconfig}
                     this.options = structmerge(this.options, ...
                         getstructfields(slice_data, 'bReserve', 'default', 0));
                     this.sh_options.omega_upper = 1;
@@ -1102,12 +1104,12 @@ classdef DynamicSlice < Slice & EventSender
             end
             
             %% Previous State
-            % In _onAddingFlow_ and _onRemovingFlow_, the slice topology does not change.
+            % In _onAddingFlow_ and _OnRemovingFlow_, the slice topology does not change.
             % The data centers and NVF type do not changes, so there is no new/deleted VNF
             % instance variables.
             %
             % Record the state changes after flow is added to the flow table to maintain
-            % the full set of variables, different from that in _<onRemovingFlow>_.
+            % the full set of variables, different from that in _<OnRemovingFlow>_.
             this.identify_change(changed_path_index);
             this.old_variables.x = zeros(this.NumberPaths,1);
             this.old_variables.z = zeros(this.num_varz,1);
@@ -1288,7 +1290,7 @@ classdef DynamicSlice < Slice & EventSender
             b_removed_nodes = this.Topology.Remove([], b_removed_links);
             
             %% Update variables
-            % see also <onRemoveFlow>.
+            % see also <OnRemoveFlow>.
             this.net_changes.NodeIndex = b_removed_nodes;
             this.net_changes.DCIndex = b_removed_dcs;
             this.net_changes.LinkIndex = b_removed_links;

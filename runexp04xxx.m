@@ -167,10 +167,17 @@ for j = 1:length(invoke_methods)
             else
                 str_method_name = 'admm_limit';
             end
-            if i == 1
+            if ~exist('runtime', 'var') || ~isfield(runtime, mode_name)
                 runtime.(mode_name).(str_method_name) = computime;
             else
                 runtime.(mode_name)(i).(str_method_name) = computime;
+            end
+            if contains(str_method_name, 'admm')
+                if ~exist('numiters', 'var') || ~isfield(numiters, mode_name)
+                    numiters.(mode_name).(str_method_name) = NUMBER_ITERS;
+                else
+                    numiters.(mode_name)(i).(str_method_name) = NUMBER_ITERS;
+                end
             end
         end
         if strcmpi(mode, 'var-eta') && ...

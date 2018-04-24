@@ -196,6 +196,7 @@ classdef RandomEventDispatcher < matlab.mixin.Copyable
                 %       determined that no more event before it.
                 if ~this.b_pending_arrive
                     this.addnewentity;
+                    assert(issorted(this.event_queue.Time), 'error: EventQueue.');
                     this.b_pending_arrive = true;
                 end
             end

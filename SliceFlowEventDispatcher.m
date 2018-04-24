@@ -130,7 +130,6 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
                 % event that is no longer valid (has no valid entity/source associated.)
                 %this.rand_state = rng;
                 ev = nextEvent@RandomEventDispatcher(this);
-                assert(issorted(this.event_queue.Time), 'error: EventQueue.');
                 if isvalidEvent(this, ev)
                     break;
                 end

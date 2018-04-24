@@ -4,7 +4,7 @@ plot_metrics = {'ReconfigRatio'}; % 'FairIndex', 'Utilization', 'Profit'
 marker = {'x', 'o', 's', 'd'};
 line_style = {'-',  '--', '-.'};
 color_set = [Color.MildBlue; Color.Red; Color.MildGreen; Color.Purple; Color.Black; Color.Gray];
-idx_offset = 1;
+idx_offset = 2;
 
 if ~exist('figs', 'var') || ~isstruct(figs)
     figs = struct;

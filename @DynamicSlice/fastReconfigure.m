@@ -4,7 +4,7 @@
 % Since the two vector has different number of elements, we should comparing
 % it accordingly, and set aside the variables of new arriving/departing flow.
 function [profit, cost] = fastReconfigure(this, action, new_opts)
-global computime ITER_LIMIT event_num;
+global computime ITER_LIMIT event_num NUMBER_ITERS;
 if nargin <= 2
     new_opts = struct;
 end
@@ -195,13 +195,15 @@ if this.options.bReserve
 else
     bs = bs0;
 end
-var0 = [this.topts.old_variables_x/2;
+var0 = [this.topts.old_variables_x;
     this.topts.old_variables_z;
-    %     this.topts.old_variables_x;
-    %     this.topts.old_variables_z
-    sparse(this.num_vars,1)
+    this.topts.old_variables_x;
+    this.topts.old_variables_z
+    %     sparse(this.num_vars,1)
     ];
-assert(this.checkFeasible(var0), 'error: infeasible solution.');
+if ~this.checkFeasible(var0)
+    warning('infeasible initial point.');
+end
 t2 = toc(t1);
 fprintf('%s: initilizing arguements ... Elapsed time is %f seconds.\n', calledby(0), t2);
 
@@ -214,7 +216,7 @@ fmincon_opt.Display = 'notify';
 % fmincon_opt.FiniteDifferenceType = 'central';
 t1 = tic;
 if options.bDistributed
-    [x, fval] = distribute_optimization();
+    [x, fval, k] = distribute_optimization();
 else
     if strcmpi(options.Form, 'compact')
         %% get the compact formulation
@@ -276,10 +278,12 @@ else
     this.interpretExitflag(exitflag, output.message);
 end
 t2 = toc;
-if exist('computime', 'var') && ~isempty(computime)
+if ~isempty(computime)
     computime(event_num-1) = t2;
 end
-
+if ~isempty(NUMBER_ITERS)
+    NUMBER_ITERS(event_num-1) = k;
+end
 options.Action = action;    % This might be used when check feasible solution.
 options.ConstraintTolerance = fmincon_opt.ConstraintTolerance;
 assert(this.checkFeasible(x,options), 'error: infeasible solution.');
@@ -322,7 +326,7 @@ end
 % distributed, and thus the shared information might not be available if not copyed.
 % NOTE3: It is assumed that flow indices and path indices are continuous for each
 % sub-problem.
-    function [x, fval] = distribute_optimization(num_process, r, ~)
+    function [x, fval, k] = distribute_optimization(num_process, r, ~)
         %% parameters
         if nargin <1
             num_process = floor(Nf);
@@ -451,8 +455,13 @@ end
         end
         t2 = toc(t1);
         fprintf('Dual-ADMM: distributing data ... Elapsed time is %f seconds.\n', t2);
-        lambda_k = zeros(num_dual, num_process); % auxiliary variables to gamma.
-        q_k = ones(num_dual, num_process); % Dual variables for the dual ADMM formulation.
+        if ~isempty(this.init_lambda_k)
+            lambda_k = repmat(this.init_lambda_k, 1, num_process);
+            q_k = repmat(this.init_q_k, 1, num_process);
+        else
+            lambda_k = zeros(num_dual, num_process); % auxiliary variables to gamma.
+            q_k = ones(num_dual, num_process); % Dual variables for the dual ADMM formulation.
+        end
         fval_lambda_k = zeros(num_process,1);
         fval_gamma_k = 0;
         exitflag_k = zeros(num_process,1);
@@ -498,22 +507,31 @@ end
             %   |num_dual*num_process|;
             tol_primal = eps_abs*sqrt(num_dual*num_process) + ...
                 eps_rel*max(sqrt(num_process)*norm(gamma_k), norm(lambda_k(:)));
-            tol_dual = eps_abs*sqrt(num_dual*(num_process+1)) + ...
-                eps_rel*norm(sum(q_k,2));       % eps_rel*|A'*y|_2
+            tol_dual = eps_abs*sqrt(num_dual) + eps_rel*norm(sum(q_k,2));       % eps_rel*|A'*y|_2
             fval_change = (sum(fval_lambda_k)+fval_gamma_k)-(sum(fval_lambda_kminus)+fval_gamma_kminus);
-            if mod(k,10) == 1
-            fprintf('                                   Primal-                  Dual-\n');                
-            fprintf('Iteration Step-length Dual-change  optimality   Tolerance   optimality   Tolerance \n');
-            cprintf('*text', ...
-                    '————————— ——————————— ——————————— ———————————— ——————————— ———————————— ———————————\n');
+            optimal_gap = abs(fval_change/(sum(fval_lambda_k)+fval_gamma_k));
+            
+            num_iters = 0;
+            num_funccount = 0;
+            for i = 1:num_process
+                num_iters = num_iters + output_k{i}.iterations;
+                num_funccount = num_funccount + output_k{i}.funcCount;
             end
-            fprintf('%9d %11.2f %11G %12G %11G %12G %11G\n',...
-                k, r, fval_change, re_norm, tol_primal, se_norm, tol_dual);
+            num_iters = round(num_iters/num_process);
+            num_funccount = round(num_funccount/num_process);
+            if mod(k,10) == 1
+                fprintf('                                               Primal-                  Dual-                   Sub-       Sub- \n');
+                fprintf('Iteration Step-length Dual-change Optimal-gap  optimality   Tolerance   optimality   Tolerance  Iterations Evaluations\n');
+                cprintf('*text', ...
+                        '————————— ——————————— ——————————— ——————————— ———————————— ——————————— ———————————— ——————————— —————————— ———————————\n');
+            end
+            fprintf('%9d %11.2f %11G %11G %12G %11G %12G %11G %9d   %9d \n',...
+                k, r, fval_change, optimal_gap, re_norm, tol_primal, se_norm, tol_dual, num_iters, num_funccount);
             if mod(k,10) == 0
                 fprintf('\n');
             end
             b_stop = false;
-            if re_norm < tol_primal %&& se_norm < tol_dual
+            if re_norm < tol_primal %&& abs(fval_change)< 100 %&& se_norm < tol_dual
                 b_stop = true;
             end
             if b_stop || k>=ITER_LIMIT
@@ -538,6 +556,8 @@ end
         options.num_varx = Np;
         options.num_varz = this.num_varz;
         fval = this.fcnFastConfigProfit(x, this, options);
+        this.init_lambda_k = mean(lambda_k, 2);
+        this.init_q_k = mean(q_k, 2);
     end
 
 

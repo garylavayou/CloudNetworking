@@ -1,10 +1,10 @@
 %% Reconfiguration Ratio (Number of Variables)
-plot_lines = {'Dimconfig','DimconfigReserve', 'DimBaseline'};  % 'Fastconfig','FastconfigReserve', 
-legend_label = {'HSR', 'HSR-RSV', 'Baseline'};
+plot_lines = {'Fastconfig', 'DimBaseline'};  % 'Fastconfig','FastconfigReserve', 
 plot_metrics = {'ReconfigRatio'}; % 'FairIndex', 'Utilization', 'Profit'
+legend_label = {'FSR', 'Baseline'};
 marker = {'x', 'o', 's', 'd'};
 line_style = {'-',  '--', '-.'};
-color_set = [Color.MildGreen; Color.Red; Color.MildBlue; Color.Purple; Color.Black; Color.Gray];
+color_set = [Color.MildBlue; Color.Red; Color.MildGreen; Color.Purple; Color.Black; Color.Gray];
 idx_offset = 2;
 
 if ~exist('figs', 'var') || ~isstruct(figs)
@@ -33,20 +33,20 @@ for k = 1:length(plot_metrics)
     end
     for j = 1:length(plot_lines)
         name = plot_lines{j};
-        if (strcmpi(name, 'Baseline') || strcmpi(name, 'dimbaseline')) && strcmpi(metric, 'ReconfigRatio')
-            continue;
-        end
         if (strcmpi(name, 'Baseline') || strcmpi(name, 'dimbaseline')) && strcmpi(mode, 'var-eta')
-            mean_value = mean(results.(name){1}{idx,metric})*ones(length(vars),1);
+            if strcmpi(metric, 'reconfigratio')
+                mean_value = mean(results.(name){1}{idx,'NumberReconfigVariables'}./...
+                        results.(name){1}{idx,'NumberVariables'})*ones(length(vars),1);
+            else
+                mean_value = mean(results.(name){1}{idx,metric})*ones(length(vars),1);
+            end
         else
             mean_value = zeros(length(results.(name)),1);
             for i = 1:length(results.(name))
                 idx = idx_offset:height(results.(name){i});
                 if strcmpi(metric, 'reconfigratio')
                     mean_value(i) = mean(results.(name){i}{idx,'NumberReconfigVariables'}./...
-                        results.(name){i}{idx,'NumberVariables'})/...
-                        mean(results.DimBaseline{1}{idx,'NumberReconfigVariables'}./...
-                        results.DimBaseline{1}{idx,'NumberVariables'});
+                        results.(name){i}{idx,'NumberVariables'});
                 else
                     mean_value(i) = mean(results.(name){i}{idx,metric});
                 end
@@ -87,15 +87,7 @@ for k = 1:length(plot_metrics)
         case 'var-number'
             ax.OuterPosition = [0 0.01 1.08 1.04];
     end
-    if strcmpi(metric, 'ReconfigRatio')
-        if strcmpi(mode, 'var-weight')
-            legend(legend_label, 'Location', 'northwest');
-        else
-            legend(legend_label, 'Location', 'northeast');
-        end
-    else
-        legend(legend_label, 'Location', 'best');
-    end
+    legend(legend_label, 'Location', 'best');
     if strcmpi(metric, 'Profit')
         if strcmpi(mode, 'var-weight')
             ax.OuterPosition = [0 0.01 1.05 1.00];
@@ -107,11 +99,11 @@ for k = 1:length(plot_metrics)
 end
 switch mode
     case 'var-eta'
-        filename = 'Figures/reconfig-ratio-vareta';
+        filename = 'Figures/reconfig-ratio-vareta-fastcomp';
     case 'var-number'
-        filename = 'Figures/reconfig-ratio-varnum';
+        filename = 'Figures/reconfig-ratio-varnum-fastcomp';
     case 'var-weight'
-        filename = 'figures/reconfig-ratio-varweight';
+        filename = 'figures/reconfig-ratio-varweight-fastcomp';
 end
 export_fig(figs.ReconfigRatio, filename, '-pdf', '-transparent');
 %%
@@ -119,3 +111,17 @@ export_fig(figs.ReconfigRatio, filename, '-pdf', '-transparent');
 function mean_profit(profit, reconfig_cost)
 
 end
+%%
+% # Save Results
+% A group of experiments with varying parameters
+%{
+varname = split(mode, '-'); varname = varname{2};
+description = sprintf('%s\n%s\n%s',...
+    sprintf('Experiment 502%d: verify the influence of network settings to FSR (without warm-up phase).', type.Permanent),...
+    sprintf('Topology=Sample-2, SliceType = %d (disable ad-hoc mode, enable dimensioning).', type.Index(type.Permanent)),...
+    sprintf('variables = %s', varname)...
+    );
+output_name = sprintf('Results/EXP502%d_var%s_fast.mat', type.Permanent, varname);
+save(output_name, 'description', 'results', 'EXPNAME', 'mode', 'etas', 'numberflow', 'weight', ...
+    'options', 'node_opt', 'link_opt', 'VNF_opt', 'slice_opt', 'type', 'NUM_EVENT');
+%}
