@@ -33,10 +33,8 @@ if exist('fig_num_reconfig', 'var') && fig_num_reconfig.isvalid
 else
     fig_num_reconfig = figure('Name', 'Number of Reconfiguration');
 end
-out_pos = fig_num_reconfig.OuterPosition;
-%     out_pos(3:4) = [496 476];
-out_pos(3:4) = [360 380];
-fig_num_reconfig.OuterPosition = out_pos;
+fig_num_reconfig.OuterPosition(3:4) = [360 380]; %  [496 476];
+
 hl = plot(t, cumsum(results.Fastconfig{ex_id}{tx,'NumberReconfigVariables'}),'-',...
     t, cumsum(results.DimBaseline{ex_id}{tx,'NumberReconfigVariables'}), '--s');
 for k=1:length(hl)
@@ -64,10 +62,7 @@ end
 if exist('textBox', 'var')
     textBox.delete;
 end
-out_pos = fig_num_reconfig_flow.OuterPosition;
-%     out_pos(3:4) = [496 476];
-out_pos(3:4) = [360 380];
-fig_num_reconfig_flow.OuterPosition = out_pos;
+fig_num_reconfig_flow.OuterPosition(3:4) = [360 380]; % [496 476];
 % fig_num_reconfig.OuterPosition = [100 400 400 380];
 hl = plot(t, cumsum(results.Fastconfig{ex_id}{tx,'NumberReconfigFlows'}),'-',...
     t, cumsum(results.DimBaseline{ex_id}{tx,'NumberReconfigFlows'}), '--s');
@@ -100,10 +95,7 @@ if exist('fig_profit_reconfig', 'var') && fig_profit_reconfig.isvalid
 else
     fig_profit_reconfig = figure('Name', 'Profit with Reconfiguration');
 end
-out_pos = fig_profit_reconfig.OuterPosition;
-% out_pos(3:4) = [496 476];
-out_pos(3:4) = [360 380];
-fig_profit_reconfig.OuterPosition = out_pos;
+fig_profit_reconfig.OuterPosition(3:4) = [360 380]; % [496 476];
 cost = [results.Fastconfig{ex_id}{tx,'Cost'}.*results.Fastconfig{ex_id}{tx,'Interval'},...
     results.DimBaseline{1}{tx,'Cost'}.*results.DimBaseline{1}{tx,'Interval'}];
 profit = [results.Fastconfig{ex_id}{tx,'Profit'}+results.Fastconfig{ex_id}{tx,'Cost'},...
@@ -150,10 +142,8 @@ if exist('fig_cost', 'var') && fig_cost.isvalid
 else
     fig_cost = figure('Name', 'Reconfiguration Cost');
 end
-out_pos = fig_cost.OuterPosition;
-% out_pos(3:4) = [496 476];
-out_pos(3:4) = [360 380];
-fig_cost.OuterPosition = out_pos;
+fig_cost.OuterPosition(3:4) = [360 380]; % [496 476];
+
 hl = plot(t, cumsum(cost(:,1)),'-',...
     t, cumsum(cost(:,2)), '--s');
 for k=1:length(hl)

@@ -22,7 +22,7 @@ if isfield(this.options, 'penalty') && ~isempty(this.options)
 elseif ~isfield(options, 'bDistributed') || isempty(options.bDistributed)
     options.bDistributed = false;
 end
-    
+
 Nf = this.NumberFlows;
 if Nf == 0
     [profit, cost] = this.handle_zero_flow(options);
@@ -211,11 +211,12 @@ fprintf('%s: initilizing arguements ... Elapsed time is %f seconds.\n', calledby
 fmincon_opt = optimoptions(@fmincon);
 fmincon_opt.Algorithm = 'interior-point';
 fmincon_opt.SpecifyObjectiveGradient = true;
-fmincon_opt.Display = 'notify';
+fmincon_opt.Display = 'notify';     % iter
 % fmincon_opt.CheckGradients = true;
 % fmincon_opt.FiniteDifferenceType = 'central';
 t1 = tic;
 if options.bDistributed
+    fmincon_opt.OptimalityTolerance = 1e-5;
     [x, fval, k] = distribute_optimization();
 else
     if strcmpi(options.Form, 'compact')
@@ -326,7 +327,7 @@ end
 % distributed, and thus the shared information might not be available if not copyed.
 % NOTE3: It is assumed that flow indices and path indices are continuous for each
 % sub-problem.
-    function [x, fval, k] = distribute_optimization(num_process, r, ~)
+    function [x, fval, k] = distribute_optimization(num_process, r, tols, opt_order)
         %% parameters
         if nargin <1
             num_process = floor(Nf);
@@ -334,23 +335,29 @@ end
             num_process = min(num_process, floor(Nf));
         end
         % num_process <= NF
-        if nargin <= 1
+        if nargin <= 1 || isempty(r)
             if isfield(this.options, 'penalty')
                 r = this.options.penalty;
             else
                 r = 5;
             end
         end
-        if nargin <= 2
+        if nargin <= 2 || isempty(tols)
             eps_abs = 10^-6;
             eps_rel = 10^-3;
+        else
+            eps_abs = tols.abs;
+            eps_rel = tols.rel;
+        end
+        if nargin <= 3 || isempty(opt_order)
+            opt_order = 1;
         end
         if license('test', 'Distrib_Computing_Toolbox')
             p = gcp('nocreate');
         else
             p = [];
         end
-        if isempty(p)
+        if isempty(p) || contains(fmincon_opt.Display, 'iter')
             M = 0;
         else
             M = p.NumWorkers;
@@ -393,7 +400,7 @@ end
         end
         t1 = tic;
         parfor (i = 1:num_process,M)
-        %for i = 1:num_process   % DEBUG
+            %for i = 1:num_process   % DEBUG
             flow_indices = flow_idx_offset(i) + (1:num_flows(i));
             path_indices = (find(sum(I_flow_path(flow_indices,:),1)))'; %#ok<PFBNS>
             num_paths = length(path_indices);
@@ -468,16 +475,21 @@ end
         output_k = cell(num_process,1);
         fcnObjective = @fcnAugmentedPrimalBasic;
         hessDual = @hessDualBasic;
+        if opt_order~=1
+            gamma_k = (sum(lambda_k,2) - sum(q_k,2)/r)/num_process;
+        end
         
         k = 1;
         t1 = tic;
         while true
-            gamma_k = (sum(lambda_k,2) - sum(q_k,2)/r)/num_process;
             fval_lambda_kminus = fval_lambda_k;
             fval_gamma_kminus = fval_gamma_k;
-            lambda_kminus = lambda_k;
+            if opt_order == 1
+                lambda_kminus = lambda_k;
+                gamma_k = (sum(lambda_k,2) - sum(q_k,2)/r)/num_process;
+            end
             parfor (j = 1:num_process,M)
-            %for j = 1:num_process
+                %for j = 1:num_process
                 fminopt = fmincon_opt;
                 xk = distr_xk{j};
                 fminopt.HessianFcn = @(x,lambda) ...
@@ -491,23 +503,33 @@ end
                     gamma_k+1/r*(q_k(:,j)+distr_params(j).cl*xk-distr_params(j).cr));
                 distr_xk{j} = xk;
             end
+            if opt_oder ~= 1
+                gamma_kminus = gamma_k;
+                gamma_k = (sum(lambda_k,2) - sum(q_k,2)/r)/num_process;
+            end
             fval_gamma_k = sum(q_k'*gamma_k);  % the L2-norm part is counted when computin lambda
             q_k = q_k + r*(gamma_k-lambda_k);
             re = lambda_k - gamma_k;
             re_norm = norm(re(:));
-            se = r*sum(lambda_k-lambda_kminus,2);
-            se_norm = norm(se);
+            if opt_order == 1
+                se = r*sum(lambda_k-lambda_kminus,2);
+                se_norm = norm(se);
+                tol_dual = eps_abs*sqrt(num_dual) + eps_rel*norm(sum(q_k,2));       % eps_rel*|A'*y|_2
+            else
+                se = r*(gamma_k-gamma_kminus);
+                se_norm = sqrt(num_process)*norm(se);
+                tol_dual = eps_abs*sqrt(num_dual*num_process) + eps_rel*norm(q_k);       % eps_rel*|A'*y|_2
+            end
             %% Stop Condition
             % Number of primal variables: in the dual-ADMM formulation, the primal
             %   variables include: (a) the dual variables of the original problems, (b)
             %   the auxiliary variables used to construct the equality system $λ-γi=0$.
             %   The size of primal variables thus is |num_dual+num_dual*num_process|;
             % Number of dual variables: the dual variables are the multipliers
-            %   corresponding to the equality constraints $λ-γi=0$. Thus the size is 
+            %   corresponding to the equality constraints $λ-γi=0$. Thus the size is
             %   |num_dual*num_process|;
             tol_primal = eps_abs*sqrt(num_dual*num_process) + ...
                 eps_rel*max(sqrt(num_process)*norm(gamma_k), norm(lambda_k(:)));
-            tol_dual = eps_abs*sqrt(num_dual) + eps_rel*norm(sum(q_k,2));       % eps_rel*|A'*y|_2
             fval_change = (sum(fval_lambda_k)+fval_gamma_k)-(sum(fval_lambda_kminus)+fval_gamma_kminus);
             optimal_gap = abs(fval_change/(sum(fval_lambda_k)+fval_gamma_k));
             
@@ -520,13 +542,14 @@ end
             num_iters = round(num_iters/num_process);
             num_funccount = round(num_funccount/num_process);
             if mod(k,10) == 1
-                fprintf('                                               Primal-                  Dual-                   Sub-       Sub- \n');
-                fprintf('Iteration Step-length Dual-change Optimal-gap  optimality   Tolerance   optimality   Tolerance  Iterations Evaluations\n');
+                fprintf('                                              Primal-                  Dual-                   Sub-       Sub- \n');
+                fprintf('Iteration Step-length       Dual-change       optimality   Tolerance   optimality   Tolerance  Iterations Evaluations\n');
                 cprintf('*text', ...
-                        '————————— ——————————— ——————————— ——————————— ———————————— ——————————— ———————————— ——————————— —————————— ———————————\n');
+                    '————————— ——————————— —————————————————————— ———————————— ——————————— ———————————— ——————————— —————————— ———————————\n');
             end
-            fprintf('%9d %11.2f %11G %11G %12G %11G %12G %11G %9d   %9d \n',...
+            fprintf('%8d  %10.2f  %10G %10G   %10G  %10G   %10G  %10G  %9d   %9d \n',...
                 k, r, fval_change, optimal_gap, re_norm, tol_primal, se_norm, tol_dual, num_iters, num_funccount);
+
             if mod(k,10) == 0
                 fprintf('\n');
             end
@@ -588,7 +611,7 @@ if nargout >= 2
     grad = zeros(num_vars, 1);
     for p = 1:params.num_varx
         i = params.path_owner(p) - params.fidx(1) + 1;
-        grad(p) = -params.weight/(1+params.I_flow_path(i,:)*var_x); 
+        grad(p) = -params.weight/(1+params.I_flow_path(i,:)*var_x);
     end
     grad(var_tx_index) = params.x_reconfig_cost;
     grad(var_tz_index) = params.z_reconfig_cost;
@@ -613,11 +636,11 @@ end
 function h = hessDualBasic(vars, lambda, gamma, q, r, params) %#ok<INUSL>
 var_x = vars(1:params.num_varx);
 num_vars = length(vars);
-h = zeros(num_vars, num_vars); 
+h = zeros(num_vars, num_vars);
 for p = 1:params.num_varx
     i = params.path_owner(p) - params.fidx(1) + 1;
     h(p,1:params.num_varx) = params.weight *...
-        params.I_flow_path(i,:)/(1+(params.I_flow_path(i,:)*var_x))^2; 
+        params.I_flow_path(i,:)/(1+(params.I_flow_path(i,:)*var_x))^2;
 end
 
 z_k = gamma+1/r*(q+params.cl*vars-params.cr);
@@ -626,3 +649,13 @@ A = params.cl;
 A(idx,:) = 0;
 h = h + (A')*A;
 end
+
+%% TEST
+%{
+fprintf('                                              Primal-                  Dual-                   Sub-       Sub- \n');
+fprintf('Iteration Step-length       Dual-change       optimality   Tolerance   optimality   Tolerance  Iterations Evaluations\n');
+cprintf('*text', ...
+        '————————— ——————————— —————————————————————— ———————————— ——————————— ———————————— ——————————— —————————— ———————————\n');
+fprintf('%8d  %10.2f  %10G %10G   %10G  %10G   %10G  %10G  %9d   %9d \n',...
+    100, 15.67,  12.3456, 0.012, 0.0011, 0.00012, 1.0234, 0.12345, 20, 45);
+%}

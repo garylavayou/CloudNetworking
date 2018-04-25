@@ -10,7 +10,7 @@
 % # This experiment has no warm-up phase (1).
 preconfig_42xx;
 global DEBUG;
-global computime ITER_LIMIT NUMBER_ITERS;
+global computime NUMBER_ITERS;
 DEBUG = true;
 type.Index = [144; 154; 164; 174; 184];
 type.Permanent = 4;
@@ -18,8 +18,8 @@ type.Static = [1; 2; 3];
 type.StaticCount = [1; 2; 2];
 type.StaticClass = {'Slice'};
 % mode = 'var-number'; etas = 2; numberflow = 1000; weight = 10; penalty = 0.5;  % [] for normal.
-mode = 'var-penalty'; etas = 1; numberflow = 1000; weight = 10; penalty = [1;2;4;8;12;16;20];   % (24,32) is too large to obtain accurate results.
-% mode = 'var-number'; etas = 1; numberflow = 100:100:1000; weight = 10; penalty = 4;  % [] for normal.
+% mode = 'var-penalty'; etas = 1; numberflow = 1000; weight = 10; penalty = [1;2;4;8;12;16;20];   % (24,32) is too large to obtain accurate results.
+mode = 'var-number'; etas = 1; numberflow = 100:100:1000; weight = 10; penalty = 4;  % [] for normal.
 b_fastconfig0 = true;        % FSR
 NUM_EVENT = 11;           
 idx = 1:NUM_EVENT;
@@ -30,7 +30,7 @@ else
     clear computime;
     clear NUMBER_ITERS;
 end
-ITER_LIMIT = inf;    % 20
+predefined_iter_limit = [93 77 58 35 28 22 28 27 27 23];   % average
 EXPNAME = sprintf('EXP6');
 if exist('penalty', 'var') && ~isempty(penalty) && license('test', 'Distrib_Computing_Toolbox') 
     p = gcp;
@@ -80,29 +80,59 @@ plot(penalty,mean_time);
 %}
 % save results
 %{
-description = ['Experiment 6001: running time of dual ADMM and the normal method, ',...
-    'varying penalty factor'];
-output_name = sprintf('Results/singles/EXP6001e%dn%03dw%2d.mat', etas, numberflow, weight);
-save(output_name, 'description', 'results', 'runtime', 'penalty', 'numiters');
+description = 'Experiment 6001: running time of dual ADMM, varying penalty factor';
+output_name = sprintf('Results/singles/EXP6001e%dn%dw%d.mat', etas, numberflow, weight);
+save(output_name, 'description', 'results', 'etas', 'weight', 'numberflow', 'penalty', ...
+    'runtime', 'numiters');
 %}
 % NOTE: penalty factor should not be too large, _i.e._, $r<=2$ will be fine; otherwise the
 %   results will be inaccurate. On the other hand the penalty should not be too small,
 %   otherwise the number of iteration will be large and the convergence rate is slow.
 
-%%
-% var size
+%% var size
+% plot admm runtime
 %{
 for i = length(runtime.varsize):-1:1
     mean_time(i) = mean(runtime.varsize(i).admm)/numberflow(i)*6;
 end
 plot(numberflow,mean_time);
 %}
+% plot normal runtime
+%{
+for i = length(runtime.varsize):-1:1
+    mean_time(i) = mean(runtime.varsize(i).normal);
+end
+plot(numberflow,mean_time);
+%}
+% statistics on number of iterations
+%{
+ll = length(numiters.varsize);
+max_iters = zeros(1,ll);
+min_iters = zeros(1,ll);
+avg_iters = zeros(1,ll);
+for i = 1:length(numiters.varsize)
+    max_iters(i) = max(numiters.varsize(i).admm);
+    min_iters(i) = min(numiters.varsize(i).admm);
+    avg_iters(i) = round(mean(numiters.varsize(i).admm));
+end
+disp(max_iters)
+disp(min_iters)
+disp(avg_iters)
+% 139   130   148   106    67    65    53    45    38    34
+%  62    44    27    15    16    13    17    14    17    14
+%  93    77    58    35    28    22    28    27    27    23
+%}
 % save results
 %{
 description = ['Experiment 6002: running time of dual ADMM and the normal method, ',...
     'varying slice size (number of flows)'];
-output_name = 'Results/singles/EXP6002.mat';
-save(output_name, 'description', 'results', 'runtime', 'penalty', 'numberflow');
+if isempty(penalty)
+    output_name = sprintf('Results/singles/EXP6002e%dw%dp_.mat', etas, weight);
+else
+    output_name = sprintf('Results/singles/EXP6002e%dw%dp%d.mat', etas, weight, penalty);
+end
+save(output_name, 'description', 'results', 'etas', 'weight', 'penalty', 'numberflow', ...
+    'runtime', 'numiters');
 %}
 %{
 description = ['Experiment 6003: running time of dual ADMM method, ',...

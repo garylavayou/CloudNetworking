@@ -20,10 +20,7 @@ if exist('fig_num_reconfig', 'var') && fig_num_reconfig.isvalid
 else
     fig_num_reconfig = figure('Name', 'Number of Reconfiguration');
 end
-out_pos = fig_num_reconfig.OuterPosition;
-%     out_pos(3:4) = [496 476];
-out_pos(3:4) = [360 380];
-fig_num_reconfig.OuterPosition = out_pos;
+fig_num_reconfig.OuterPosition(3:4) = [360 380]; % [496 476];
 hl = plot(t, cumsum(results.Dimconfig{ex_id}{tx,'NumberReconfigVariables'}),'-',...
     t, cumsum(results.DimconfigReserve{ex_id}{tx,'NumberReconfigVariables'}),'-.',...
     t, cumsum(results.DimBaseline{1}{tx,'NumberReconfigVariables'}), '--s');
@@ -63,10 +60,7 @@ end
 if exist('textBox', 'var')
     textBox.delete;
 end
-out_pos = fig_num_reconfig_flow.OuterPosition;
-%     out_pos(3:4) = [496 476];
-out_pos(3:4) = [360 380];
-fig_num_reconfig_flow.OuterPosition = out_pos;
+fig_num_reconfig_flow.OuterPosition(3:4) = [360 380]; % [496 476];
 % fig_num_reconfig.OuterPosition = [100 400 400 380];
 hl = plot(t, cumsum(results.Dimconfig{ex_id}{tx,'NumberReconfigFlows'}),'-',...
     t, cumsum(results.DimconfigReserve{ex_id}{tx,'NumberReconfigFlows'}),'-.',...
@@ -112,10 +106,7 @@ if exist('fig_profit_reconfig', 'var') && fig_profit_reconfig.isvalid
 else
     fig_profit_reconfig = figure('Name', 'Profit with Reconfiguration');
 end
-out_pos = fig_profit_reconfig.OuterPosition;
-% out_pos(3:4) = [496 476];
-out_pos(3:4) = [360 380];
-fig_profit_reconfig.OuterPosition = out_pos;
+fig_profit_reconfig.OuterPosition(3:4) = [360 380]; % [496 476];
 cost = [results.Dimconfig{ex_id}{tx,'Cost'}.*results.Dimconfig{ex_id}{tx,'Interval'},...
     results.DimconfigReserve{ex_id}{tx,'Cost'}.*results.DimconfigReserve{ex_id}{tx,'Interval'},...
     results.DimBaseline{1}{tx,'Cost'}.*results.DimBaseline{1}{tx,'Interval'}];
@@ -164,10 +155,8 @@ if exist('fig_cost', 'var') && fig_cost.isvalid
 else
     fig_cost = figure('Name', 'Reconfiguration Cost');
 end
-out_pos = fig_cost.OuterPosition;
-% out_pos(3:4) = [496 476];
-out_pos(3:4) = [360 380];
-fig_cost.OuterPosition = out_pos;
+fig_cost.OuterPosition(3:4) = [360 380]; % [496 476];
+
 hl = plot(t, cumsum(cost(:,1)),'-',...
     t, cumsum(cost(:,2)),'-.',...
     t, cumsum(cost(:,3)), '--s');
@@ -193,10 +182,8 @@ if exist('fig_util', 'var') && fig_util.isvalid
 else
     fig_util = figure('Name', 'Utilization of Slice Resources');
 end
-out_pos = fig_util.OuterPosition;
-% out_pos(3:4) = [496 476];
-out_pos(3:4) = [362 367];
-fig_util.OuterPosition = out_pos;
+fig_util.OuterPosition(3:4) = [362 367]; % [496 476];
+
 hl = plot(t, results.Dimconfig{ex_id}{tx,'Utilization'},'-',...
     t, results.DimconfigReserve{ex_id}{tx,'Utilization'},'-.',...
     t, results.DimBaseline{1}{tx,'Utilization'}, '--s');
@@ -223,10 +210,8 @@ if exist('fig_fairness', 'var') && fig_fairness.isvalid
 else
     fig_fairness = figure('Name', 'Fairness Index');
 end
-out_pos = fig_fairness.OuterPosition;
-% out_pos(3:4) = [496 476];
-out_pos(3:4) = [360 380];
-fig_fairness.OuterPosition = out_pos;
+fig_fairness.OuterPosition(3:4) = [360 380]; % [496 476];
+
 hl = plot(t, results.Dimconfig{ex_id}{tx,'FairIndex'},'-',...
     t, results.DimconfigReserve{ex_id}{tx,'FairIndex'},'-.',...
     t, results.DimBaseline{1}{tx,'FairIndex'}, '--s');
