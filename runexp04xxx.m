@@ -1,6 +1,7 @@
 %% Run script
 % single slice reconfiguration
 %%
+global ITER_LIMIT; 
 invoke_methods = [];
 title_names = cell(0);
 if ~exist('mode', 'var')
@@ -101,7 +102,7 @@ end
 if ~strcmpi(mode, 'var-number') && exist('numberflow', 'var') && ~isscalar(numberflow)
     warning('%s: ''numberflow'' is not a scalar.', calledby);
 end
-if ~strcmpi(mode, 'var-penalty') && exist('penalty', 'var') && ~isscalar(numberflow)
+if ~strcmpi(mode, 'var-penalty') && exist('penalty', 'var') && ~isscalar(penalty)
     warning('%s: ''penalty'' is not a scalar.', calledby);
 end
 for j = 1:length(invoke_methods)
@@ -152,6 +153,15 @@ for j = 1:length(invoke_methods)
                 if exist('etas', 'var')
                     options.UnitReconfigureCost = etas(1);
                 end
+        end
+        if exist('predefined_iter_limit', 'var')
+            if isscalar(predefined_iter_limit)
+                ITER_LIMIT = predefined_iter_limit;
+            else
+                ITER_LIMIT = predefined_iter_limit(i);
+            end
+        else
+            ITER_LIMIT = inf;
         end
         SingleSliceReconfiguration;
         if i == 1

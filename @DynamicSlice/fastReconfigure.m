@@ -216,8 +216,8 @@ fmincon_opt.Display = 'notify';     % iter
 % fmincon_opt.FiniteDifferenceType = 'central';
 t1 = tic;
 if options.bDistributed
-    fmincon_opt.OptimalityTolerance = 1e-5;
-    [x, fval, k] = distribute_optimization();
+    fmincon_opt.OptimalityTolerance = 1e-5;     % In-exact solving the sub-problems
+    [x, fval, k] = distribute_optimization([],[],[],0);
 else
     if strcmpi(options.Form, 'compact')
         %% get the compact formulation
@@ -329,7 +329,7 @@ end
 % sub-problem.
     function [x, fval, k] = distribute_optimization(num_process, r, tols, opt_order)
         %% parameters
-        if nargin <1
+        if nargin<1 || isempty(num_process)
             num_process = floor(Nf);
         else
             num_process = min(num_process, floor(Nf));
@@ -503,7 +503,7 @@ end
                     gamma_k+1/r*(q_k(:,j)+distr_params(j).cl*xk-distr_params(j).cr));
                 distr_xk{j} = xk;
             end
-            if opt_oder ~= 1
+            if opt_order ~= 1
                 gamma_kminus = gamma_k;
                 gamma_k = (sum(lambda_k,2) - sum(q_k,2)/r)/num_process;
             end
@@ -547,7 +547,7 @@ end
                 cprintf('*text', ...
                     '————————— ——————————— —————————————————————— ———————————— ——————————— ———————————— ——————————— —————————— ———————————\n');
             end
-            fprintf('%8d  %10.2f  %10G %10G   %10G  %10G   %10G  %10G  %9d   %9d \n',...
+            fprintf('%8d  %10.2f  %10G %10.4G   %10.4G  %10.4G   %10.4G  %10.4G  %9d   %9d \n',...
                 k, r, fval_change, optimal_gap, re_norm, tol_primal, se_norm, tol_dual, num_iters, num_funccount);
 
             if mod(k,10) == 0
@@ -656,6 +656,6 @@ fprintf('                                              Primal-                  
 fprintf('Iteration Step-length       Dual-change       optimality   Tolerance   optimality   Tolerance  Iterations Evaluations\n');
 cprintf('*text', ...
         '————————— ——————————— —————————————————————— ———————————— ——————————— ———————————— ——————————— —————————— ———————————\n');
-fprintf('%8d  %10.2f  %10G %10G   %10G  %10G   %10G  %10G  %9d   %9d \n',...
+fprintf('%8d  %10.2f  %10G %10.8G   %10.8G  %10.8G   %10.8G  %10.8G  %9d   %9d \n',...
     100, 15.67,  12.3456, 0.012, 0.0011, 0.00012, 1.0234, 0.12345, 20, 45);
 %}
