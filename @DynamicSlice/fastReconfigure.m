@@ -543,9 +543,9 @@ end
             num_funccount = round(num_funccount/num_process);
             if mod(k,10) == 1
                 fprintf('                                              Primal-                  Dual-                   Sub-       Sub- \n');
-                fprintf('Iteration Step-length       Dual-change       optimality   Tolerance   optimality   Tolerance  Iterations Evaluations\n');
+                fprintf('Iteration Step-length  Dual-change/Percent    optimality   Tolerance   optimality   Tolerance  Iterations Evaluations\n');
                 cprintf('*text', ...
-                    '————————— ——————————— —————————————————————— ———————————— ——————————— ———————————— ——————————— —————————— ———————————\n');
+                        '————————— ——————————— —————————————————————— ———————————— ——————————— ———————————— ——————————— —————————— ———————————\n');
             end
             fprintf('%8d  %10.2f  %10G %10.4G   %10.4G  %10.4G   %10.4G  %10.4G  %9d   %9d \n',...
                 k, r, fval_change, optimal_gap, re_norm, tol_primal, se_norm, tol_dual, num_iters, num_funccount);
