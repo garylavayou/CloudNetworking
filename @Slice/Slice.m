@@ -309,7 +309,7 @@ classdef Slice < VirtualNetwork & EventReceiver
             end
         end
         
-        [profit, grad] = fcnSocialWelfare(x_vars, S);
+        [profit, grad] = fcnSocialWelfare(x_vars, S, options);
         function [profit, grad] = fcnSocialWelfareCompact(act_vars, slice)
             vars = zeros(options.num_orig_vars,1);
             vars(slice.I_active_variables) = act_vars;
@@ -499,7 +499,7 @@ classdef Slice < VirtualNetwork & EventReceiver
                     params.lb, params.ub, [], options.fmincon_opt);
             else  % 'normal', 'single-function', ...
                 [xs, fval, exitflag, output] = ...
-                    fmincon(@(x)Slice.fcnSocialWelfare(x,this), ...
+                    fmincon(@(x)Slice.fcnSocialWelfare(x,this,options), ...
                     params.x0, params.As, params.bs, params.Aeq, params.beq, ...
                     params.lb, params.ub, [], options.fmincon_opt);
             end

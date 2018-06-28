@@ -1,16 +1,18 @@
 %% Static Network Slicing
-% In the static slicing method, once the resource is allocated to a slice, the allocation
-% scheme is not changed during its lifetime.
+% In the static slicing method, once the resource is allocated to a slice,
+% the allocation scheme is not changed during its lifetime.
 %
-% *NOTE*: when link and node resources are exhausted, some slice request might be
-% rejected.
+% *NOTE*: when link and node resources are exhausted, some slice request
+% might be rejected.
 %%
-% |options|: if _Method_ is 'slice', then we dimension the slice without pricing,
-% otherwise, the fixed pricing policy is adopted ('slice-price'). [Deprecated]
+% |options|: if _Method_ is 'slice', then we dimension the slice without
+% pricing, otherwise, the fixed pricing policy is adopted ('slice-price').
+% [Deprecated] 
 %
 % *TODO*: we can adjust the unit price according to the residual capacity.
 function output = staticSlicing(this, slice)
-options = getstructfields(this.options, {'ConstraintTolerance','SlicingMethod','Form'}, 'ignore');
+options = getstructfields(this.options, ...
+	{'ConstraintTolerance','SlicingMethod','Form'}, 'ignore');
 if contains(options.SlicingMethod, 'price')  % options for _optimalFlowRate_.
     options.PricingPolicy = 'linear';
 else
@@ -47,5 +49,6 @@ this.setDataCenterField('Load', node_load);
 this.setLinkField('Load', link_load);
 
 % Calculate the output
+options.Slices = this.slices;
 output = this.calculateOutput([], options);
 end

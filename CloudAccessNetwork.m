@@ -146,8 +146,8 @@ classdef CloudAccessNetwork < CloudNetwork
             end
         end
         %         [flow_table, phy_adjacent, flag] = generateFlowTable( this, graph, slice_opt )
-        function slice_opt = preAddingSlice(this, slice_opt)
-            warning('TODO');
-        end
+%         function slice_opt = preAddingSlice(this, slice_opt)
+%             warning('TODO');
+%         end
     end
 end

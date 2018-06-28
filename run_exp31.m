@@ -1,49 +1,49 @@
 %%
-% Giving a combination of different types of slices, calculate the performace metrics.
+% Giving a combination of different types of slices, calculate the
+% performace metrics. 
+%
+% Network Model: Sample1
+
 %% NOTE
-% Compared with <run_exp301.m>, in this program, each iteration will not repeatly add slices
-% to the network, only new slices will be added to the network based on the last one
-% iteration. Thus, the computation time of static slicing and path calculation can be
-% saved.
+% Compared with <run_exp301.m>, in this program, each iteration will not
+% repeatly add slices to the network, only new slices will be added to the
+% network based on the last one iteration. Thus, the computation time of
+% static slicing and path calculation can be saved.
 
 %% Configurable parameters in this experiment
 link_opt.CostUnit = 100;        % 75 | 100 | 150
 node_opt.CostUnit = 300;        % 250 | 300 | 500
-options.PricingFactor = 2;      % 1 | 2 | 3 ,
-options.Threshold = 'average';
+net_opt.PricingFactor = 2;      % 1 | 2 | 3 ,
+net_opt.Threshold = 'average';
+% Experiment Control
+b_single_optimal = true;
+b_price_adjust1 = true;
+b_price_adjust2 = true;
+b_static_slice = true;
 
 %% Specification of VNFs and Network Slices
+link_opt.RandomSeed = 20170423;
 link_opt.delay = LinkDelayOption.Random;
 link_opt.cost = LinkCostOption.CapacityInverse;
 link_opt.CapacityFactor = 30;
-link_opt.RandomSeed = 20170423;
-net_opt.delta = 0.7;
 
-node_opt.model = NetworkModel.Sample1;
+node_opt.model = NetworkModel.Sample1;		
 node_opt.capacity = NodeCapacityOption.BandwidthProportion;
 node_opt.cost = NodeCostOption.CapacityInverse;
 node_opt.CapacityFactor = 1.5;     % [0.3; 0.5; 0.8; 1]
-net_opt.NetworkClass = 'CloudAccessNetwork';
 net_opt.AdmitPolicy = 'reject-flow';
+net_opt.NetworkClass = 'CloudNetwork';
 
 VNF_opt.Number = 4;            % number of VNF type
 VNF_opt.Model = VNFIntegrateModel.AllInOne;
 VNF_opt.RandomSeed = [20161101 0];
 
 %% Slice Combination
-slice_config.Type = [13; 23; 33];
+slice_config.Type = [11; 21; 31];
 slice_config.RatioSet = {[1;1;1],[4; 1; 1],[1; 4; 1], [1; 1; 4]};
 slice_config.Count = 4:4:36;
 
-%% Algorithm options
-options.ProfitType = {'ApproximatePrice','AccuratePrice'};
-options.WelfareType = {'Accurate', 'Approximate'};
-
-%% Experiment Control
-b_single_optimal = true;
-b_price_adjust1 = true;
-b_price_adjust2 = true;
-b_static_slice = true;
+%% Initialization
 experiment_length = length(slice_config.RatioSet) * length(slice_config.Count)*...
     (b_single_optimal+b_price_adjust1+b_price_adjust2+b_static_slice);
 current_length = 0;
@@ -52,7 +52,7 @@ progress_bar = waitbar(current_length/experiment_length, ...
 progress_bar.Name = 'Computing Progress';
 pause(0.01);
 
-%%
+num_config = length(slice_config.RatioSet);
 if (~exist('output_results', 'var') || ~isstruct(output_results))
     if exist('output_file_name', 'file')
         load('output_file_name', 'output_results');
@@ -62,7 +62,6 @@ if (~exist('output_results', 'var') || ~isstruct(output_results))
 end
 num_point = length(slice_config.Count);
 num_type = length(slice_config.Type);
-num_config = length(slice_config.RatioSet);
 for exp_id = 1:num_config
     slice_config.Ratio = slice_config.RatioSet{exp_id};
     seed = 20170430;
@@ -71,9 +70,6 @@ for exp_id = 1:num_config
     if b_single_optimal
         [stat_optimal, slice_stat_optimal] = ...
             CloudNetwork.createStatTable(num_point, num_type, 'optimal-spp'); 
-        if ~isfield(net_opt, 'AdmitPolicy')
-            net_opt.AdmitPolicy = 'reject-flow';
-        end
     end
     if b_price_adjust1
         [stat_price1, slice_stat_price1] = ...
@@ -90,12 +86,10 @@ for exp_id = 1:num_config
         PN_static = instantiateclass(net_opt.ClassName, ...
             node_opt, link_opt, VNF_opt, net_opt);
         PN_static.slice_template = Slice.loadSliceTemplate(slice_config.Type);
-        link_price = PN_static.getLinkCost * (1 + options.PricingFactor);
-        node_price = PN_static.getNodeCost * (1 + options.PricingFactor);
+        link_price = PN_static.getLinkCost * (1 + net_opt.PricingFactor);
+        node_price = PN_static.getNodeCost * (1 + net_opt.PricingFactor);
         PN_static.setLinkField('Price', link_price);
         PN_static.setDataCenterField('Price', node_price);
-        static_opts = options;
-        static_opts.SlicingMethod = 'slice-price';
     end
     if b_single_optimal || b_price_adjust1 || b_price_adjust2
         PN = instantiateclass(net_opt.ClassName, ...
@@ -182,11 +176,11 @@ for exp_id = 1:num_config
                 fprintf('(%s)Static slicing: adding a slice %d.\n', datestr(now), ...
                     slice_opt.Type);
                 tic;
-                [output_static] = PN_static.staticSlicing(sl, static_opts);
+                [output_static] = PN_static.staticSlicing(sl);
                 rt(j) = toc;
             end
-            [tb, stbs] = saveStatTable(PN_static, output_static, rt, slice_config.Type, ...
-                num_type, 'static');
+            [tb, stbs] = saveStatTable(PN_static, output_static, rt, ...
+							slice_config.Type, 'static');
             stat_static(point_id, tb.Properties.VariableNames) = tb;
             for j = 1:num_type
                 slice_stat_static{j}(point_id, stbs.Properties.VariableNames) = stbs(j,:);
@@ -210,9 +204,9 @@ for exp_id = 1:num_config
         if b_single_optimal
             fprintf('(%s)Global SPP.\n', datestr(now));
             PN.setOptions('SlicingMethod', 'single-normal');
-            [output_optimal, rt] = PN.singleSliceOptimization(options);
-            [tb, stbs] = saveStatTable(PN, output_optimal, rt, slice_config.Type, ...
-                num_type, 'optimal-spp');
+            [output_optimal, rt] = PN.singleSliceOptimization(net_opt);
+            [tb, stbs] = saveStatTable(PN, output_optimal, rt, ...
+							slice_config.Type, 'optimal-spp');
             stat_optimal(point_id, tb.Properties.VariableNames) = tb;
             for j = 1:num_type
                 slice_stat_optimal{j}(point_id, stbs.Properties.VariableNames) = stbs(j,:);
@@ -225,9 +219,9 @@ for exp_id = 1:num_config
         if b_price_adjust1
             fprintf('(%s)Pricing-1.\n', datestr(now));
             PN.setOptions('SlicingMethod', 'price-adjust');
-            [output_price, rt] = PN.optimizeResourcePrice([], options);
-            [tb, stbs] = saveStatTable(PN, output_price, rt, slice_config.Type, ...
-                num_type, 'dynamic-price');
+            [output_price, rt] = PN.optimizeResourcePrice();
+            [tb, stbs] = saveStatTable(PN, output_price, rt, ...
+							slice_config.Type, 'dynamic-price');
             stat_price1(point_id, tb.Properties.VariableNames) = tb;
             for j = 1:num_type
                 slice_stat_price1{j}(point_id, stbs.Properties.VariableNames) = stbs(j,:);
@@ -241,8 +235,8 @@ for exp_id = 1:num_config
             fprintf('(%s)Pricing-2.\n', datestr(now));
             PN.setOptions('SlicingMethod', 'price-adjust');
             [output_price, rt] = PN.optimizeResourcePriceNew();
-            [tb, stbs] = saveStatTable(PN, output_price, rt, slice_config.Type, ...
-                num_type, 'dynamic-price');
+            [tb, stbs] = saveStatTable(PN, output_price, rt, ...
+							slice_config.Type, 'dynamic-price');
             stat_price2(point_id, tb.Properties.VariableNames) = tb;
             for j = 1:num_type
                 slice_stat_price2{j}(point_id, stbs.Properties.VariableNames) = stbs(j,:);
@@ -278,15 +272,16 @@ close(progress_bar);
 %% Figure
 
 %%
-% description = '{average profit ratio|max SP profit}, middle cost, middle price';
-% save('Results\output_4400.mat', 'output_results', 'description');
-
 welfare_limit = [0 60000];
 cost_limit = [0 5000];
 profit_limit = [0 12000];
-description = 'average profit ratio, middle cost, low price';
-save('Results\output_4401.mat', 'output_results', 'description', 'link_opt', 'node_opt',...
-    'net_opt', 'VNF_opt', 'slice_config', 'options');
+
+% description = '{average profit ratio|max SP profit}, middle cost, middle price';
+% save('Results\output_4400.mat', 'output_results', 'description');
+
+% description = 'average profit ratio, middle cost, low price';
+% save('Results\output_4401.mat', 'output_results', 'description', 'link_opt', 'node_opt',...
+%     'net_opt', 'VNF_opt', 'slice_config', 'options');
 
 % description = 'average profit ratio, middle cost, middle price';
 % save('Results\output_4402.mat', 'output_results', 'description', 'link_opt', 'node_opt',...

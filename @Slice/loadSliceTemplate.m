@@ -46,6 +46,7 @@ for i = 1:length(type_index)
             slice_template(i).ServiceInterval = 4;
             slice_template(i).Probability = 3/4;
             slice_template(i).ConstantProfit = 100;
+						
         case 12  % Type 1 for experiment 2
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
             slice_template(i).Weight =25;
@@ -76,6 +77,7 @@ for i = 1:length(type_index)
             slice_template(i).Probability = 5/6;
             slice_template(i).MinRate = 50;      % Mbps
             slice_template(i).ConstantProfit = 600;
+						
         case 13     % Type 1 for experiment 3
             slice_template(i).FlowPattern = FlowPattern.RandomInterDataCenter;
             slice_template(i).Weight = 40;
@@ -100,6 +102,7 @@ for i = 1:length(type_index)
             slice_template(i).VNFList = [1,4,6];
             slice_template(i).ServiceInterval = 4;
             slice_template(i).Probability = 5/6;
+						
         case 14     % Type 1 for experiment 4: dynamic flow arrival and departure.
             slice_template(i).Weight = 40;
             slice_template(i).NumberPaths = 1;
@@ -178,7 +181,7 @@ for i = 1:length(type_index)
             %
             % Flow arrival rate is set to 30 sec/arrival, i.e., 120 arrivals/hour, while
             % the service interval is set to 900s(10min), so that the average number of
-            % flows stays at 30(¡Ö36). 
+            % flows stays at 30(â‰ˆ36). 
             slice_template(i).Weight = 50;
             slice_template(i).NumberPaths = 2;
             slice_template(i).VNFList = [1,2,4,5];
