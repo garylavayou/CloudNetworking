@@ -9,8 +9,8 @@
 % _Methods_
 %	*single-normal*: combine all flows in one slice, and solve it as a global
 %           optimization; 
-%   *single-function*:
-%   *slice-price*: solve each slice's problem independently, with resource price known.
+% *single-function*:
+% *slice-price*: solve each slice's problem independently, with resource price known.
 %    resource prices should be set beforehand.
 % _CostModel_: 'fixed'.
 % _Form_: 'compact'|'normal'.
@@ -68,11 +68,10 @@ parameters.bs(idx) = [];
 % * *Start Point*: in case that the capacity of a virtual link/node is zero, we initialize
 % $z_{min}$ and $x_{min}$ as the nonzero minimum value.
 parameters.x0 = zeros(this.num_vars,1);
-switch options.SlicingMethod
-    case 'single-function'
-        max_alpha_f = max(options.Alpha_f);
-    otherwise
-        max_alpha_f = max(this.Parent.VNFTable{this.VNFList, 'ProcessEfficiency'});
+if options.SlicingMethod == SlicingMethod.SingleFunction
+	max_alpha_f = max(options.Alpha_f);
+else
+	max_alpha_f = max(this.Parent.VNFTable{this.VNFList, 'ProcessEfficiency'});
 end
 % z_min = min(this.VirtualNodes.Capacity(this.VirtualNodes.Capacity>1))/(NP*NV);
 % x_min = min(this.VirtualLinks.Capacity(this.VirtualLinks.Capacity>1))/NP;
@@ -126,30 +125,29 @@ options.fmincon_opt.HessianFcn = ...
 %
 % On the other hand, too small components should be rounded.
 this.temp_vars.x = x(1:NP);
-switch options.SlicingMethod
-    case 'single-function'
-        %% TODO
-        % allocate VNF instance by order.
-        this.VNFList = 1:this.Parent.NumberVNFs;
-        this.getAs_res;
-        z_np = x(NP+1:end);
-        z_np = reshape(this.I_node_path(:).*z_np, NC,NP);
-        znpf = zeros(NC, NP, this.NumberVNFs);
-        for v = 1:this.NumberVNFs
-            af = this.Parent.VNFTable.ProcessEfficiency(v);
-            idx_path = this.I_path_function(:,v)==1;
-            p_slice = this.path_owner(idx_path);
-            znpf(:, idx_path, v) = z_np(:, idx_path).*(af./this.alpha_f(p_slice))';
-        end
-        this.temp_vars.z = znpf(:);
-    otherwise
-        this.temp_vars.z = x((NP+1):end);
-        nz = this.NumberDataCenters*this.NumberPaths;
-        z_index = 1:nz;
-        for f = 1:this.NumberVNFs
-            this.temp_vars.z(z_index) = this.I_node_path(:).*this.temp_vars.z(z_index);
-            z_index = z_index + nz;
-        end
+if options.SlicingMethod == SlicingMethod.SingleFunction
+	%% TODO
+	% allocate VNF instance by order.
+	this.VNFList = 1:this.Parent.NumberVNFs;
+	this.getAs_res;
+	z_np = x(NP+1:end);
+	z_np = reshape(this.I_node_path(:).*z_np, NC,NP);
+	znpf = zeros(NC, NP, this.NumberVNFs);
+	for v = 1:this.NumberVNFs
+		af = this.Parent.VNFTable.ProcessEfficiency(v);
+		idx_path = this.I_path_function(:,v)==1;
+		p_slice = this.path_owner(idx_path);
+		znpf(:, idx_path, v) = z_np(:, idx_path).*(af./this.alpha_f(p_slice))';
+	end
+	this.temp_vars.z = znpf(:);
+else
+	this.temp_vars.z = x((NP+1):end);
+	nz = this.NumberDataCenters*this.NumberPaths;
+	z_index = 1:nz;
+	for f = 1:this.NumberVNFs
+		this.temp_vars.z(z_index) = this.I_node_path(:).*this.temp_vars.z(z_index);
+		z_index = z_index + nz;
+	end
 end
 clear znpf;
 this.flow_rate = this.getFlowRate(this.temp_vars.x);

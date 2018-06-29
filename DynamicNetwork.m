@@ -230,7 +230,7 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
             else
                 slice_opt.NumberFlows = numflow;
             end
-            slice_opt.SlicingMethod = 'dynamic-slicing';
+            slice_opt.SlicingMethod = SlicingMethod.AdjustPricing;
             b_vailid_flow = false;
             while ~b_vailid_flow
                 try

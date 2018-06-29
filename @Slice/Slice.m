@@ -60,7 +60,7 @@ classdef Slice < VirtualNetwork & EventReceiver
             end
             
             this.options = structmerge(this.options, ...
-                getstructfields(slice_data, 'SlicingMethod', 'default', 'dynamic-slicing'),...
+                getstructfields(slice_data, 'SlicingMethod', 'default', SlicingMethod.AdjustPricing),...
                 getstructfields(slice_data, 'PricingPolicy', 'ignore'));
 
             this.getAs_res;
@@ -491,19 +491,22 @@ classdef Slice < VirtualNetwork & EventReceiver
     methods (Access = protected)
         % Called by _optimalFlowRate_, if 'bCompact = true', options should be speicifed with
         % 'num_orig_vars'.
+				% See also <SlicingMethod>.
         function [x, fval] = optimize(this, params, options)
-            if contains(options.SlicingMethod, 'price') % 'price', 'slice-price'
-                [xs, fval, exitflag, output] = ...
-                    fmincon(@(x)Slice.fcnProfit(x, this, options), ...
-                    params.x0, params.As, params.bs, params.Aeq, params.beq, ...
-                    params.lb, params.ub, [], options.fmincon_opt);
-            else  % 'normal', 'single-function', ...
-                [xs, fval, exitflag, output] = ...
-                    fmincon(@(x)Slice.fcnSocialWelfare(x,this,options), ...
-                    params.x0, params.As, params.bs, params.Aeq, params.beq, ...
-                    params.lb, params.ub, [], options.fmincon_opt);
-            end
-            
+						if options.SlicingMethod.IsSingle
+							% 'normal', 'single-function'
+							[xs, fval, exitflag, output] = ...
+								fmincon(@(x)Slice.fcnSocialWelfare(x,this,options), ...
+								params.x0, params.As, params.bs, params.Aeq, params.beq, ...
+								params.lb, params.ub, [], options.fmincon_opt);
+						elseif options.SlicingMethod.IsPricing
+							[xs, fval, exitflag, output] = ...
+								fmincon(@(x)Slice.fcnProfit(x, this, options), ...
+								params.x0, params.As, params.bs, params.Aeq, params.beq, ...
+								params.lb, params.ub, [], options.fmincon_opt);
+						else
+						end
+						
             this.interpretExitflag(exitflag, output.message);
             if isfield(options, 'bCompact') && options.bCompact
                 x = zeros(options.num_orig_vars, 1);
@@ -543,13 +546,14 @@ classdef Slice < VirtualNetwork & EventReceiver
             v1 = A1*var_x;
             v2 = A2*var_z;
             index_violate = find(v1+v2>0);      % re = v1+v2
+						caller = replace(calledby(0), '.', '\');
             if ~isempty(index_violate)
-                message = sprintf('%s: Maximal violation is %.4f before processing.', ...
-                    calledby, full(max(v1+v2)));
+                message = sprintf('[%s] Maximal violation is %.4f before processing.', ...
+                    caller, full(max(v1+v2)));
                 if ~isempty(DEBUG) && DEBUG
                     warning(message); %#ok<SPWRN>
                 elseif ~isempty(INFO) && INFO
-                    cprintf('SystemCommands', '%s\n', message);
+                    cprintf('SystemCommands', 'Warning: %s\n', message);
                 end
                 
                 NP = this.NumberPaths;
@@ -572,7 +576,7 @@ classdef Slice < VirtualNetwork & EventReceiver
                         % we set a relatively small tolerance, i.e. 1e-10. 
                         assert(this.checkFeasible([var_x; var_z], ...
                             struct('ConstraintTolerance', 1e-10)), ...
-                            '[Post Processing]: failed infeasible solution.');
+                            '[%s] failed infeasible solution.', caller);
                     case {'drop','recover'}
                         %% Ignore the tiny components
                         % Use the differentiation of |v1-v2|/|v1+v2| is more flexible than use only
@@ -626,7 +630,7 @@ classdef Slice < VirtualNetwork & EventReceiver
                             var_x(pidx) = 0;
                         end
                     otherwise
-                        error('%s: invalid processing option (%s).', calledby, post_process);
+                        error('error: [%s] invalid processing option (%s).', caller, post_process);
                 end
             end
             if nargout >= 2

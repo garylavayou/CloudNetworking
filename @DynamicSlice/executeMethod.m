@@ -29,7 +29,7 @@ switch this.options.ReconfigMethod
         % should exclude it from the |profit|, as well as the reconfiguration
         % cost.
         options.CostModel = 'fixcost';
-        options.SlicingMethod = 'slice-price';
+        options.SlicingMethod = SlicingMethod.AdjustPricing;
         this.prices.Link = this.VirtualLinks.Price;
         this.prices.Node = this.VirtualDataCenters.Price;
         profit = this.optimalFlowRate(options);

@@ -30,9 +30,13 @@ function [output, runtime] = singleSliceOptimization( this, new_opts )
 if nargin < 2
     new_opts = struct;
 end
-options = getstructfields(this.options, 'SlicingMethod');
-assert(contains(options.SlicingMethod, {'single-normal', 'single-function'}),...
-    'error: unrecognized method (%s).', options.SlicingMethod);
+options = getstructfields(this.options, {'SlicingMethod', 'PricingFactor'});
+assert(options.SlicingMethod.IsSingle,...
+	'error[%s]: unrecognized method (%s).', calledby(0), options.SlicingMethod.char);
+assert(isfield(options, 'PricingFactor'), ...
+	'error[%s]: PricingFactor not specified, %s, %s',  calledby(0), ...
+	'considerng provide it when creating the network',...
+	'or specify it before calling this method.');
 options = structmerge(options, getstructfields(new_opts, 'bCompact', 'default', true));
 options.PricingPolicy = 'linear';       % can be specified by the input argument.
 
@@ -81,10 +85,10 @@ slice_data.SlicingMethod = [];
 slice_data.Parent = this;
 % the flow id and path id has been allocated in each slice already, no need to reallocate.
 ss = Slice(slice_data);
-if strcmpi(options.SlicingMethod, 'single-function')
+if options.SlicingMethod == SlicingMethod.SingleFunction
     ss.getAs_res(flow_owner, slice_data.Alpha_f);
     options.Alpha_f = slice_data.Alpha_f;
-elseif strcmpi(options.SlicingMethod, 'single-normal')
+elseif options.SlicingMethod == SlicingMethod.SingleNormal
     %% Coefficient for global optimization
     % When all slices are combined into one slice, a VNF might not be used by all paths
     % (_i.e._ all flows). If a VNF |f| is not used by a path |p|, there is no
@@ -111,7 +115,7 @@ if nargout == 2
     runtime.Serial = toc;
     runtime.Parallel = runtime.Serial;
 end
-if strcmpi(options.SlicingMethod, 'single-normal')
+if options.SlicingMethod == SlicingMethod.SingleNormal
     nz = ss.NumberDataCenters*ss.NumberPaths;
     z_index = 1:nz;
     for v = 1:ss.NumberVNFs
@@ -139,8 +143,8 @@ for s = 1:NS
     pid_offset = pid_offset + sl.NumberPaths;
     assert(sl.checkFeasible([sl.temp_vars.x; sl.temp_vars.z], ...
         struct('ConstraintTolerance', fmincon_opt.ConstraintTolerance)), 'error: infeasible solution.');
-    sl.VirtualDataCenters.Capacity = sl.getNodeCapacity(sl.temp_vars.z);
-    sl.VirtualLinks.Capacity = sl.getLinkCapacity(sl.temp_vars.x);
+    sl.VirtualDataCenters.Capacity = sl.getNodeCapacity(false);
+    sl.VirtualLinks.Capacity = sl.getLinkCapacity(false);
     % DEBUG
 %     eid = sl.VirtualLinks.PhysicalLink;
 %     node_load(nid) = node_load(nid) + sl.VirtualNodes.Capacity;
@@ -163,5 +167,6 @@ this.finalize(node_price, link_price);
 
 %% Calculate the output
 output.SingleSlice = ss;
+options.Slices = this.slices;
 output = this.calculateOutput(output, options);
 end

@@ -108,7 +108,7 @@ if ~this.b_dim
             [profit,cost] = this.fastReconfigure2(action, new_opts);
         case ReconfigMethod.DimBaseline
             new_opts.CostModel = 'fixcost';
-            new_opts.SlicingMethod = 'slice-price';
+            new_opts.SlicingMethod = SlicingMethod.AdjustPricing;
             this.prices.Link = this.VirtualLinks.Price;
             this.prices.Node = this.VirtualDataCenters.Price;
             [profit,cost] = this.optimalFlowRate(new_opts);

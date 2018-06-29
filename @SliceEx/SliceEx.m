@@ -179,15 +179,14 @@ classdef SliceEx < Slice
     
     methods(Access=protected)
         function [x, fval, exitflag] = optimize(this, params, options)
-            switch options.SlicingMethod
-                case 'price'
-                    [x, fval, exitflag] = optimize@Slice(this, params, options);
-                otherwise
-                    [x, fval, exitflag] = ...
-                        fmincon(@(x)Slice.fcnSocialWelfare(x,this,'Approximate'), ...
-                        params.x0, params.As, params.bs, params.Aeq, params.beq, ...
-                        params.lb, params.ub, [], fmincon_opt);
-            end
+            if options.SlicingMethod.IsPricing
+							[x, fval, exitflag] = optimize@Slice(this, params, options);
+						else
+							[x, fval, exitflag] = ...
+								fmincon(@(x)Slice.fcnSocialWelfare(x,this,'Approximate'), ...
+								params.x0, params.As, params.bs, params.Aeq, params.beq, ...
+								params.lb, params.ub, [], fmincon_opt);
+						end
         end
     end
 end

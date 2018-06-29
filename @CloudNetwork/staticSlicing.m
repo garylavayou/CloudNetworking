@@ -5,18 +5,15 @@
 % *NOTE*: when link and node resources are exhausted, some slice request
 % might be rejected.
 %%
-% |options|: if _Method_ is 'slice', then we dimension the slice without
-% pricing, otherwise, the fixed pricing policy is adopted ('slice-price').
-% [Deprecated] 
+% |options|: 
+%		*SlicingMethod*: _StaticPricing_
 %
 % *TODO*: we can adjust the unit price according to the residual capacity.
 function output = staticSlicing(this, slice)
 options = getstructfields(this.options, ...
 	{'ConstraintTolerance','SlicingMethod','Form'}, 'ignore');
-if contains(options.SlicingMethod, 'price')  % options for _optimalFlowRate_.
+if options.SlicingMethod.IsPricing  % options for _optimalFlowRate_.
     options.PricingPolicy = 'linear';
-else
-    options.SlicingMethod = 'slice';
 end
 
 if nargin>=2 && ~isempty(slice)
