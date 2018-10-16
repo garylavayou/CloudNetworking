@@ -47,15 +47,15 @@ classdef SliceEntity < Entity
     end
     
     methods (Access = protected)
-        function this = copyElement(et)
-            this = copyElement@Entity(et);
+        function newobj = copyElement(this)
+            newobj = copyElement@Entity(this);
             %% Deep Copy Issue
             % *Child* is an exterior link. When performing copy, we should not make a copy of this
             % object. Instead, the link should be updated by the caller of the _copy_ function. To
             % secure the original data, we detach the link in the new copy from the original data.
             % See also <Entity>.
-            if ~isempty(et.Child)
-                this.Child = et.Child.empty();
+            if ~isempty(this.Child)
+                newobj.Child = this.Child.empty();
             end
         end
     end

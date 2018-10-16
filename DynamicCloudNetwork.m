@@ -162,10 +162,10 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             end
             if ~isempty(idle_slices)
                 % recycle all resources
-                link_price = this.getLinkField('Price');
-                node_price = this.getDataCenterField('Price');
+                prices.Link = this.getLinkField('Price');
+                prices.Node = this.getDataCenterField('Price');
                 for i = 1:length(idle_slices)
-                    idle_slices{i}.finalize(node_price,link_price);
+                    idle_slices{i}.finalize(prices);
                 end
                 % since all resources are released, the profit (reconfiguration cost not
                 % included) and cost is zero.
@@ -236,23 +236,23 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
     
     methods(Access=protected)
         %% Deep Copy
-        function this = copyElement(pn)
-            % Make a shallow copy of all properties
-            this = copyElement@CloudNetwork(pn);
+        function newobj = copyElement(this)
+            % Make a shallow copy of all properties and perform deep copy for
+            % superclasses
+            newobj = copyElement@CloudNetwork(this);
+						newobj = copyElement@DynamicNetwork(newobj);
+						%% Reset the listener of the new instance
+						% We should reconfigure the listeners by using AddListeners outside.
+						% see <DynamicNetwork>, <EventSender>, <RepeatSliceReconfiguration>.
             %% Deep Copy Issue.
             % Make a deep copy of the DeepCp object
             % *pending_slices* is just a soft link to data (slices). Therefore, we do not directly
             % call <ListArray.copy> to avoid copying the content in the List. Instead, we will
             % update the corresponding elements with new links to the data.
-            %             temp = copyElement@DynamicNetwork(pn);
-            %             this.listeners = temp.listeners;
-            %             this.targets = temp.targets;
-            this.listeners = ListArray('event.listener');
-            this.targets = ListArray('EventReceiver');
-            this.pending_slices = ListArray('DynamicSlice');
-            for i = 1:pn.pending_slices.Length
-                sid = pn.FindSlice(pn.pending_slices{i});
-                this.pending_slices.Add(this.slices{sid});
+            newobj.pending_slices = ListArray('DynamicSlice');
+            for i = 1:this.pending_slices.Length
+                sid = this.FindSlice(this.pending_slices{i});
+                newobj.pending_slices.Add(newobj.slices{sid});
             end
         end
         
@@ -293,11 +293,11 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
         
         %%
         % |finalize| should only be called when dimensiong network slices.
-        function finalize(this, node_price, link_price, sub_slices)
+        function finalize(this, prices, sub_slices)
             if nargin <= 3
                 sub_slices = this.slices;
             end
-            finalize@CloudNetwork(this, node_price, link_price, sub_slices);
+            finalize@CloudNetwork(this, prices, sub_slices);
             %             finalize@DynamicNetwork(this, sub_slices);
         end
         
@@ -305,14 +305,12 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
         % Profit of Slice Provider: resource consumption payment - resource consumption cost =
         %       (resource consumption payment + reconfiguration cost - resource consumption cost
         %       - reconfiguration cost);
-        function [profit, revenue] = ...
-                getSliceProviderProfit(this, node_price, link_price, new_opts)
+        function [profit, revenue] = getSliceProviderProfit(this, prices, new_opts)
             if nargin <= 3
                 new_opts = struct();
             end
             
-            [profit, revenue] = getSliceProviderProfit@CloudNetwork(this, ...
-                node_price, link_price, new_opts);
+            [profit, revenue] = getSliceProviderProfit@CloudNetwork(this, prices, new_opts);
             
             % In the superclass (ClouNetwork) method, the reconfiguration cost is not
             % counted.

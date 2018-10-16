@@ -50,7 +50,7 @@ if nargout == 2
     %  the gradient on path variable is non-zeros, so there is |P| components;
     %  whether the gradient on node variable is zeros is depend on the node-path
     %  incidence matrix, so the number of non-zero elements is less than i.e.
-    %  |nnz(I_node_path)*F|.
+    %  |nnz(I_dc_path)*F|.
     %
     % Gradient of user utility on |x(p)| is given by
     %
@@ -72,7 +72,7 @@ if nargout == 2
     %    -\frac{w}{1+\sum_{p_0\in\mathcal{P}}{q_{i_p,p_0}\cdot x_{p_0}}} +
     %    \sum_{e\in p}{\rho^{'}_e\cdot g_{e,p}},~~ \forall p\in\mathcal{P}$$
     gd = spalloc(slice.num_vars, 1, ...
-        slice.NumberPaths+nnz(slice.I_node_path)*slice.NumberVNFs);
+        slice.NumberPaths+nnz(slice.I_dc_path)*slice.NumberVNFs);
     for p = 1:slice.NumberPaths
         i = slice.path_owner(p);
         switch options.PricingPolicy
@@ -103,15 +103,15 @@ if nargout == 2
     nz = (slice.NumberDataCenters*slice.NumberPaths);
     z_index = slice.NumberPaths+(1:nz);
     for f = 1:slice.NumberVNFs
-        % compatible arithmetic operation: node_price is a row vector and S.I_node_path is
+        % compatible arithmetic operation: node_price is a row vector and S.I_dc_path is
         % a matrix, and these two operants have the same number of rows.
         switch options.PricingPolicy
             case 'quadratic-price'
                 % |grad(z_index)| is a vector, and the right side is a matrix, the value
                 % of the matrix will be assigned to |grad(z_index)| column by column.
-                gd(z_index) = node_price_grad.*slice.I_node_path; %#ok<SPRIX>
+                gd(z_index) = node_price_grad.*slice.I_dc_path; %#ok<SPRIX>
             case 'linear'
-                gd(z_index) = slice.prices.Node.*slice.I_node_path; %#ok<SPRIX>
+                gd(z_index) = slice.prices.Node.*slice.I_dc_path; %#ok<SPRIX>
             otherwise
                 error('%s: invalid pricing policy', calledby);
         end

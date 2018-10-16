@@ -46,7 +46,7 @@ if isfield(options, 'bFinal') && options.bFinal
 else
     link_price = slice.link_unit_cost;
     node_price = slice.node_unit_cost;
-    gd = spalloc(length(vars),1, slice.NumberPaths+nnz(slice.I_node_path)*slice.NumberVNFs);
+    gd = spalloc(length(vars),1, slice.NumberPaths+nnz(slice.I_dc_path)*slice.NumberVNFs);
     for p = 1:slice.NumberPaths
         i = slice.path_owner(p);
         gd(p) = -weight(i)/(1+slice.I_flow_path(i,:)*var_x) + ...
@@ -57,7 +57,7 @@ else
     z_index = slice.NumberPaths+(1:nz);
     for f = 1:slice.NumberVNFs
         % compatiable arithmetic operation
-        gd(z_index) = node_price.*slice.I_node_path; %#ok<SPRIX>
+        gd(z_index) = node_price.*slice.I_dc_path; %#ok<SPRIX>
         z_index = z_index + nz;
     end
     

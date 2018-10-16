@@ -90,7 +90,7 @@ if nargin >= 4 && isfield(options, 'PricingPolicy')
                     % we only calculate the lower triangle, and use the symetric property
                     % to fill the upper triangle.
                     h2(z_index1,z_index2) = ...
-                        diag(this.I_node_path(:,p1) .* nph .* this.I_node_path(:,p2)); %#ok<SPRIX>
+                        diag(this.I_dc_path(:,p1) .* nph .* this.I_dc_path(:,p2)); %#ok<SPRIX>
                     z_index2 = z_index2 + NC;
                 end
                 z_index1 = z_index1 + NC;

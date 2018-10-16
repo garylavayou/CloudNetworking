@@ -93,19 +93,21 @@ classdef Event < matlab.mixin.Copyable
     end
     
     methods (Access = protected)
-        function this = copyElement(ev)
-            this = copyElement@matlab.mixin.Copyable(ev);
+        function newobj = copyElement(this)
+            newobj = copyElement@matlab.mixin.Copyable(this);
             %% Deep Copy Issue
             % *Entity*: is an exterior link. When performing copy, we should not make a copy of this
             % object. Instead, the link should be updated by the caller of the _copy_ function. To
             % secure the original data, we detach the link in the new copy from the original data.
             % *userdata*: whether it is a handle class object is unknown. If yes, we detach the link
             % to the original data instead of make a copy.
-            if ~isempty(ev.Entity)
-                this.Entity = ev.Entity.empty();
+						%
+						% See also <RandomEventDispatcher.copyElement>.
+            if ~isempty(this.Entity)
+                newobj.Entity = this.Entity.empty();
             end
-            if ishandle(ev.userdata)
-                this.userdata = [];
+            if ishandle(this.userdata)
+                newobj.userdata = [];
             end
         end
     end

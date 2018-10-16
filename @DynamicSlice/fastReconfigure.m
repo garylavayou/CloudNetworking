@@ -17,7 +17,7 @@ options = structmerge(new_opts, ...
 if ~isfield(options, 'bEnforceReserve')
     options.bEnforceReserve = false;
 end
-if isfield(this.options, 'penalty') && ~isempty(this.options)
+if isfield(this.options, 'penalty') && ~isempty(this.options.penalty)
     options.bDistributed = true;
 elseif ~isfield(options, 'bDistributed') || isempty(options.bDistributed)
     options.bDistributed = false;
@@ -59,7 +59,7 @@ if this.options.bReserve
         % Fast reconfigure after slice dimensioning.
         theta = this.options.Reserve;
         num_lcon = num_lcon + 2;
-        nnz_As = nnz_As + nnz(this.I_node_path)*Nvnf + Np;
+        nnz_As = nnz_As + nnz(this.I_dc_path)*Nvnf + Np;
         if this.options.bReserve == 2
             theta1 = min((1+theta)/2, theta0);
             num_lcon = num_lcon + Ndc;
@@ -141,7 +141,7 @@ if this.options.bReserve
     end
     %% limit the resource utilization
     if options.bEnforceReserve
-        As(row_offset+1, Np+(1:this.num_varz)) = repmat((this.I_node_path(:))', 1, Nvnf);
+        As(row_offset+1, Np+(1:this.num_varz)) = repmat((this.I_dc_path(:))', 1, Nvnf);
         As(row_offset+2, 1:Np) = sum(this.I_edge_path,1);
         row_offset = row_offset + 2;
         if this.options.bReserve == 2
@@ -222,7 +222,7 @@ else
     if strcmpi(options.Form, 'compact')
         %% get the compact formulation
         % There are lots of zeros in z_npf, which could be determined by h_np.
-        z_filter = sparse(repmat(logical(this.I_node_path(:)), Nvnf,1));
+        z_filter = sparse(repmat(logical(this.I_dc_path(:)), Nvnf,1));
         %     tx_filter = this.topts.x_reconfig_cost~=0;
         %     tz_filter = z_filter&(this.topts.z_reconfig_cost~=0);
         tx_filter = true(numel(this.topts.x_reconfig_cost),1);
@@ -373,7 +373,7 @@ end
         % Number of dual variables (for basic scheme), corresponding to the VNF instance and link
         % capacity constraints.
         % NOTE: If implementing the scheme with resource reservation, there will be more dual
-        % variables.
+        % variables (corresponding to the extra constraints).
         num_dual = Ndc*Nvnf+Nl;
         var_indices = cell(num_process, 1);
         distr_num_vars = zeros(num_process,1);   % Number of primal variables for each sub-problem
@@ -387,7 +387,7 @@ end
         end
         distr_params = structarray(num_process, param_fields);
         I_flow_path = this.I_flow_path;
-        I_node_path = this.I_node_path;
+        I_dc_path = this.I_dc_path;
         topts = this.topts;
         path_owner = this.path_owner;
         num_lcon_res = this.num_lcon_res;
@@ -435,7 +435,7 @@ end
             distr_params(i).I_flow_path = I_flow_path(flow_indices, path_indices);
             distr_params(i).path_owner = path_owner(path_indices); %#ok<PFBNS>
             if bCompact
-                distr_node_path = I_node_path(:,path_indices); %#ok<PFBNS>
+                distr_node_path = I_dc_path(:,path_indices); %#ok<PFBNS>
                 distr_z_filter = repmat(logical(distr_node_path(:)), Nvnf,1);
                 distr_tx_filter = true(num_paths,1);
                 distr_tz_filter = distr_z_filter;
@@ -462,61 +462,62 @@ end
         end
         t2 = toc(t1);
         fprintf('Dual-ADMM: distributing data ... Elapsed time is %f seconds.\n', t2);
-        if ~isempty(this.init_lambda_k)
-            lambda_k = repmat(this.init_lambda_k, 1, num_process);
+        if ~isempty(this.init_gamma_k)
+            gamma_k = repmat(this.init_gamma_k, 1, num_process);
             q_k = repmat(this.init_q_k, 1, num_process);
         else
-            lambda_k = zeros(num_dual, num_process); % auxiliary variables to gamma.
+            gamma_k = zeros(num_dual, num_process); % auxiliary variables to gamma.
             q_k = ones(num_dual, num_process); % Dual variables for the dual ADMM formulation.
         end
-        fval_lambda_k = zeros(num_process,1);
-        fval_gamma_k = 0;
+        fval_gamma_k = zeros(num_process,1);
+        fval_lambda_k = 0;
         exitflag_k = zeros(num_process,1);
         output_k = cell(num_process,1);
         fcnObjective = @fcnAugmentedPrimalBasic;
         hessDual = @hessDualBasic;
         if opt_order~=1
-            gamma_k = (sum(lambda_k,2) - sum(q_k,2)/r)/num_process;
+            lambda_k = (sum(gamma_k,2) - sum(q_k,2)/r)/num_process;
         end
         
         k = 1;
         t1 = tic;
         while true
-            fval_lambda_kminus = fval_lambda_k;
             fval_gamma_kminus = fval_gamma_k;
+            fval_lambda_kminus = fval_lambda_k;
             if opt_order == 1
-                lambda_kminus = lambda_k;
-                gamma_k = (sum(lambda_k,2) - sum(q_k,2)/r)/num_process;
+                gamma_kminus = gamma_k;
+                lambda_k = (sum(gamma_k,2) - sum(q_k,2)/r)/num_process;
             end
             parfor (j = 1:num_process,M)
                 %for j = 1:num_process
                 fminopt = fmincon_opt;
                 xk = distr_xk{j};
-                fminopt.HessianFcn = @(x,lambda) ...
-                    hessDual(x,lambda,gamma_k,q_k(:,j),r,distr_params(j));
+                fminopt.HessianFcn = @(x,lbd) ...
+                    hessDual(x,lbd,lambda_k,q_k(:,j),r,distr_params(j));
                 % dual_k is not the true dual function value, since the constant part of
                 % the objective function has been omitted.
-                [xk, fval_lambda_k(j), exitflag_k(j), output_k{j}] = ...
-                    fmincon(@(x) fcnObjective(x,gamma_k,q_k(:,j),r,distr_params(j)), ...
+                [xk, fval_gamma_k(j), exitflag_k(j), output_k{j}] = ...
+                    fmincon(@(x) fcnObjective(x,lambda_k,q_k(:,j),r,distr_params(j)), ...
                     xk, distr_params(j).A, distr_params(j).b, [], [], distr_params(j).lb, [], [], fminopt); %#ok<PFOUS>
-                lambda_k(:,j) = max(0,...
-                    gamma_k+1/r*(q_k(:,j)+distr_params(j).cl*xk-distr_params(j).cr));
+                gamma_k(:,j) = max(0,...
+                    lambda_k+1/r*(q_k(:,j)+distr_params(j).cl*xk-distr_params(j).cr));
                 distr_xk{j} = xk;
             end
             if opt_order ~= 1
-                gamma_kminus = gamma_k;
-                gamma_k = (sum(lambda_k,2) - sum(q_k,2)/r)/num_process;
+                lambda_kminus = lambda_k;
+                lambda_k = (sum(gamma_k,2) - sum(q_k,2)/r)/num_process;
             end
-            fval_gamma_k = sum(q_k'*gamma_k);  % the L2-norm part is counted when computin lambda
-            q_k = q_k + r*(gamma_k-lambda_k);
-            re = lambda_k - gamma_k;
+            % fval_lambda_k = sum(q_k'*lambda_k);  % the L2-norm part is counted when computing lambda
+						fval_lambda_k = sum(sum(q_k.*gamma_k)); 
+            q_k = q_k + r*(lambda_k-gamma_k);
+            re = gamma_k - lambda_k;
             re_norm = norm(re(:));
             if opt_order == 1
-                se = r*sum(lambda_k-lambda_kminus,2);
+                se = r*sum(gamma_k-gamma_kminus,2);
                 se_norm = norm(se);
                 tol_dual = eps_abs*sqrt(num_dual) + eps_rel*norm(sum(q_k,2));       % eps_rel*|A'*y|_2
             else
-                se = r*(gamma_k-gamma_kminus);
+                se = r*(lambda_k-lambda_kminus);
                 se_norm = sqrt(num_process)*norm(se);
                 tol_dual = eps_abs*sqrt(num_dual*num_process) + eps_rel*norm(q_k);       % eps_rel*|A'*y|_2
             end
@@ -529,9 +530,9 @@ end
             %   corresponding to the equality constraints $λ-γi=0$. Thus the size is
             %   |num_dual*num_process|;
             tol_primal = eps_abs*sqrt(num_dual*num_process) + ...
-                eps_rel*max(sqrt(num_process)*norm(gamma_k), norm(lambda_k(:)));
-            fval_change = (sum(fval_lambda_k)+fval_gamma_k)-(sum(fval_lambda_kminus)+fval_gamma_kminus);
-            optimal_gap = abs(fval_change/(sum(fval_lambda_k)+fval_gamma_k));
+                eps_rel*max(sqrt(num_process)*norm(lambda_k), norm(gamma_k(:)));
+            fval_change = (sum(fval_gamma_k)+fval_lambda_k)-(sum(fval_gamma_kminus)+fval_lambda_kminus);
+            optimal_gap = abs(fval_change/(sum(fval_gamma_k)+fval_lambda_k));
             
             num_iters = 0;
             num_funccount = 0;
@@ -579,7 +580,7 @@ end
         options.num_varx = Np;
         options.num_varz = this.num_varz;
         fval = this.fcnFastConfigProfit(x, this, options);
-        this.init_lambda_k = mean(lambda_k, 2);
+        this.init_gamma_k = mean(gamma_k, 2);
         this.init_q_k = mean(q_k, 2);
     end
 
@@ -588,7 +589,7 @@ end
 
 %% The objective function used with the basic scheme without resource reservation.
 % See also <fcnFastConfigProfit>.
-function [profit, grad] = fcnAugmentedPrimalBasic(vars, gamma, q, r, params)
+function [profit, grad] = fcnAugmentedPrimalBasic(vars, lambda, q, r, params)
 num_vars = length(vars);
 num_basic_vars = params.num_varx + params.num_varz;
 num_var_tx = length(params.x_reconfig_cost);
@@ -604,7 +605,7 @@ flow_rate = params.I_flow_path * var_x;      % see also <getFlowRate>
 profit = -params.weight*sum(fcnUtility(flow_rate));
 profit = profit + dot(var_tx, params.x_reconfig_cost) + ...
     dot(var_tz, params.z_reconfig_cost);
-profit = profit + r/2*sum((max(0, gamma+1/r*(q+params.cl*vars-params.cr))).^2);
+profit = profit + r/2*sum((max(0, lambda+1/r*(q+params.cl*vars-params.cr))).^2);
 
 % Gradient
 if nargout >= 2
@@ -616,7 +617,7 @@ if nargout >= 2
     grad(var_tx_index) = params.x_reconfig_cost;
     grad(var_tz_index) = params.z_reconfig_cost;
     
-    z_k = gamma+1/r*(q+params.cl*vars-params.cr);
+    z_k = lambda+1/r*(q+params.cl*vars-params.cr);
     idx = z_k<=0;
     A = params.cl;
     A(idx,:) = 0;
@@ -633,7 +634,7 @@ end
 function fcnAugmentedPrimalEnforceReserve() %#ok<DEFNU>
 end
 
-function h = hessDualBasic(vars, lambda, gamma, q, r, params) %#ok<INUSL>
+function h = hessDualBasic(vars, lbd, lambda, q, r, params) %#ok<INUSL>
 var_x = vars(1:params.num_varx);
 num_vars = length(vars);
 h = zeros(num_vars, num_vars);
@@ -643,7 +644,7 @@ for p = 1:params.num_varx
         params.I_flow_path(i,:)/(1+(params.I_flow_path(i,:)*var_x))^2;
 end
 
-z_k = gamma+1/r*(q+params.cl*vars-params.cr);
+z_k = lambda+1/r*(q+params.cl*vars-params.cr);
 idx = z_k<=0;
 A = params.cl;
 A(idx,:) = 0;

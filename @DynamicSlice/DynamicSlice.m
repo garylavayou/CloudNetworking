@@ -1,4 +1,4 @@
-classdef DynamicSlice < Slice & EventSender
+classdef DynamicSlice < SimpleSlice & EventSender
     %DynamicSlice Event-driven to dynamic configure slice.
     properties (Constant)
         GLOBAL_OPTIONS = StaticProperties;
@@ -81,7 +81,7 @@ classdef DynamicSlice < Slice & EventSender
         lower_bounds = struct([]);
         upper_bounds = struct([]);
         max_flow_rate;
-        init_lambda_k;
+        init_gamma_k;
         init_q_k; 
     end
     properties(Dependent)
@@ -168,7 +168,7 @@ classdef DynamicSlice < Slice & EventSender
     
     methods
         function this = DynamicSlice(slice_data)
-            this@Slice(slice_data);
+            this@SimpleSlice(slice_data);
             if isfield(slice_data, 'Flow')
                 if isfield(slice_data.Flow, 'ArrivalRate') && ...
                         slice_data.Flow.ArrivalRate>0 && slice_data.Flow.ArrivalRate<inf
@@ -252,9 +252,9 @@ classdef DynamicSlice < Slice & EventSender
             end
         end
         
-        function finalize(this, node_price, link_price)
+        function finalize(this, prices)
             global DEBUG g_results;
-            finalize@Slice(this, node_price, link_price);
+            finalize@SimpleSlice(this, prices);
             if isfield(this.temp_vars,'v') && ~isempty(this.temp_vars.v)
                 if this.NumberFlows > 0
                     % Override the capacity setting in the super class.
@@ -438,7 +438,7 @@ classdef DynamicSlice < Slice & EventSender
                 c = this.VirtualLinks.Capacity;
             else
                 if this.invoke_method == 0
-                    c = getLinkCapacity@Slice(this, isfinal);
+                    c = getLinkCapacity@SimpleSlice(this, isfinal);
                 else
                     c = this.temp_vars.c;
                 end
@@ -450,7 +450,7 @@ classdef DynamicSlice < Slice & EventSender
                 c = this.VirtualDataCenters.Capacity;
             else
                 if this.invoke_method == 0
-                    c = getNodeCapacity@Slice(this, isfinal);
+                    c = getNodeCapacity@SimpleSlice(this, isfinal);
                 else
                     % since we do not reconfigure VNF capacity through fast slice reconfiguration,
                     % the sum of VNF capacity equals to the node capacity.
@@ -567,7 +567,7 @@ classdef DynamicSlice < Slice & EventSender
                     end
                 end
                 % v_nf >= sum_{p}{z_npf}
-                n_path = nnz(this.I_node_path)/this.NumberDataCenters;
+                n_path = nnz(this.I_dc_path)/this.NumberDataCenters;
                 b.v = b.z/n_path;
             end
         end
@@ -601,7 +601,7 @@ classdef DynamicSlice < Slice & EventSender
                 % In the optimization, we ignore the reconfiguration cost of the new flow,
                 % while in the results, we should consider the new flow's reconfiguration
                 % cost. See also <update_reconfig_cost>. 
-                ds.tI_node_path = this.I_node_path;
+                ds.tI_dc_path = this.I_dc_path;
                 % adding flow, |path| will increase, and |edge| might(might not) increase;
                 ds.tI_edge_path = this.I_edge_path;
             else
@@ -616,7 +616,7 @@ classdef DynamicSlice < Slice & EventSender
                 % in the optimization, see also <update_reconfig_cost>.
                 %
                 % removing flow: |path| will decrease, and |edge| might(might not) decrease;
-                ds.tI_node_path = this.old_state.I_node_path;
+                ds.tI_dc_path = this.old_state.I_dc_path;
                 ds.tI_edge_path = this.old_state.I_edge_path;
             end
             ds.diff_x = sparse(new_x-this.old_variables.x);
@@ -761,7 +761,7 @@ classdef DynamicSlice < Slice & EventSender
                 %% Number of Variables
                 if contains(stat_names{i},{'All', 'NumberVariables'},'IgnoreCase',true)
                     stat.NumberVariables = ...
-                        nnz(s.tI_edge_path)+nnz(s.tI_node_path)*this.NumberVNFs;
+                        nnz(s.tI_edge_path)+nnz(s.tI_dc_path)*this.NumberVNFs;
                     if isfield(s, 'mid_v')
                         stat.NumberVariables = stat.NumberVariables + nnz(s.mid_v);
                     end
@@ -826,7 +826,7 @@ classdef DynamicSlice < Slice & EventSender
     methods (Access = private)
         function s = get_state(this)
             this.old_state.flow_table = this.FlowTable;
-            this.old_state.I_node_path = this.I_node_path;
+            this.old_state.I_dc_path = this.I_dc_path;
             this.old_state.I_edge_path = this.I_edge_path;
             this.old_state.I_flow_path = this.I_flow_path;
             this.old_state.path_owner = this.path_owner;
@@ -855,7 +855,7 @@ classdef DynamicSlice < Slice & EventSender
                     pid = pid + 1;
                 end
             end
-            this.I_node_path = this.old_state.I_node_path;
+            this.I_dc_path = this.old_state.I_dc_path;
             this.I_edge_path = this.old_state.I_edge_path;
             this.I_flow_path = this.old_state.I_flow_path;
             this.path_owner = this.old_state.path_owner;
@@ -990,10 +990,10 @@ classdef DynamicSlice < Slice & EventSender
     end
     
     
-    methods (Access = {?Slice, ?CloudNetwork, ?SliceFlowEventDispatcher})
+    methods (Access = {?SimpleSlice, ?CloudNetwork, ?SliceFlowEventDispatcher})
         [utility, node_load, link_load] = priceOptimalFlowRate(this, x0, new_opts);
     end
-    methods (Access = {?Slice, ?CloudNetwork})
+    methods (Access = {?SimpleSlice, ?CloudNetwork})
         %%
         % |new_opts|:
         % * *FixedCost*: used when slice's resource amount and resource prices are fixed,
@@ -1008,12 +1008,12 @@ classdef DynamicSlice < Slice & EventSender
             this.VirtualDataCenters.Capacity = theta0*this.VirtualDataCenters.Capacity;
             this.VirtualLinks.Capacity = theta0*this.VirtualLinks.Capacity;
             if ~isfield(new_opts, 'CostModel') || ~strcmpi(new_opts.CostModel, 'fixcost')
-                [profit,cost] = optimalFlowRate@Slice( this, new_opts );
+                [profit,cost] = optimalFlowRate@SimpleSlice( this, new_opts );
             else 
                 if this.NumberFlows == 0
                     [profit, cost] = this.handle_zero_flow(new_opts);
                 else
-                    [profit, cost] = optimalFlowRate@Slice( this, new_opts );
+                    [profit, cost] = optimalFlowRate@SimpleSlice( this, new_opts );
                     if isfield(new_opts, 'CostModel') && strcmpi(new_opts.CostModel, 'fixcost')
                         profit = profit - cost;
                     end
@@ -1035,26 +1035,22 @@ classdef DynamicSlice < Slice & EventSender
         [profit,cost] = fastReconfigure(this, action, options);
         [exitflag,fidx] = executeMethod(this, action);
         
-        %% Deep Copy
-        function this = copyElement(ds)
-            this = copyElement@Slice(ds);
-            %%
-            % The copyed version may not have the same targets as the copy source. We can
-            % mannually update the target/listener list using AddListener/RemoveListener.
-            %{
-              temp = copyElement@EventSender(ds);
-              this.targets = temp.targets;
-              this.listeners = temp.listeners;
-            %}
-            this.listeners = ListArray('event.listener');
-            this.targets = ListArray('EventReceiver');
+        %% Copy
+        function newobj = copyElement(this)
+            newobj = copyElement@SimpleSlice(this);
+						newobj = copyElement@EventSender(newobj);
+						%% Reset the listener of the new instance
+						% We should reconfigure the listeners by using AddListeners 
+						% outside.
+            % see <EventSender>, <RepeatSliceReconfiguration>.
+						newobj.ClearListener();
         end
         
         %% fast slice reconfiguration when flow arriving and depaturing
         % * *flow*: flow table entries.
         %
         % *Update state*: when single flow arrive or depart, update the state record,
-        % including: |I_node_path, I_edge_path, I_flow_path, path_owner| and |As|.
+        % including: |I_dc_path, I_edge_path, I_flow_path, path_owner| and |As|.
         % Since only add/remove entry for only one flow, this operation is more efficient
         % than <initializeState>.
         function fidx = OnAddingFlow(this, flows)
@@ -1093,12 +1089,12 @@ classdef DynamicSlice < Slice & EventSender
                         this.I_edge_path(eid, pid) = 1;
                         dc_index = this.VirtualNodes{e(1),'DataCenter'};
                         if dc_index~=0
-                            this.I_node_path(dc_index, pid) = 1;
+                            this.I_dc_path(dc_index, pid) = 1;
                         end
                     end
                     dc_index = this.VirtualNodes{e(2),'DataCenter'}; % last node
                     if dc_index~=0
-                        this.I_node_path(dc_index, pid) = 1;
+                        this.I_dc_path(dc_index, pid) = 1;
                     end
                 end
             end
@@ -1189,7 +1185,7 @@ classdef DynamicSlice < Slice & EventSender
             %% Update incident matrix
             % remove the path/flow-related rows/columns.
             this.I_edge_path(:, changed_path_index) = [];
-            this.I_node_path(:, changed_path_index) = [];
+            this.I_dc_path(:, changed_path_index) = [];
             this.I_flow_path(:, changed_path_index) = [];
             this.I_flow_path(fidx, :) = [];
             
@@ -1225,7 +1221,7 @@ classdef DynamicSlice < Slice & EventSender
                     struct('ConstraintTolerance', options.fmincon_opt.ConstraintTolerance)), ...
                     'error: infeasible solution.');
             else
-                [x, fval] = optimize@Slice(this, params, rmstructfields(options, 'CostModel'));
+                [x, fval] = optimize@SimpleSlice(this, params, rmstructfields(options, 'CostModel'));
             end
         end
         
@@ -1295,7 +1291,7 @@ classdef DynamicSlice < Slice & EventSender
             this.net_changes.DCIndex = b_removed_dcs;
             this.net_changes.LinkIndex = b_removed_links;
             this.identify_change(false(this.NumberPaths,1));
-            this.I_node_path(b_removed_dcs, :) = [];
+            this.I_dc_path(b_removed_dcs, :) = [];
             this.I_edge_path(b_removed_links, :) = [];
             this.Variables.z(this.changed_index.z) = [];
             this.Variables.v(this.changed_index.v) = [];
@@ -1329,7 +1325,7 @@ classdef DynamicSlice < Slice & EventSender
         function [b, vars] = postProcessing(this)
 %             % [TODO] May need post processing for VNF capacity constraint;            
             %% post process reconfiguration
-            postProcessing@Slice(this);
+            postProcessing@SimpleSlice(this);
             options = getstructfields(this.Parent.options, ...
                 {'DiffNonzeroTolerance', 'NonzeroTolerance', 'ConstraintTolerance'});
             if isfield(this.temp_vars, 'v')
@@ -1596,7 +1592,7 @@ classdef DynamicSlice < Slice & EventSender
                             idtz = (s.diff_z(idz)<0) & (s.diff_z_norm(idz)<tol_vec);
                     end
                     if isempty(find(idtz,1))
-                        if nargout == 1 && dot(this.I_node_path(:,p), tz) < af(k)*restore_x(p)
+                        if nargout == 1 && dot(this.I_dc_path(:,p), tz) < af(k)*restore_x(p)
                             % when x increase, but z keeps unchange, so we need to check the processing
                             % constraint.
                             tf = false;
@@ -1608,10 +1604,10 @@ classdef DynamicSlice < Slice & EventSender
                     tz(idtz) = old_tz(idtz);  % recover: down-scaling | down/up-scaling | up-scaling
                     if t == 2 || t == 3
                         delta_tz = restore_z(idz) - tz; % current - past
-                        t_delta_vnf = delta_vnf(idn)+this.I_node_path(:,p).*delta_tz;
+                        t_delta_vnf = delta_vnf(idn)+this.I_dc_path(:,p).*delta_tz;
                     end
                     if t == 1
-                        if dot(this.I_node_path(:,p), tz) >= af(k)*restore_x(p) % check processing constraint
+                        if dot(this.I_dc_path(:,p), tz) >= af(k)*restore_x(p) % check processing constraint
                             restore_z(idz) = tz;
                             s.diff_z_norm(idz(idtz)) = 0;
                             s.diff_z(idz(idtz)) = 0;
@@ -1621,7 +1617,7 @@ classdef DynamicSlice < Slice & EventSender
                         end
                     end
                     if t == 2
-                        if dot(this.I_node_path(:,p), tz) >= af(k)*restore_x(p) &&...
+                        if dot(this.I_dc_path(:,p), tz) >= af(k)*restore_x(p) &&...
                                 isempty(find(t_delta_vnf<0,1))
                             %% check both processing constraint and VNF capacity constraint
                             restore_z(idz) = tz; % accept old value or keep current value.
@@ -1634,7 +1630,7 @@ classdef DynamicSlice < Slice & EventSender
                         end
                     end
                     if t == 3 
-                        if (nargout == 0 && isempty(find(t_delta_vnf<0,1))) || (nargout == 1 && isempty(find(t_delta_vnf<0,1)) && dot(this.I_node_path(:,p), tz) >= af(k)*restore_x(p))
+                        if (nargout == 0 && isempty(find(t_delta_vnf<0,1))) || (nargout == 1 && isempty(find(t_delta_vnf<0,1)) && dot(this.I_dc_path(:,p), tz) >= af(k)*restore_x(p))
                             restore_z(idz) = tz; % accept old value or keep current value.
                             s.diff_z_norm(idz(idtz)) = 0;
                             s.diff_z(idz(idtz)) = 0;

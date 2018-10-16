@@ -91,8 +91,8 @@ classdef RandomEventDispatcher < matlab.mixin.Copyable
         end
     end
     methods (Access=protected)
-        function this = copyElement(ed)
-            this = copyElement@matlab.mixin.Copyable(ed);
+        function newobj = copyElement(this)
+            newobj = copyElement@matlab.mixin.Copyable(this);
             %% Deep Copy Issues
             % *entity_builder*: we should relocate the flow entity builder's parent for the new copy.
             % *entities*: we should relocate the entity's builder for the new copy. Furthermore, if
@@ -100,43 +100,43 @@ classdef RandomEventDispatcher < matlab.mixin.Copyable
             %     copy. <RandomEventDispatcher> has access to <Entity.Builder>, and
             %     <SliceEntity.Child>.
             %
-            this.entity_builder = ed.entity_builder.copy;
-            this.entities = ed.entities.copy;
-            this.event_queue = ed.event_queue.copy;
-            for i = 1:this.entity_builder.Length
-                if isa(ed.entity_builder(i), 'FlowEntityBuilder')
-                    if ~isempty(ed.entity_builder(i).Parent)
-                        idx = ed.entities.Find(ed.entity_builder(i).Parent);
-                        eb = this.entity_builder(i);
-                        eb.Parent = this.entities(idx);
+            newobj.entity_builder = this.entity_builder.copy;
+            newobj.entities = this.entities.copy;
+            newobj.event_queue = this.event_queue.copy;
+            for i = 1:newobj.entity_builder.Length
+                if isa(this.entity_builder(i), 'FlowEntityBuilder')
+                    if ~isempty(this.entity_builder(i).Parent)
+                        idx = this.entities.Find(this.entity_builder(i).Parent);
+                        eb = newobj.entity_builder(i);
+                        eb.Parent = newobj.entities(idx);
                     end
                 end
             end
-            for i = 1:this.entities.Length
-                if ~isempty(ed.entities(i).Builder)
-                    idx = ed.entity_builder.Find(ed.entities(i).Builder);
-                    et = this.entities(i);
+            for i = 1:newobj.entities.Length
+                if ~isempty(this.entities(i).Builder)
+                    idx = this.entity_builder.Find(this.entities(i).Builder);
+                    et = newobj.entities(i);
                     % Since (slice) entities may be mannually added to the dispatcher, thus without
                     % associated builder in the dispatcher. Since the external builder will not be
                     % used, we set the |Builder| field of the new copy as empty.
                     if isempty(idx)
                         et.Builder = creatempty('EntityBuilder');
                     else
-                        et.Builder = this.entity_builder(idx);
+                        et.Builder = newobj.entity_builder(idx);
                     end
                 end
-                if isa(ed.entities(i), 'SliceEntity')
-                    if ~isempty(ed.entities(i).Child)
+                if isa(this.entities(i), 'SliceEntity')
+                    if ~isempty(this.entities(i).Child)
                         warning('<Child> is non-empty.');
                     end
                 end
                 
             end
-            for i = 1:this.event_queue.Length
-                if ~isempty(ed.event_queue(i).Entity)
-                    idx = ed.entities.Find(ed.event_queue(i).Entity);
-                    ev = this.event_queue(i);
-                    ev.Entity = this.entities(idx);
+            for i = 1:newobj.event_queue.Length
+                if ~isempty(this.event_queue(i).Entity)
+                    idx = this.entities.Find(this.event_queue(i).Entity);
+                    ev = newobj.event_queue(i);
+                    ev.Entity = newobj.entities(idx);
                 end
             end
         end

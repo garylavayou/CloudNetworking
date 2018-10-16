@@ -1,5 +1,5 @@
-%% EventDrivenNetwork 
-% This class extend <PhysicalNetwork> to enable handling of network events.
+%% DynamicNetwork 
+% DynamicNetwork interface enables handling of network events.
 %
 % Subclass should impelement _onAddingSlice_ and _onRemovingSlice_ to handle the network
 % dynamics: deciding whether to admit a slice or not, and how to allocate/release
@@ -15,12 +15,14 @@
 %     (c) profit threshold based: after the profit of fast reconfiguration is lower than a
 %         threshold, performs a reconfiguration;
 %     (d) profit threshold based with prediction: additionaly predict the threshold*.
-classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
 
+%% Implementation Issues
+% Implementation of this interface should also inherit from <PhysicalNetwork>. 
+%
+classdef (Abstract) DynamicNetwork < EventSender & EventReceiver
     methods
         function this = DynamicNetwork(varargin)
             % Only called by subclasses, other member must be initialized by subclasses.
-            %             this@PhysicalNetwork(varargin);
             if length(varargin)>=4
                 % |VNFReconfigCoefficient|'s default value is 3.
                 this.options = structmerge(this.options, ...
@@ -32,15 +34,7 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
                     getstructfields(varargin{4}, 'ReconfigMethod'));
             end
         end
-    end
-    
-    methods          
-        function sl = RemoveSlice(this, arg1)
-            sl = RemoveSlice@PhysicalNetwork(this, arg1);
-            sl = this.onRemovingSlice(sl);
-        end
-                
-    end
+		end
     
     events
         FlowArrive; 
@@ -53,7 +47,8 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
         AddFlowFailed;
         RemoveFlowSucceed;
         RemoveFlowFailed;          % NOT used.
-    end
+		end
+		
     methods
         function h = eventhandler(this, source, eventData)
             global DEBUG; %#ok<NUSED>
@@ -167,18 +162,13 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
     end
     methods (Access = protected)
         %% Deep Copy
-        function this = copyElement(pn)
-            this = copyElement@PhysicalNetwork(pn);
-            %%
-            % The copyed version may not have the same targets as the copy source. We can
-            % mannually update the target/listener list using AddListener/RemoveListener.
-            %{
-              temp = copyElement@EventSender(pn);
-              this.targets = temp.targets;
-              this.listeners = temp.listeners;
-            %}
-            this.listeners = ListArray('event.listener');
-            this.targets = ListArray('EventReceiver');
+        function newobj = copyElement(this)
+						newobj = copyElement@EventSender(this);
+						%% Reset the listener of the new instance
+						% We should reconfigure the listeners by using AddListeners 
+						% outside.
+            % see <EventSender>, <RepeatSliceReconfiguration>.
+						newobj.ClearListener();
         end
         function sl = createslice(this, slice_opt)
             % examine flow arrival parameters.
@@ -187,12 +177,12 @@ classdef DynamicNetwork < PhysicalNetwork & EventSender & EventReceiver
             % as no dynamics of flow, and it will not handle flow events. Therefore
             % initilize it as class <Slice> is OK.
             if ~isfield(slice_opt, 'ArrivalRate') || ~isfield(slice_opt, 'ServiceInterval')
-                this.slices{end+1} = Slice(slice_opt);
+                this.slices{end+1} = SimpleSlice(slice_opt);
             elseif isempty(slice_opt.ArrivalRate) || isempty(slice_opt.ServiceInterval)
-                this.slices{end+1} = Slice(slice_opt);
-                warning('slice created with type Slice.');
+                this.slices{end+1} = SimpleSlice(slice_opt);
+                warning('slice created with type SimpleSlice.');
             else
-                this.slices{end+1} = DynamicSlice(slice_opt);
+                this.slices{end+1} = SimpleDynamicSlice(slice_opt);
             end
             sl = this.slices{end};
         end

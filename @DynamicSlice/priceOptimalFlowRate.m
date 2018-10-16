@@ -106,7 +106,7 @@ if (this.invoke_method == 1 || this.invoke_method == 4) && this.options.bReserve
     theta = options.Reserve;
     num_lcon = num_lcon + 2;
     %     nnz_As = nnz_As + this.num_varz + this.num_varv + NP + NL;
-    nnz_As = nnz_As + nnz(this.I_node_path)*Nvnf + this.num_varv + Np + Nl;
+    nnz_As = nnz_As + nnz(this.I_dc_path)*Nvnf + this.num_varv + Np + Nl;
 end
 if this.invoke_method == 1 || this.invoke_method == 4
     switch this.options.bReserve 
@@ -206,7 +206,7 @@ if this.invoke_method == 1 || this.invoke_method == 4
         % As(row_offset+1, [NP+(1:this.num_varz), this.num_vars+(1:this.num_varv)]) = ...
         % 	[ones(1,this.num_varz), -theta*ones(1,this.num_varv)];
         As(row_offset+1, [Np+(1:this.num_varz), this.num_vars+(1:this.num_varv)]) = ...
-            [repmat((this.I_node_path(:))', 1, Nvnf), -theta*ones(1,this.num_varv)];
+            [repmat((this.I_dc_path(:))', 1, Nvnf), -theta*ones(1,this.num_varv)];
         As(row_offset+2, [1:Np, (num_vars-Nl+1):num_vars]) = ...
             [sum(this.I_edge_path,1), -theta*ones(1, Nl)];
         % bs(row_offset+(1:2)) = [0; 0];
@@ -293,7 +293,7 @@ fmincon_opt.Display = 'notify';   %'notify-detailed'; %'iter'; 'notify'
 if strcmpi(options.Form, 'compact')
     % column/variables: isequal(this.I_active_variables', sum(this.As_res,1)~=0)
     % row/constraints:  isequal(active_rows, find(sum(this.As_res,2)~=0))  
-    z_filter = sparse(repmat(logical(this.I_node_path(:)), Nvnf, 1));
+    z_filter = sparse(repmat(logical(this.I_dc_path(:)), Nvnf, 1));
     this.I_active_variables = [true(Np,1);  z_filter;  true(this.num_varv,1)];
     if this.invoke_method ~= 1
         %         tx_filter = this.topts.x_reconfig_cost~=0;

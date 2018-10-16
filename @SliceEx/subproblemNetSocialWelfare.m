@@ -24,11 +24,11 @@ lbs = sparse(this.num_vars,1);
 % Algorithm option
 fmincon_opt = optimoptions(@fmincon);
 fmincon_opt.Algorithm = 'interior-point';
-fmincon_opt.HessianFcn = @(x,lmd)Slice.fcnHessian(x,lmd,this);
+fmincon_opt.HessianFcn = @(x,lmd)SimpleSlice.fcnHessian(x,lmd,this);
 fmincon_opt.SpecifyObjectiveGradient = true;
 fmincon_opt.SpecifyConstraintGradient = false;
 fmincon_opt.Display = 'notify';
-[x, fval, exitflag] = fmincon(@(x)Slice.subproblemObjective(x, lambda, this), ...
+[x, fval, exitflag] = fmincon(@(x)SimpleSlice.subproblemObjective(x, lambda, this), ...
     x0, this.As_res, bs, [], [], lbs, [], [], fmincon_opt);
 % fprintf('\tThe optimal net profit of the slice: %G.\n', -fval);
 if exitflag == 1 || exitflag == 2
@@ -42,7 +42,7 @@ if exitflag == 1 || exitflag == 2
     nz = this.NumberVirtualNodes*this.NumberPaths;
     z_index = 1:nz;
     for f = 1:this.NumberVNFs
-        this.temp_vars.z(z_index) = this.I_node_path(:).*this.temp_vars.z(z_index);
+        this.temp_vars.z(z_index) = this.I_dc_path(:).*this.temp_vars.z(z_index);
         z_index = z_index + nz;
     end
     %     this.x_path(this.x_path<10^-3) = 0;
@@ -60,7 +60,7 @@ if exitflag == 1 || exitflag == 2
     %     dg_pf = x_path.*alpha_f';
     %         z_np = reshape(z_npf(z_index), this.NumberVirtualNodes, this.NumberPaths);
     %         %% gradient of lambda(p,f)
-    %         % |z_np = this.I_node_path.*z_npf(index)|
+    %         % |z_np = this.I_dc_path.*z_npf(index)|
     %         %
     %         % $$\alpha_f x_p^{(s)} -
     %         % \sum_{n\in\mathcal{N}^{(s)}}{h_{n,p}^{(s)}z_{n,p,f}^{(s)}}$$

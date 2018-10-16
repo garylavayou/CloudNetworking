@@ -34,7 +34,7 @@ NC = this.NumberDataCenters;
 NV = this.NumberVNFs;
 NP = this.NumberPaths;
 % Coefficient for process-rate constraints
-nnz_As = nnz(this.As_res) + NV*nnz(this.I_node_path) + nnz(this.I_edge_path);
+nnz_As = nnz(this.As_res) + NV*nnz(this.I_dc_path) + nnz(this.I_edge_path);
 num_lcon = this.num_lcon_res + NC + NL;
 parameters.As = spalloc(num_lcon, this.num_vars, nnz_As);
 parameters.As(1:this.num_lcon_res,:) = this.As_res;
@@ -99,7 +99,7 @@ options.fmincon_opt.SpecifyObjectiveGradient = true;
 options.fmincon_opt.Display = 'notify';
 if strcmpi(options.Form, 'compact')
     z_filter = sparse(repmat(...
-        reshape(logical(this.I_node_path), numel(this.I_node_path),1), NV, 1));
+        reshape(logical(this.I_dc_path), numel(this.I_dc_path),1), NV, 1));
     this.I_active_variables = [true(NP,1) ;  z_filter];
     parameters.As = parameters.As(:, this.I_active_variables);
     parameters.x0 = parameters.x0(this.I_active_variables);
@@ -113,7 +113,7 @@ else
     parameters.lb = sparse(this.num_vars,1);
 end
 options.fmincon_opt.HessianFcn = ...
-    @(x,lambda)Slice.fcnHessian(x, lambda, this, options);
+    @(x,lambda)SimpleSlice.fcnHessian(x, lambda, this, options);
 [x, fval] = this.optimize(parameters, options);
 
 %% Additional Process
@@ -131,7 +131,7 @@ if options.SlicingMethod == SlicingMethod.SingleFunction
 	this.VNFList = 1:this.Parent.NumberVNFs;
 	this.getAs_res;
 	z_np = x(NP+1:end);
-	z_np = reshape(this.I_node_path(:).*z_np, NC,NP);
+	z_np = reshape(this.I_dc_path(:).*z_np, NC,NP);
 	znpf = zeros(NC, NP, this.NumberVNFs);
 	for v = 1:this.NumberVNFs
 		af = this.Parent.VNFTable.ProcessEfficiency(v);
@@ -145,7 +145,7 @@ else
 	nz = this.NumberDataCenters*this.NumberPaths;
 	z_index = 1:nz;
 	for f = 1:this.NumberVNFs
-		this.temp_vars.z(z_index) = this.I_node_path(:).*this.temp_vars.z(z_index);
+		this.temp_vars.z(z_index) = this.I_dc_path(:).*this.temp_vars.z(z_index);
 		z_index = z_index + nz;
 	end
 end

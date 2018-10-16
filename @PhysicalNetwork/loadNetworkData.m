@@ -24,7 +24,7 @@
 % capacity. Since we assume that the flow processing load is proportion to the flow rate,
 % the node capacity is proportion to the adjacent link capacity. A unit of flow pass
 % thorough a node will consume a unit of processing load, and two unit of link bandwidth
-% (on the flow-in and flowout link), which is taken into consideration when mapping the
+% (on the flow-in and flow-out link), which is taken into consideration when mapping the
 % node capacity.
 % * *CostOption* |NodeCostOption|: how to specify the network node's unit cost. See also
 % <NodeCostOption>.

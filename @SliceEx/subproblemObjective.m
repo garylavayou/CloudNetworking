@@ -34,10 +34,10 @@ else
     %  the gradient on path variable is nonzeros, so there is |P| components;
     %  whether the gradient on node variable is zeros is depend on the node-path
     %  incidence matrix, so the number of non-zero elements is less than i.e.
-    %  |nnz(I_node_path)*F|.
+    %  |nnz(I_dc_path)*F|.
     link_uc = S.Parent.getLinkField('UnitCost', S.VirtualLinks.PhysicalLink);
     node_uc = S.Parent.getNodeField('UnitCost', S.VirtualNodes.PhysicalNode);
-    grad = spalloc(length(var_x),1, S.NumberPaths+nnz(S.I_node_path)*S.NumberVNFs);
+    grad = spalloc(length(var_x),1, S.NumberPaths+nnz(S.I_dc_path)*S.NumberVNFs);
     for p = 1:S.NumberPaths
         i = S.path_owner(p);
         grad(p) = -S.weight/(S.I_flow_path(i,:)*var_path) + ...
@@ -50,7 +50,7 @@ else
         %% Each iteration: find z(:,:,f)'s derivatives.
         % compatible arithmetic operation: node_unit_cost, s_n and lambda.n is column
         % vectors and (lambda.pf(:,f))' is a row vectors, the result is a matrix.
-        grad(z_index) = (node_uc + S.Parent.phis_n + lambda.n).*S.I_node_path; %#ok<SPRIX>
+        grad(z_index) = (node_uc + S.Parent.phis_n + lambda.n).*S.I_dc_path; %#ok<SPRIX>
         z_index = z_index + nz;
     end
 end

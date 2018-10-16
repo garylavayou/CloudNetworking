@@ -105,14 +105,16 @@ classdef Entity < matlab.mixin.Heterogeneous & matlab.mixin.Copyable
     end
     
     methods (Access = protected)
-        function this = copyElement(et)
-            this = copyElement@matlab.mixin.Copyable(et);
+        function newobj = copyElement(this)
+            newobj = copyElement@matlab.mixin.Copyable(this);
             %% Deep Copy Issue
             % *Builder* is an exterior link. When performing copy, we should not make a copy of this
             % object. Instead, the link should be updated by the caller of the _copy_ function. To
             % secure the original data, we detach the link in the new copy from the original data.
-            if ~isempty(et.Builder)
-                this.Builder = et.Builder.empty();
+						%
+						% See also <RandomEventDispatcher.copyElement>.
+            if ~isempty(this.Builder)
+                newobj.Builder = this.Builder.empty();
             end
         end
     end

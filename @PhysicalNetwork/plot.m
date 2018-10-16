@@ -6,6 +6,9 @@ if nargin < 2
     b_undirect = false;
 end
 num_figure = this.NumberSlices+1;
+if num_figure >= 16
+	num_figure = 16;
+end
 plot_col = ceil(sqrt(num_figure));
 plot_row = ceil(num_figure/plot_col);
 h1 = subplot(plot_row,plot_col, 1);

@@ -62,15 +62,16 @@ classdef FlowEntityBuilder < EntityBuilder
     end
     
     methods(Access=protected)        
-        function this = copyElement(febdr)
-            this = copyElement@EntityBuilder(febdr);
+        function newobj = copyElement(this)
+            newobj = copyElement@EntityBuilder(this);
             %% Deep Copy Issue
             % *Parent* is an exterior link. When performing copy, we should not make a copy of this
             % object. Instead, the link should be updated by the caller of the _copy_ function. To
             % secure the original data, we detach the link in the new copy from the original data.
-            % See also <Entity>.
-            if ~isempty(febdr.Parent)
-                this.Parent = febdr.Parent.empty();
+						%
+            % See also <Entity>, <RandomEventDispatcher.copyElement>.
+            if ~isempty(this.Parent)
+                newobj.Parent = this.Parent.empty();
             end
         end
     end

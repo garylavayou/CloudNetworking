@@ -17,7 +17,7 @@ options = structmerge(...
 NP = this.NumberPaths;
 NV = this.NumberVNFs;
 
-if nargin == 2 && ~isempty(x0)
+if nargin >= 2 && ~isempty(x0)
     this.x0 = x0;
 else%if isempty(this.x0)
     this.x0 = zeros(this.num_vars,1);
@@ -58,7 +58,7 @@ fmincon_opt.Display = 'notify';   %'notify-detailed'; %'iter';
 if strcmpi(options.Form, 'compact')
     %     isequal(this.I_active_variables', sum(this.As_res,1)~=0)
     z_filter = sparse(repmat(...
-        reshape(logical(this.I_node_path), numel(this.I_node_path),1), NV, 1));
+        reshape(logical(this.I_dc_path), numel(this.I_dc_path),1), NV, 1));
     this.I_active_variables = [true(NP,1) ;  z_filter];
     As = this.As_res(:, this.I_active_variables);
     var0 = this.x0(this.I_active_variables);
@@ -71,8 +71,8 @@ else
     var0 = this.x0;
 end
 fmincon_opt.HessianFcn = ...
-    @(x,lambda)Slice.fcnHessian(x, lambda, this, options);
-[xs, fval, exitflag, output] = fmincon(@(x)Slice.fcnProfit(x, this, options), ...
+    @(x,lambda)SimpleSlice.fcnHessian(x, lambda, this, options);
+[xs, fval, exitflag, output] = fmincon(@(x)SimpleSlice.fcnProfit(x, this, options), ...
     var0, As, bs, [], [], lbs, [], [], fmincon_opt);
 if strcmpi(options.Form, 'compact')
     x = zeros(num_vars, 1);
@@ -95,7 +95,7 @@ this.temp_vars.z = x((this.NumberPaths+1):end);
 nz = this.NumberDataCenters*this.NumberPaths;
 z_index = 1:nz;
 for f = 1:this.NumberVNFs
-    this.temp_vars.z(z_index) = this.I_node_path(:).*this.temp_vars.z(z_index);
+    this.temp_vars.z(z_index) = this.I_dc_path(:).*this.temp_vars.z(z_index);
     z_index = z_index + nz;
 end
 % tol_zero = this.Parent.options.NonzeroTolerance;

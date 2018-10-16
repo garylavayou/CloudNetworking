@@ -32,15 +32,15 @@ if nargin >= 2
 end
 if nargin < 2 || ~isfield(options, 'PricingPolicy')
     options.PricingPolicy = 'linear';
-    warning('Slice.fcnProfit: <PricingPolicy> not specifed, set to [%s].', ...
-        options.PricingPolicy);
+    warning('%s: <PricingPolicy> not specifed, set to [%s].', ...
+        calledby, options.PricingPolicy);
 end
 %%
 % Here, the invoked method must be <Slice.fcnProfit>.
 % Use class name to avoid dynamic loading of class.
 % Subclasses may override this method to define different ways to calculate profits.
 options.bFinal = true;
-profit = Slice.fcnProfit(vars, slice, options); 
+profit = SimpleSlice.fcnProfit(vars, slice, options); 
 slice.prices.Node = [];
 slice.prices.Link = [];
 end

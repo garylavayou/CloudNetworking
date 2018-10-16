@@ -4,6 +4,7 @@ classdef (Abstract) EventSender < matlab.mixin.Copyable
     properties (Access = protected)
         listeners;  % We need to remove some listeners, when the listeners have been destoryed. [Deprecated].
         targets;
+				bCopyReady logical = true; 
     end
     
     properties 
@@ -58,7 +59,14 @@ classdef (Abstract) EventSender < matlab.mixin.Copyable
             end
             this.listeners.Remove(b_removed);       % delete the listener objects;
             [~] = this.targets.Removed(b_removed);  % remove but not delete the targets;
-        end
+				end
+				
+				function ClearListener(this)
+					delete(this.listeners);
+					this.listeners = ListArray('event.listener');
+					this.targets.Clear();
+					this.bCopyReady = true;
+				end
         
         function t = findTargets(this, ev_name)
             b_targets = false(length(this.listeners),1);
@@ -72,21 +80,28 @@ classdef (Abstract) EventSender < matlab.mixin.Copyable
     end
     
     methods (Access = protected)
-        %% Deep Copy
-        function this = copyElement(es)
+			%% Copy the Listeners and Targets
+			% After the default shallow copy, the new instance has the
+			% same event targets as the current instance. 
+			% However, the stored listeners in the 'newobj.listeners' instance is
+			% the listeners of 'this'. Thus the listeners for the new instance
+			% should be regenerated with the same set of targets as 'this'.
+			%
+			% After the copy is finished, the listeners might be changed outside.
+			% Then we need to first <delete> the existing listeners and then add
+			% new listeners.
+        function newobj = copyElement(this)
             % Make a shallow copy of all properties
-            this = copyElement@matlab.mixin.Copyable(es);
+            newobj = copyElement@matlab.mixin.Copyable(this);
             % Make a deep copy of the DeepCp object
-            this.listeners = ListArray('event.listener');
-            %% ISSUE
-            % After copy, the new instance still send message to the old targets, since
-            % we do not know whether the targets will be changed or not, inside the copy
-            % method. 
-            warning('Targets are not deep copyed.');
-            for i=1:this.targets.Length
-                this.listeners.Add(addlistener(this, ...
-                    es.listeners(i).EventName, es.listeners(i).callback));
-            end
+            newobj.listeners = ListArray('event.listener');
+						cprintf('Comments', 'info:[%s] copy listeners to the new object.\n', calledby);
+						for i=1:newobj.targets.Length
+							newobj.listeners.Add(addlistener(newobj, ...
+								this.listeners(i).EventName, this.listeners(i).callback));
+						end
+						
+						this.bCopyReady = false;
         end
     end
 end

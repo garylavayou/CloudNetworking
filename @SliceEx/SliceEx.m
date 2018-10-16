@@ -1,4 +1,4 @@
-classdef SliceEx < Slice
+classdef SliceEx < SimpleSlice
     properties
         constant_profit = 0;	% consant profit added to avoid slices with negative profit.
     end
@@ -8,7 +8,7 @@ classdef SliceEx < Slice
             if nargin == 0
                 slice_data = [];
             end
-            this@Slice(slice_data);
+            this@SimpleSlice(slice_data);
             if nargin == 0
                 return;
             end
@@ -28,7 +28,7 @@ classdef SliceEx < Slice
         %                 for j = 1:num_paths
         %                     eid = this.I_edge_path(:,p)~=0;
         %                     pc{i}(j) = pc{i}(j) + sum(link_uc(eid)+lambda_e(eid)) + this.Parent.phis_l*nnz(eid);
-        %                     nid = this.I_node_path(:,p)~=0;
+        %                     nid = this.I_dc_path(:,p)~=0;
         %                     pc{i}(j) = pc{i}(j) + min(node_uc(nid)+lambda_n(nid)) + this.Parent.phis_n;
         %                     p = p + 1;
         %                 end
@@ -45,7 +45,7 @@ classdef SliceEx < Slice
                 for j = 1:num_paths
                     eid = this.I_edge_path(:,p)~=0;
                     pc{i}(j) = pc{i}(j) + sum(link_uc(eid)+lambda_e(eid)) + this.Parent.phis_l*nnz(eid);
-                    nid = this.I_node_path(:,p)~=0;
+                    nid = this.I_dc_path(:,p)~=0;
                     pc{i}(j) = pc{i}(j) + min(node_uc(nid)+lambda_n(nid)) + this.Parent.phis_n;
                     p = p + 1;
                 end
@@ -110,18 +110,18 @@ classdef SliceEx < Slice
         
         %         function [nc, nid] = getPathNodeCost(this, pid, lambda_n)
         %            node_uc = this.Parent.getNodeField('UnitCost', this.VirtualNodes.PhysicalNode);
-        %            nid = find(this.I_node_path(:,pid)~=0);
+        %            nid = find(this.I_dc_path(:,pid)~=0);
         %            nc = node_uc(nid) + lambda_n(nid) + this.Parent.phis_n;
         %         end
         %% Get the node cost on a path.
         function [nc, nid] = getPathNodeCost(this, pid, lambda_n)
             node_uc = this.node_unit_cost;
-            nid = find(this.I_node_path(:,pid)~=0);
+            nid = find(this.I_dc_path(:,pid)~=0);
             nc = node_uc(nid) + lambda_n(nid) + this.Parent.phis_n;
         end
 
         function r = getRevenue(this)
-            r = getRevenue@Slice(this) + this.constant_profit;
+            r = getRevenue@SimpleSlice(this) + this.constant_profit;
         end
         
         [fval, node_load, link_load] = subproblemNetSocialWelfare( this, lambda );
@@ -157,7 +157,7 @@ classdef SliceEx < Slice
                 warning('model is set as Approximate.');
                 model = 'Approximate';
             end
-            rc = getResourceCost@Slice(this, node_load, link_load, model);
+            rc = getResourceCost@SimpleSlice(this, node_load, link_load, model);
             epsilon = pn.unitStaticNodeCost;
             switch model
                 case 'Approximate'
@@ -180,10 +180,10 @@ classdef SliceEx < Slice
     methods(Access=protected)
         function [x, fval, exitflag] = optimize(this, params, options)
             if options.SlicingMethod.IsPricing
-							[x, fval, exitflag] = optimize@Slice(this, params, options);
+							[x, fval, exitflag] = optimize@SimpleSlice(this, params, options);
 						else
 							[x, fval, exitflag] = ...
-								fmincon(@(x)Slice.fcnSocialWelfare(x,this,'Approximate'), ...
+								fmincon(@(x)SimpleSlice.fcnSocialWelfare(x,this,'Approximate'), ...
 								params.x0, params.As, params.bs, params.Aeq, params.beq, ...
 								params.lb, params.ub, [], fmincon_opt);
 						end

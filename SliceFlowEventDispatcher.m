@@ -45,7 +45,7 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
                     % and removed when it is dequeuing.
                     this.entities.Remove(eventData.entity);
                 case 'RemoveSliceSucceed'
-                    if isa(eventData.slice, 'Slice')
+                    if isa(eventData.slice, 'SimpleSlice')
                         this.RemoveListener(eventData.slice);
                     else
                         error('error: type error.');
@@ -175,20 +175,14 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
     end
     
     methods (Access = protected)
-         function this = copyElement(ed)
-            this = copyElement@RandomEventDispatcher(ed);
+         function newobj = copyElement(this)
+            newobj = copyElement@RandomEventDispatcher(this);
+						newobj = copyElement@EventSender(newobj);
             %%
-            % The copyed version may not have the same targets as the copy source. We can
+            % The copyed version have different targets wth the copy source. We can
             % mannually update the target/listener list using AddListener/RemoveListener.
-            %{
-              temp = copyElement@EventSender(ed);
-              this.targets = temp.targets;
-              this.listeners = temp.listeners;
-            %}
-            % To make the new object not influence the original one, we detach the link of targets
-            % and listeners.
-            this.listeners = ListArray('event.listener');
-            this.targets = ListArray('EventReceiver');
+						% See also <EventSender>, <RepeatSliceReconfiguration>.
+						newobj.ClearListener();
          end
         function removeFlowEntityBuilder(this, parent)
             for i = 1:this.entity_builder.Length

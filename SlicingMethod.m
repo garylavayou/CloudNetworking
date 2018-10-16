@@ -8,6 +8,7 @@ classdef SlicingMethod < uint32
 		SingleFunction(hex2dec('10313'));
 		AdjustPricing(hex2dec('0111'));
 		DualPricing(hex2dec('0211'));
+		%FactorPricing(hex2dec('0211'));		% factor cost to pricing
 %%
 		DynamicPartition(hex2dec('0001'));
 		PartitionPricing(hex2dec('0021'));
