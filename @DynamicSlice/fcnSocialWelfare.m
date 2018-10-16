@@ -36,9 +36,9 @@ if strcmp(options.CostModel, 'fixcost')
     end
 else
     if nargout <= 1
-        profit = fcnSocialWelfare@Slice(vars, slice, options);
+        profit = fcnSocialWelfare@SimpleSlice(vars, slice, options);
     else
-        [profit, gd] = fcnSocialWelfare@Slice(vars, slice, options);
+        [profit, gd] = fcnSocialWelfare@SimpleSlice(vars, slice, options);
     end
 end
 end

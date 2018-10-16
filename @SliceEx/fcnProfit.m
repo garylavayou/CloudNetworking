@@ -6,10 +6,10 @@
 %%
 function [profit, grad] = fcnProfit(vars, slice, options)
 if nargout <= 1
-    profit = fcnProfit@Slice(vars, slice, options);
+    profit = fcnProfit@SimpleSlice(vars, slice, options);
     profit = profit + slice.constant_profit;
 else
-    [profit, grad] = fcnProfit@Slice(vars, slice, options);
+    [profit, grad] = fcnProfit@SimpleSlice(vars, slice, options);
     profit = profit - slice.constant_profit;
 end
 end

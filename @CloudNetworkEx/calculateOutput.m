@@ -62,7 +62,7 @@ for s = 1:this.NumberSlices
         argout.WelfareAccurate = argout.WelfareAccurate + sl.constant_profit;
     end
     if ~isempty(cellstrfind(welfare_type, 'Approximate'))
-        sw = Slice.fcnSocialWelfare(var_x, sl, 'Approximate');
+        sw = SimpleSlice.fcnSocialWelfare(var_x, sl, 'Approximate');
         argout.WelfareApprox = argout.WelfareApprox + sw;
     end
     
@@ -81,7 +81,7 @@ for s = 1:this.NumberSlices
             case 'ApproximatePercent'   % <deprecated>
                 profit_table(s,i) = options.PercentFactor * sw;
             case 'AccuratePercent'      % <deprecated>
-                sw = Slice.fcnSocialWelfare(var_x, sl, 'Accurate');
+                sw = SimpleSlice.fcnSocialWelfare(var_x, sl, 'Accurate');
                 if this.static_factor ~= 0
                     nid = sl.DCNI;
                     idx = sl.VirtualDataCenters.Load>0;
@@ -91,7 +91,7 @@ for s = 1:this.NumberSlices
                 end
                 profit_table(s,i) = options.PercentFactor * sw;
             case 'ApproximatePrice'
-                profit_table(s,i) = Slice.fcnProfit(sl, options);
+                profit_table(s,i) = SimpleSlice.fcnProfit(sl, options);
             case'AccuratePrice'
                 profit_table(s,i) = argout.Profit(s);
             otherwise 
