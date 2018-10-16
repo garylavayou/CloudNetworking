@@ -40,7 +40,7 @@ type.Fixed = [1; 2; 3];
 type.FixedCount = [3; 13; 27];      % Number of persistent slices: {1|2|3...}
 
 %% 
-net_opt.SlicingMethod = 'single-normal';
+net_opt.SlicingMethod = SlicingMethod.SingleNormal;
 PN = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
 PN.slice_template = Slice.loadSliceTemplate(type.Index);
 link_capacity = PN.getLinkField('Capacity');

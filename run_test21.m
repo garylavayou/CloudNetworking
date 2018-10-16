@@ -58,7 +58,7 @@ b_repeat = true;
 
 %% 
 if b_optimal
-    net_opt.SlicingMethod = 'single-normal';
+    net_opt.SlicingMethod = SlicingMethod.SingleNormal;
     PN = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
     PN.slice_template = Slice.loadSliceTemplate(slice_type);
     link_capacity = PN.getLinkField('Capacity');
@@ -99,7 +99,7 @@ if b_optimal
 end
 %%
 if b_static
-    net_opt.SlicingMethod = 'static-price';
+    net_opt.SlicingMethod = SlicingMethod.StaticPricing;
     PN_static = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
     PN_static.slice_template = Slice.loadSliceTemplate(slice_type);
     link_capacity = PN_static.getLinkField('Capacity');

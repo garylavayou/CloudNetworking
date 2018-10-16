@@ -1,233 +1,236 @@
-%% declaration
-line_width = [1 1 1 1 1 1];
-marker_size = [6 7 6 8 6 6 6];
-marker = {'none', 'none', '+', 'x', 's', 'd', 'o'};
-line_style = {'-.', '-', 'none', 'none', '--', '--', '--'};
-color_set = [Color.Red; Color.MildGreen; Color.MildBlue; Color.Purple; Color.Black; Color.Gray];
-legend_label = {'HSR', 'HSR-RSV', 'Baseline'};
+%% Performance Evaluation of HSR/HSR-RSV/FSR
+% results: providing one group of output for each scheme.
+%
+%% HSR/HSR-RSV/Baseline (default)
+
+%% FSR and Baseline
+%{
+lines.Labels = {'FSR', 'Baseline'};
+
+%}
+function dataplot3sa2(results, lines, metrics, idx_offset, options)
+global figs;
+if ~exist('figs', 'var') || isempty(figs) || ~isstruct(figs)
+    figs = struct;
+end
+%% Arguments
+if nargin <= 0 || isempty(results)
+	load('Results/EXP042_e100.mat', 'results');
+end
+if nargin <= 1 || isempty(lines)
+	lines = struct;
+end
+if ~isfield(lines, 'Sources')
+	lines.Sources = {'Dimconfig','DimconfigReserve', 'DimBaseline'};
+end
+if ~isfield(lines, 'Labels')
+	lines.Labels = {'HSR', 'HSR-RSV', 'Baseline'};
+end
+if ~isfield(lines, 'Markers')
+	lines.Markers = {'none', 'none', 's', 'x', '+', 'd', 'o'};
+end
+if ~isfield(lines, 'MarkerSizes')
+	lines.MarkerSizes = [6 7 6 8 6 6 6];
+end
+if ~isfield(lines, 'Styles')
+	lines.Styles = {'-',  '-.', '--'};
+end
+if ~isfield(lines, 'Colors')
+	lines.Colors = [Color.Red; Color.MildGreen; Color.MildBlue; Color.Purple; Color.Black; Color.Gray];
+end
+if ~isfield(lines, 'Width')
+	lines.Width = [1 1 1 1 1 1];
+end
+if nargin <= 2 || isempty(metrics)
+	metrics = struct;
+end
+if ~isfield(metrics, 'Names')
+	metrics.Names = {'NumberReconfigVariables', 'NumberReconfigFlows',...
+		'Profit', 'Cost', 'Utilization', 'FairIndex'};
+end
+if ~isfield(metrics, 'Labels')
+	metrics.Labels = {'# of Reconfigured Variables',...
+		'# of Reconfigured Flows',...
+		'Cummulated Profit',...
+		'Reconfiguration Cost',...
+		'Utilization Ratio',...
+		'Fairness Index'};
+end
+if ~isfield(metrics, 'Titles')
+	metrics.Titles= {'Number of Reconfigured Variables',...
+		'Number of Reconfigured Flows',...
+		'Profit of Slice',...
+		'Reconfiguration Cost',...
+		'Utilization of Slice Resources',...
+		'Fairness Index'};
+end
+if nargin <= 3 || isempty(idx_offset)
+	idx_offset = 50;
+end
+if nargin <= 4
+	options = struct;
+end
+if ~isfield(options, 'bSavePlot')
+	options.bSavePlot = false;
+end
+if options.bSavePlot
+	if ~isfield(options, 'Filenames')
+	options.filenames = {'numac-reconfig-vartime',...
+		'numac-reconfigflow-vartime', ...
+		'profit-vartime',...
+		'cost-vartime',...
+		'utilization-vartime',...
+		'fairness-vartime'};
+	end
+	if ~isfield(options, 'Suffix')
+		options.Suffix = '';
+	end
+end
+
 %%
-load('Results/EXP5001_varweight.mat')
-ex_id = 3;
-tx = 50:NUM_EVENT;
-t = results.DimBaseline{1}.Time(tx);
+tx = (idx_offset+1):height(results.Dimconfig{1});
+t = results.(lines.Sources{1}){1}.Time(tx);
 if length(tx)>=10
     marker_index = round(linspace(1,length(tx), 10));
 end
-%% Number of Reconfiguration Variables
-if exist('fig_num_reconfig', 'var') && fig_num_reconfig.isvalid
-    figure(fig_num_reconfig);
-    fig_num_reconfig.Children.delete;
-else
-    fig_num_reconfig = figure('Name', 'Number of Reconfiguration');
+for i = 1:length(metrics.Names)
+	metric = metrics.Names{i};
+	title = metrics.Titles{i};
+	if isfield(figs, metric) && isvalid(figs.(metric))
+		figs.(metric).Children.delete;
+		figure(figs.(metric));
+	else
+		figs.(metric) = figure('Name', title);
+		switch metric
+			case 'Utilization'
+				figs.(metric).OuterPosition(3:4) = [362 367];
+			otherwise
+				figs.(metric).OuterPosition(3:4) = [360 380];  % [496 476];
+		end
+	end
+	hold on;
+	switch metric
+		case {'NumberReconfigVariables', 'NumberReconfigFlows'}  % accumulated
+			%% Number of Reconfiguration Variables and Flows
+			num_lines = length(lines.Sources);
+			data = cell(num_lines, 1);
+			for j = 1:num_lines
+				name = lines.Sources{j};
+				data{j} = cumsum(results.(name){1}{tx,metric});
+				plot(t, data{j}, lines.Styles{j});
+			end
+			axis tight;
+		case {'Utilization', 'FairIndex'}
+			for j = 1:num_lines
+				plot(t, results.(name){1}{tx,metric}, lines.Styles{j});
+			end
+			xlim([t(1), t(end-1)]);
+			if strcmpi(metric, 'FairIndex')
+				ylim([0.55, 0.9]);
+			else
+				ylim([0.8,1]);
+			end
+		case {'Profit', 'Cost'}
+			cum_cost = cell(num_lines, 1);
+			cum_profit = cell(num_lines, 1);
+			tx1 = idx_offset:height(results.(lines.Sources{1}){1});
+			t_diff = diff(results.(lines.Sources{1}){1}{tx1,'Time'});
+			for j = 1:num_lines
+				name = lines.Sources{j};
+				cost = results.(name){1}{tx1,'Cost'}.*results.(name){1}{tx1,'Interval'};
+				profit = results.(name){1}{tx1,'Profit'}+results.(name){1}{tx1,'Cost'};
+				% recover profit without reconfiguration cost
+				cum_cost{j} = cumsum(cost(1:(end-1)));
+				cum_profit{j} = cumsum(profit(1:(end-1)).*t_diff) - cum_cost{j};
+				if strcmpi(metric, 'Profit')
+					plot(t, cum_profit{j}, lines.Styles{j});
+				else
+					plot(t, cum_cost{j}, lines.Styles{j});
+				end
+			end
+			xlim([t(1), t(end-1)]);
+		otherwise
+	end
+	ax = gca;
+	for j = 1:num_lines
+		k = num_lines-j+1;
+		ax.Children(j).Color = lines.Colors(k).RGB;
+		ax.Children(j).LineWidth = lines.Width(k);
+		ax.Children(j).MarkerIndices = marker_index;
+		ax.Children(j).Marker = lines.Markers{k};
+		ax.Children(j).MarkerSize = lines.MarkerSizes(k);
+	end
+	switch metric
+		case 'Cost'
+			ax.OuterPosition = [-0.02 0 1.09 1.01];	% ax.OuterPosition = [-0.04 -0.01 1.13 1.06];
+		case 'Utilization'
+			ax.OuterPosition = [0 0 1.09 1.04];
+		case 'FairIndex'
+			ax.OuterPosition = [0 0 1.08 1.04];
+		otherwise
+			ax.OuterPosition = [0 0 1.08 1.01];			% ax.OuterPosition = [-0.045 -0.01 1.14 1.04];
+	end
+	ylabel(metrics.Labels{i});
+	xlabel('Time');
+	switch metric
+		case {'Utilization', 'FairIndex'}
+			legend(lines.Labels, 'Location', 'southwest');
+		otherwise	
+			legend(lines.Labels, 'Location', 'northwest');
+	end
+	%% small figure
+	switch metric
+		case {'NumberReconfigVariables','NumberReconfigFlows'}
+			if num_lines >= 3
+				if strcmpi(metric, 'NumberReconfigVariables')
+					% axes('OuterPosition', [0.58, 0.20, 0.41, 0.39]);
+					ax = axes('OuterPosition', [0.58, 0.21, 0.42, 0.41]);
+				else
+					% ax = axes('OuterPosition', [0.61, 0.24, 0.38, 0.35]);
+					ax = axes('OuterPosition', [0.61, 0.24, 0.38, 0.35]);
+					if exist('textBox', 'var')
+						textBox.delete;
+					end
+				end
+				hold on;
+				for j = 1:num_lines-1
+					plot(t, data{j}, lines.Styles{j});
+				end
+				ax.XTickLabel = {};
+				for j = 1:num_lines-1
+					k = num_lines-j;
+					ax.Children(j).Color = lines.Colors(k).RGB;
+					ax.Children(j).LineWidth = lines.Width(k);
+				end
+				axis tight
+				if strcmpi(metric, 'NumberReconfigFlows')
+					scale = 10^3; scale_string = sprintf('\\times10^{%d}',log10(scale));
+					ax.YTickLabel = num2str(str2double(ax.YTickLabel)/scale);
+					textBox = text(0, 1.125, scale_string, 'Interpreter', 'tex', ...
+						'Units', 'normalized', 'FontSize', 9);
+					% posAxes = get(gca,'position');
+					% textBox = annotation('textbox','linestyle','none','string',['x10^{' sprintf('%d',log10(1./scale)) '}']);
+					% posAn = get(textBox,'position');
+					% set(textBox,'position',[posAxes(1) posAxes(2)+posAxes(4)-0.02 posAn(3) posAn(4)],'VerticalAlignment','cap');
+				end
+			end
+		case 'Profit'
+			% axes('OuterPosition', [0.55, 0.125, 0.43, 0.4]);
+			% hl = plot(t(1:end-1), cum_profit);
+			% mi = round(linspace(1,length(tx), 40));
+			% for k=1:length(hl)
+			%     kr = length(hl) - k + 1;
+			%     hl(k).Color = color_set(kr).RGB;
+			%     hl(k).LineWidth = line_width(kr);
+			%     hl(k).Marker = marker{kr};
+			%     hl(k).MarkerIndices = mi;
+			%     hl(k).LineStyle = line_style{kr};
+			% end
+			% axis tight
+			% xlim([300, 360]);
+	end
+	if options.bSavePlot
+		export_fig(fig_num_reconfig, ['Figures/', options.Filenames{i}, options.Suffix], ...
+			'-pdf', '-transparent');
+	end
 end
-fig_num_reconfig.OuterPosition(3:4) = [360 380]; % [496 476];
-hl = plot(t, cumsum(results.Dimconfig{ex_id}{tx,'NumberReconfigVariables'}),'-',...
-    t, cumsum(results.DimconfigReserve{ex_id}{tx,'NumberReconfigVariables'}),'-.',...
-    t, cumsum(results.DimBaseline{1}{tx,'NumberReconfigVariables'}), '--s');
-for k=1:length(hl)
-    hl(k).Color = color_set(k).RGB;
-    hl(k).LineWidth = line_width(k);
-    hl(k).MarkerIndices = marker_index;
-    hl(k).MarkerSize = marker_size(k);
-end
-ax = hl(1).Parent;
-ylabel('# of Reconfigured Variables');
-xlabel('Time');
-% ax.OuterPosition = [-0.045 -0.01 1.14 1.04];
-ax.OuterPosition = [0 0 1.08 1.01];
-axis tight;
-legend(legend_label, 'Location', 'northwest');
-% axes('OuterPosition', [0.58, 0.20, 0.41, 0.39]);
-ax = axes('OuterPosition', [0.58, 0.21, 0.42, 0.41]);
-hl = plot(t, cumsum(results.Dimconfig{ex_id}{tx,'NumberReconfigVariables'}),'-',...
-    t, cumsum(results.DimconfigReserve{ex_id}{tx,'NumberReconfigVariables'}),'-.');
-ax.XTickLabel = {}; 
-for k=1:length(hl)
-    hl(k).Color = color_set(k).RGB;
-    hl(k).LineWidth = line_width(k);
-    hl(k).MarkerIndices = marker_index;
-    hl(k).MarkerSize = marker_size(k);
-end
-axis tight
-export_fig(fig_num_reconfig, 'Figures/numac-reconfig-vartime', '-pdf', '-transparent');
-%% Number of Reconfigured Flows
-if exist('fig_num_reconfig_flow', 'var') && fig_num_reconfig_flow.isvalid
-    figure(fig_num_reconfig_flow);
-    fig_num_reconfig_flow.Children.delete;
-else
-    fig_num_reconfig_flow = figure('Name', 'Number of Reconfigured Flows');
-end
-if exist('textBox', 'var')
-    textBox.delete;
-end
-fig_num_reconfig_flow.OuterPosition(3:4) = [360 380]; % [496 476];
-% fig_num_reconfig.OuterPosition = [100 400 400 380];
-hl = plot(t, cumsum(results.Dimconfig{ex_id}{tx,'NumberReconfigFlows'}),'-',...
-    t, cumsum(results.DimconfigReserve{ex_id}{tx,'NumberReconfigFlows'}),'-.',...
-    t, cumsum(results.DimBaseline{1}{tx,'NumberReconfigFlows'}), '--s');
-for k=1:length(hl)
-    hl(k).Color = color_set(k).RGB;
-    hl(k).LineWidth = line_width(k);
-    hl(k).MarkerIndices = marker_index;
-    hl(k).MarkerSize = marker_size(k);
-end
-legend(legend_label, 'Location', 'northwest');
-ylabel('# of Reconfigured Flows');
-xlabel('Time');
-ax = hl(1).Parent;
-% ax.OuterPosition = [-0.045 -0.01 1.14 1.04];
-ax.OuterPosition = [0 0 1.08 1.01];
-axis tight
-% ax = axes('OuterPosition', [0.61, 0.24, 0.38, 0.35]);
-ax = axes('OuterPosition', [0.61, 0.24, 0.38, 0.35]);
-hl = plot(t, cumsum(results.Dimconfig{ex_id}{tx,'NumberReconfigFlows'}),'-',...
-    t, cumsum(results.DimconfigReserve{ex_id}{tx,'NumberReconfigFlows'}),'-.');
-ax.XTickLabel = {}; 
-for k=1:length(hl)
-    hl(k).Color = color_set(k).RGB;
-    hl(k).LineWidth = line_width(k);
-    hl(k).MarkerIndices = marker_index;
-    hl(k).MarkerSize = marker_size(k);
-end
-axis tight
-scale = 10^3; scale_string = sprintf('\\times10^{%d}',log10(scale));
-ax.YTickLabel = num2str(str2double(ax.YTickLabel)/scale);
-textBox = text(0, 1.125, scale_string, 'Interpreter', 'tex', 'Units', 'normalized', ...
-    'FontSize', 9); 
-export_fig(fig_num_reconfig_flow, 'Figures/numac-reconfigflow-vartime', '-pdf', '-transparent');
-% posAxes = get(gca,'position');
-% textBox = annotation('textbox','linestyle','none','string',['x10^{' sprintf('%d',log10(1./scale)) '}']);
-% posAn = get(textBox,'position');
-% set(textBox,'position',[posAxes(1) posAxes(2)+posAxes(4)-0.02 posAn(3) posAn(4)],'VerticalAlignment','cap');
-%% Profit with Reconfiguration
-if exist('fig_profit_reconfig', 'var') && fig_profit_reconfig.isvalid
-    figure(fig_profit_reconfig);
-    fig_profit_reconfig.Children.delete;
-else
-    fig_profit_reconfig = figure('Name', 'Profit with Reconfiguration');
-end
-fig_profit_reconfig.OuterPosition(3:4) = [360 380]; % [496 476];
-cost = [results.Dimconfig{ex_id}{tx,'Cost'}.*results.Dimconfig{ex_id}{tx,'Interval'},...
-    results.DimconfigReserve{ex_id}{tx,'Cost'}.*results.DimconfigReserve{ex_id}{tx,'Interval'},...
-    results.DimBaseline{1}{tx,'Cost'}.*results.DimBaseline{1}{tx,'Interval'}];
-profit = [results.Dimconfig{ex_id}{tx,'Profit'}+results.Dimconfig{ex_id}{tx,'Cost'},...
-    results.DimconfigReserve{ex_id}{tx,'Profit'}+results.DimconfigReserve{ex_id}{tx,'Cost'},...
-    results.DimBaseline{1}{tx,'Profit'}+results.DimBaseline{1}{tx,'Cost'}];   % recover profit without reconfiguration cost
-%     results.Dimconfig0{i}{tx,'Profit'}+results.Dimconfig0{i}{tx,'Cost'}
-t_diff = diff(results.DimBaseline{1}{tx,'Time'});
-cum_profit = cumsum(profit(end-1,:).*t_diff) - cumsum(cost(end-1,:),1);
-hl = plot(t(1:end-1), cum_profit);
-mi = marker_index;
-mi(end) = mi(end) - 1;
-for k=1:length(hl)
-    kr = length(hl) - k + 1;
-    hl(k).Color = color_set(kr).RGB;
-    hl(k).LineWidth = line_width(kr);
-    hl(k).LineStyle = line_style{kr};
-    hl(k).Marker = marker{kr};
-    hl(k).MarkerIndices = mi;
-end
-ylabel('Cummulated Profit');
-xlabel('Time');
-xlim([t(1), t(end-1)]);
-legend(legend_label, 'Location', 'northwest');
-ax = hl(1).Parent;
-% ax.OuterPosition = [-0.035 -0.01 1.13 1.04];
-ax.OuterPosition = [0 0 1.08 1.01];
-% axes('OuterPosition', [0.55, 0.125, 0.43, 0.4]);
-% hl = plot(t(1:end-1), cum_profit);
-% mi = round(linspace(1,length(tx), 40));
-% for k=1:length(hl)
-%     kr = length(hl) - k + 1;
-%     hl(k).Color = color_set(kr).RGB;
-%     hl(k).LineWidth = line_width(kr);
-%     hl(k).Marker = marker{kr};
-%     hl(k).MarkerIndices = mi;
-%     hl(k).LineStyle = line_style{kr};
-% end
-% axis tight
-% xlim([300, 360]);
-export_fig(fig_profit_reconfig, 'Figures/profit-vartime', '-pdf', '-transparent');
-%% Cost
-if exist('fig_cost', 'var') && fig_cost.isvalid
-    figure(fig_cost);
-    fig_cost.Children.delete;
-else
-    fig_cost = figure('Name', 'Reconfiguration Cost');
-end
-fig_cost.OuterPosition(3:4) = [360 380]; % [496 476];
-
-hl = plot(t, cumsum(cost(:,1)),'-',...
-    t, cumsum(cost(:,2)),'-.',...
-    t, cumsum(cost(:,3)), '--s');
-for k=1:length(hl)
-    kr = length(hl) - k + 1;
-    hl(k).Color = color_set(kr).RGB;
-    hl(k).LineWidth = line_width(kr);
-    hl(k).MarkerIndices = marker_index;
-    hl(k).MarkerSize = marker_size(kr);
-end
-ylabel('Reconfiguration Cost');
-xlabel('Time');
-xlim([t(1), t(end)]);
-legend(legend_label, 'Location', 'northwest');
-ax = hl(1).Parent;
-% ax.OuterPosition = [-0.04 -0.01 1.13 1.06];
-ax.OuterPosition = [-0.02 0 1.09 1.01];
-export_fig(fig_cost, 'Figures/cost-vartime', '-pdf', '-transparent');
-%% Resource Utilization
-if exist('fig_util', 'var') && fig_util.isvalid
-    figure(fig_util);
-    fig_util.Children.delete;
-else
-    fig_util = figure('Name', 'Utilization of Slice Resources');
-end
-fig_util.OuterPosition(3:4) = [362 367]; % [496 476];
-
-hl = plot(t, results.Dimconfig{ex_id}{tx,'Utilization'},'-',...
-    t, results.DimconfigReserve{ex_id}{tx,'Utilization'},'-.',...
-    t, results.DimBaseline{1}{tx,'Utilization'}, '--s');
-for k=1:length(hl)
-    kr = length(hl) - k + 1;
-    hl(k).Color = color_set(kr).RGB;
-    hl(k).LineWidth = line_width(kr);
-    hl(k).MarkerIndices = marker_index;
-    hl(k).MarkerSize = marker_size(kr);
-end
-ylabel('Utilization Ratio');
-xlabel('Time');
-xlim([t(1), t(end-1)]);
-ylim([0.8,1]);
-legend(legend_label, 'Location', 'southwest');
-ax = hl(1).Parent;
-% ax.OuterPosition = [-0.035 -0.01 1.13 1.06];
-ax.OuterPosition = [0 0 1.09 1.04];
-export_fig(fig_util, 'Figures/utilization-vartime', '-pdf', '-transparent');
-%% Fairness
-if exist('fig_fairness', 'var') && fig_fairness.isvalid
-    figure(fig_fairness);
-    fig_fairness.Children.delete;
-else
-    fig_fairness = figure('Name', 'Fairness Index');
-end
-fig_fairness.OuterPosition(3:4) = [360 380]; % [496 476];
-
-hl = plot(t, results.Dimconfig{ex_id}{tx,'FairIndex'},'-',...
-    t, results.DimconfigReserve{ex_id}{tx,'FairIndex'},'-.',...
-    t, results.DimBaseline{1}{tx,'FairIndex'}, '--s');
-for k=1:length(hl)
-    kr = length(hl) - k + 1;
-    hl(k).Color = color_set(kr).RGB;
-    hl(k).LineWidth = line_width(kr);
-    hl(k).MarkerIndices = marker_index;
-    hl(k).MarkerSize = marker_size(kr);
-end
-ylabel('Fairness Index');
-xlabel('Time');
-xlim([t(1), t(end-1)]);
-ylim([0.55, 0.9]);
-legend(legend_label, 'Location', 'southwest');
-ax = hl(1).Parent;
-% ax.OuterPosition = [-0.04 -0.01 1.13 1.06];
-ax.OuterPosition = [0 0 1.08 1.04];
-export_fig(fig_fairness, 'Figures/fairness-vartime', '-pdf', '-transparent');

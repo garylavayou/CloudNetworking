@@ -115,6 +115,7 @@ for i = 1:num_events
     disp(T);
     stat.times(i) = e.Time;
     s_type = e.Type+num_fix_type;
+		%% Add or Remove Slice
     if strcmp(e.Description, 'arrival')
         %%%
         % |e.Type+num_fix_type | is the index of slice type in the array.
@@ -150,7 +151,8 @@ for i = 1:num_events
     end
     if PN.NumberSlices == 0         %% might not invalid, since PN may not exist
         break;
-    end
+		end
+		%% Static Slicing
     if b_static_slice
         if strcmp(e.Description, 'arrival')
             if i > 1
@@ -208,7 +210,7 @@ for i = 1:num_events
         waitbar(current_length/experiment_length, progress_bar, ...
             sprintf('%d/%d',current_length, experiment_length));
     end
-    
+    %% Single Optimal
     if b_single_optimal
         PN.setOptions({'SlicingMethod', 'PricingFactor'}, ...
 					{SlicingMethod.SingleNormal, net_opt.PricingFactor});
@@ -238,7 +240,7 @@ for i = 1:num_events
         waitbar(current_length/experiment_length, progress_bar, ...
             sprintf('%d/%d',current_length, experiment_length));
     end
-    
+    %% Price Adjusting
     if b_price_adjust
         PN.setOptions('SlicingMethod', SlicingMethod.AdjustPricing);
         [output_price, rt] = PN.optimizeResourcePriceNew();
