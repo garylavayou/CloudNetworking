@@ -102,7 +102,6 @@ for i = 1:length(type_index)
             slice_template(i).VNFList = [1,4,6];
             slice_template(i).ServiceInterval = 4;
             slice_template(i).Probability = 5/6;
-						
         case 14     % Type 1 for experiment 4: dynamic flow arrival and departure.
             slice_template(i).Weight = 40;
             slice_template(i).NumberPaths = 1;
@@ -251,6 +250,30 @@ for i = 1:length(type_index)
             slice_template(i).ReconfigScaler = 2;       % beta
             slice_template(i).PricingPolicy = 'quadratic';
             slice_template(i).UtilizationVariance = 0.03;
+        case 46     % Type 1 for experiment 6
+            slice_template(i).FlowPattern = FlowPattern.RandomInterDataCenter;
+            slice_template(i).Weight = 20;
+            slice_template(i).NumberPaths = 2;
+            slice_template(i).NumberFlows = 25;
+            slice_template(i).VNFList = [1,2,3];
+            slice_template(i).ServiceInterval = 1000;
+            slice_template(i).Probability = [];
+			  case 56      % Type 2 for experiment 6
+            slice_template(i).FlowPattern = FlowPattern.RandomInterBaseStation;
+            slice_template(i).Weight = 50;
+            slice_template(i).NumberPaths = 1;
+            slice_template(i).NumberFlows = 15;
+            slice_template(i).VNFList = [1,2,4,5];
+            slice_template(i).ServiceInterval = 12;
+            slice_template(i).Probability = 1/6;
+        case 66      % Type 3 for experiment 6
+            slice_template(i).FlowPattern = FlowPattern.RandomDataCenter2BaseStation;
+            slice_template(i).Weight = 100;
+            slice_template(i).NumberPaths = 3;
+            slice_template(i).NumberFlows = 10;
+            slice_template(i).VNFList = [1,4,6];
+            slice_template(i).ServiceInterval = 4;
+            slice_template(i).Probability = 5/6;						
         otherwise
             error('error: unrecognized slice type (%d).', type_index(i));
     end
@@ -309,16 +332,31 @@ for i = 1:length(type_index)
             error('error: unrecognized slice type (%d).', type_index(i));
     end
     
-    switch getdigit(type_index(i),5)
-        case 1
-            switch mod(type_index(i),100)
-                case {44,54,64}
-                    slice_template(i).ClassName = 'DynamicSliceTest';
-            end
-        case 0
-        otherwise
-            error('error: unrecognized slice type (%d).', type_index(i));
-    end
+		switch getdigit(type_index(i),5)
+			case 1
+				switch mod(type_index(i),100)
+					case {44,54,64}
+						slice_template(i).ClassName = 'DynamicSliceTest';
+				end
+			case 0
+			otherwise
+				error('error: unrecognized slice type (%d).', type_index(i));
+		end
+		
+		switch getdigit(type_index(i),6)		% adjust the number of flows
+			case 1
+				switch mod(type_index(i),100)		% small number of flows
+					case 46
+						slice_template(i).NumberFlows = 20;
+					case 56
+						slice_template(i).NumberFlows = 10;
+					case 66
+            slice_template(i).NumberFlows = 5;
+				end
+			case 0
+			otherwise
+				error('error: unrecognized slice type (%d).', type_index(i));
+		end
 end
 end
 %% Adjust Parameters
