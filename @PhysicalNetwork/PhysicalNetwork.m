@@ -37,13 +37,15 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
                              % data_center(dc_id) returns the physical node id;
         VNFTable = table;    % Meta data of virtual network function
         slices;              % a list of <Slice> objects        
+        AggregateLinkUsage;
+        AggregateNodeUsage;
     end
     
     properties
         slice_template;
     end
     
-    properties (Access = {?PhysicalNetwork, ?Slice})
+    properties (Access = {?PhysicalNetwork, ?SubstrateNetwork, ?Slice})
         % |options| will be visited by <CloudNetwork> and <DynamicNetwork>
         options;
     end    
@@ -52,11 +54,7 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
         path_identifier_generator;
         flow_identifier_generator;
     end
-    properties (Access = {?PhysicalNetwork,?VirtualNetwork})
-        AggregateLinkUsage;
-        AggregateNodeUsage;
-    end
-    
+
     methods
         %% Constructor
         %   PhysicalNetwork(node_opt, link_opt, VNF_opt, options)
@@ -75,7 +73,7 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
             % Store graph information
             this.Topology = PhysicalNetwork.loadNetworkData(node_opt, link_opt);
             dc_node_index = find(this.Topology.Nodes.Capacity>0);
-            this.DataCenters = table(dc_node_index, 'VariableName', {'NodeIndex'});
+            this.DataCenters = table(dc_node_index, 'VariableName', {'Node'});
             c = 1;
             while c<=width(this.Topology.Nodes)
                 name = this.Topology.Nodes.Properties.VariableNames{c};
@@ -97,6 +95,13 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
             % In the edge table, link is indexed by rows, which is different from the
             % default index scheme of matlab matrix. So we add a column-index to the Edge
             % Table.
+						%
+						% Note: we cannot rely on the system <graph>/<digraph> class, as the
+						% edges are automatially sorted (row-indexing). As a result, we
+						% cannot easily track the old link index when we add new links.
+						%
+						%% TODO: change the definition of Adjacency matric of DirectedGraph
+						% row as tail, column as head of link.
             [s,t] = this.Topology.findedge;
             idx = this.graph.IndexEdge(s,t);
             this.Topology.Edges.Index = idx;
@@ -126,15 +131,15 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
     methods (Access = protected)
         % Child classes can overload these functions, which can be called from the
         % superclass, without consideration the specific class of the object. 
-        function this = copyElement(pn)
-            % Make a shallow copy of all properties
-            this = copyElement@matlab.mixin.Copyable(pn);
+        function newobj = copyElement(this)
+            %% Make a shallow copy of all properties
+            newobj = copyElement@matlab.mixin.Copyable(this);
             %% Deep Copy Issue
             % *slice.Parent*: update this link to the copyed network object.
-            this.graph = pn.graph.copy;
-            for i = 1:pn.NumberSlices
-                this.slices{i} = pn.slices{i}.copy;
-                this.slices{i}.Parent = this;
+            newobj.graph = this.graph.copy;
+            for i = 1:this.NumberSlices
+                newobj.slices{i} = this.slices{i}.copy;
+                newobj.slices{i}.Parent = newobj;
             end
         end        
     end
@@ -175,14 +180,14 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
                 case FlowPattern.RandomMultiFlow
                     info.NumberFlows = this.NumberNodes*(this.NumberNodes-1);
                 otherwise
-                    error('error: cannot handle the flow pattern <%s>.', ...
-                        slice_opt.FlowPattern.char);
+                    error('error: [%s] unidentified flow pattern <%s>.', ...
+                        calledby(0), slice_opt.FlowPattern.char);
             end
             if isfield(slice_opt, 'NodeSet')
                 info.NumberNodes = length(slice_opt.NodeSet);
                 info.NodeSet = slice_opt.NodeSet;
             else
-                info.NumberNodes = this.Topology.numnodes;
+                info.NumberNodes = this.NumberNodes;
                 info.NodeSet = 1:info.NumberNodes;
             end
         end
@@ -415,7 +420,7 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
                     value = this.Topology.Nodes{node_id, {name}};
                 otherwise
                     value = zeros(this.NumberNodes, 1);
-                    value(this.DataCenters.NodeIndex) = this.getDataCenterField(name);
+                    value(this.DataCenters.Node) = this.getDataCenterField(name);
                     value = value(node_id);
             end
         end
@@ -600,35 +605,45 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
         % <Slice.getLinkCapacity>, <Slice.getNodeCapacity> and
         % <DynamicSlice.getLinkCapacity>, <DynamicSlice.getNodeCapacity>. 
         %
-        % If the 2nd argument is provided, calculate load from the set of |sub_slices|,
-        % otherwise, calculate from all slices. 
-        % If |option| is not provided, directly copy from 'Capacity' field of each slice.
-        % Otheriwse if |option='sum'|, use the temporary variables of each slice, to
-        % calculate temporary capacity of each slice.   
-        % Makesure the temporary variables is up-to-date , when calling this method.
-        function [node_load, link_load] = getNetworkLoad(this, sub_slices, option)
-            if nargin <= 1 || isempty(sub_slices)
-                sub_slices = this.slices;
-            elseif ~iscell(sub_slices)
-                sub_slices = {sub_slices};
-            end
-            if nargin <= 2
-                option = 'copy';
-            end
-            node_load = zeros(this.NumberDataCenters, 1);
-            link_load = zeros(this.NumberLinks, 1);
-            for i = 1:length(sub_slices)
-                sl = sub_slices{i};
-                link_id = sl.VirtualLinks.PhysicalLink;
-                dc_id = sl.getDCPI;
-                if strcmpi(option, 'copy')
-                    node_load(dc_id) = node_load(dc_id) + sl.getNodeCapacity;
-                    link_load(link_id) = link_load(link_id) + sl.getLinkCapacity;
-                else  % 'sum'
-                    node_load(dc_id) = node_load(dc_id) + sl.getNodeCapacity(false);
-                    link_load(link_id) = link_load(link_id)+ sl.getLinkCapacity(false);                    
-                end
-            end
+        % |slices|: If the argument is provided, calculate load from the
+        %						set of |slices|, otherwise, calculate from all slices. 
+        % |options|
+				%			_Stage_ 
+				%					'final': directly copy from 'Capacity' field of each slice.
+				%					'temp': use the temporary variables of each slice, to
+				%							calculate temporary capacity of each slice. Makesure
+				%							the temporary variables is up-to-date, when calling
+				%							this method.  
+				function load = getNetworkLoad(this, slices, options)
+					defaultopts = struct('Stage', 'final');
+					if nargin <= 2
+						options = defaultopts;
+					else
+						options = structupdate(defaultopts, options);
+					end
+					
+					if nargin <= 1 || isempty(slices)
+						slices = this.slices;
+					elseif ~iscell(slices)
+						slices = {slices};
+					end
+					
+					load.Node = zeros(this.NumberDataCenters, 1);
+					load.Link = zeros(this.NumberLinks, 1);
+					for i = 1:length(slices)
+						sl = slices{i};
+						link_id = sl.VirtualLinks.PhysicalLink;
+						dc_id = sl.getDCPI;
+						if sl.isFinal() || strcmpi(options.State, 'final')
+							load.Node(dc_id) = load.Node(dc_id) + sl.getNodeCapacity;
+							load.Link(link_id) = load.Link(link_id) + sl.getLinkCapacity;
+						elseif strcmpi(options.State, 'temp')
+							load.Node(dc_id) = load.Node(dc_id) + sl.getNodeCapacity(false);
+							load.Link(link_id) = load.Link(link_id)+ sl.getLinkCapacity(false);
+						else
+							error('error:[%s] Invalid value for options ''Stage''=''%s''.', options.Stage);
+						end
+					end
         end
                 
     end

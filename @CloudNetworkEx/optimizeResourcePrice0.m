@@ -13,6 +13,7 @@
 function [output, runtime] = optimizeResourcePrice0(this, init_price)
 global DEBUG;
 options = getstructfields(this.options, {'PricingFactor', 'PercentFactor'});
+options.Stage ='temp';
 
 this.clearStates;
 if nargout == 2
@@ -30,17 +31,17 @@ link_capacity = this.getLinkField('Capacity');
 
 % Initial Price
 if nargin >=2 && ~isempty(init_price)
-    link_price = init_price.Link;
-    node_price = init_price.Node;
+    prices.Link = init_price.Link;
+    prices.Node = init_price.Node;
 else
     init_price.Link = this.getLinkCost;
-    link_price = init_price.Link;
+    prices.Link = init_price.Link;
     init_price.Node = this.getNodeCost;
-    node_price = init_price.Node;
+    prices.Node = init_price.Node;
 end
-beta_link = link_price.*(1/3).*link_capacity;
+beta_link = prices.Link.*(1/3).*link_capacity;
 delta_link_price = beta_link./link_capacity;
-beta_node = node_price.*(1/3).*node_capacity;
+beta_node = prices.Node.*(1/3).*node_capacity;
 delta_node_price = beta_node./node_capacity;
 
 number_iter = 1;
@@ -55,9 +56,9 @@ while true
     % announce the resource price and optimize each network slice
     for s = 1:NS
         this.slices{s}.prices.Link= ...
-            link_price(this.slices{s}.VirtualLinks.PhysicalLink);
+            prices.Link(this.slices{s}.VirtualLinks.PhysicalLink);
         this.slices{s}.prices.Node = ...
-            node_price(this.slices{s}.VirtualNodes.PhysicalNode);
+            prices.Node(this.slices{s}.VirtualNodes.PhysicalNode);
         if nargout == 2
             tic;
         end
@@ -86,8 +87,8 @@ while true
     % residual capacity of each link and node. Given the log barrier function
     % $\beta\log{(1-\frac{y_e}{c_e})}$, the resource price is calculated as follows.
     %
-    [node_load, link_load] = this.getNetworkLoad([], 'sum');
-    residual_link_capacity = link_capacity - link_load;
+    load = this.getNetworkLoad([], options);
+    residual_link_capacity = link_capacity - load.Link;
     b_violate = residual_link_capacity<=0;
     delta_link_price(b_violate) = delta_link_price(b_violate) * 2;
     new_link_price = init_price.Link;
@@ -95,7 +96,7 @@ while true
     new_link_price(a_link_violate) = ...
         new_link_price(a_link_violate) + delta_link_price(a_link_violate);
     
-    residual_node_capacity = node_capacity - node_load;
+    residual_node_capacity = node_capacity - load.Node;
     b_violate = residual_node_capacity<=0;
     delta_node_price(b_violate) = delta_node_price(b_violate) * 2;
     new_node_price = init_price.Node;
@@ -115,11 +116,11 @@ while true
         sl = this.slices{s};
         new_net_welfare = new_net_welfare + sl.weight*sum(fcnUtility(sl.flow_rate));
     end
-    new_net_welfare = new_net_welfare - this.getNetworkCost(node_load, link_load);
+    new_net_welfare = new_net_welfare - this.getNetworkCost(load);
     % The stop condition
-    %    (norm(new_link_price-link_price)/this.NumberLinks;
-    stop_cond11 = norm(new_link_price-link_price)/norm(link_price);
-    stop_cond12 = norm(new_node_price-node_price)/norm(node_price);
+    %    (norm(new_link_price-prices.Link)/this.NumberLinks;
+    stop_cond11 = norm(new_link_price-prices.Link)/norm(prices.Link);
+    stop_cond12 = norm(new_node_price-prices.Node)/norm(prices.Node);
     %     norm(new_utility-utility)/NS < 10^-3;
     stop_cond2 = norm(new_profit-profit)/norm(profit);
     %     stop_cond3 = norm(new_net_welfare-net_welfare)/NS < 10^-3;
@@ -134,8 +135,8 @@ while true
         %|| stop_cond2<10^-4 %|| stop_cond3<10^-4
         break;
     else
-        link_price = alpha*new_link_price+(1-alpha)*link_price;
-        node_price = alpha*new_node_price+(1-alpha)*node_price;
+        prices.Link = alpha*new_link_price+(1-alpha)*prices.Link;
+        prices.Node = alpha*new_node_price+(1-alpha)*prices.Node;
         profit = new_profit;
         net_welfare = new_net_welfare;
     end
@@ -149,17 +150,17 @@ l = 0;
 alpha = 1/2;
 h = 1;
 while true && ~(nnz(a_link_violate)==0 && nnz(a_node_violate)==0)
-    link_price = init_price.Link;
-    link_price(a_link_violate) = ...
-        link_price(a_link_violate) + alpha*delta_link_price(a_link_violate);
-    node_price = init_price.Node;
-    node_price(a_node_violate) = ...
-        node_price(a_node_violate) + alpha*delta_node_price(a_node_violate);
+    prices.Link = init_price.Link;
+    prices.Link(a_link_violate) = ...
+        prices.Link(a_link_violate) + alpha*delta_link_price(a_link_violate);
+    prices.Node = init_price.Node;
+    prices.Node(a_node_violate) = ...
+        prices.Node(a_node_violate) + alpha*delta_node_price(a_node_violate);
     for s = 1:NS
         this.slices{s}.prices.Link = ...
-            link_price(this.slices{s}.VirtualLinks.PhysicalLink);
+            prices.Link(this.slices{s}.VirtualLinks.PhysicalLink);
         this.slices{s}.prices.Node = ...
-            node_price(this.slices{s}.VirtualNodes.PhysicalNode);
+            prices.Node(this.slices{s}.VirtualNodes.PhysicalNode);
         if nargout == 2
             tic;
         end
@@ -175,9 +176,9 @@ while true && ~(nnz(a_link_violate)==0 && nnz(a_node_violate)==0)
     if nargout == 2
         runtime.Parallel = runtime.Parallel + slice_runtime;
     end
-    [node_load, link_load] = this.getNetworkLoad([], 'sum');
-    residual_link_capacity = link_capacity - link_load;
-    residual_node_capacity = node_capacity - node_load;
+    load = this.getNetworkLoad([], options);
+    residual_link_capacity = link_capacity - load.Link;
+    residual_node_capacity = node_capacity - load.Node;
     if isempty(find(residual_link_capacity<0,1)) && isempty(find(residual_node_capacity<0,1))
         h = alpha;
         alpha = (l+alpha)/2;
@@ -192,7 +193,7 @@ while true && ~(nnz(a_link_violate)==0 && nnz(a_node_violate)==0)
 end
 
 % Finalize substrate network
-this.finalize(node_price, link_price);
+this.finalize(prices);
 
 % Calculate the output
 output = this.calculateOutput();

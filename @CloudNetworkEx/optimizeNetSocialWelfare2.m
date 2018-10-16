@@ -4,6 +4,7 @@
 function [prim_fval] = optimizeNetSocialWelfare2( this )
 global DEBUG;
 options = getstructfields(this.options, {'PricingFactor', 'PercentFactor'});
+options.Stage = 'temp';
 
 %% network data
 NN = this.NumberNodes;
@@ -42,13 +43,13 @@ while true
     end
     prev_dual_fval = dual_fval;
     % check the primal feasibility
-    [node_load, link_load] = this.getNetworkLoad([], 'sum');
+    load = this.getNetworkLoad([], options);
     b_feasible = true;
-    if ~isempty(find(node_load>node_capacity,1))
+    if ~isempty(find(load.Node>node_capacity,1))
         b_feasible = false;
         lambda.n = lambda.n * 2;
     end
-    if ~isempty(find(link_load>link_capacity,1))
+    if ~isempty(find(load.Link>link_capacity,1))
         b_feasible = false;
         lambda.e = lambda.e * 2;
     end
@@ -59,8 +60,8 @@ end
 this.saveStates;
 
 %% Evaluate the initial step length    
-delta_lambda.n = node_load - node_capacity;
-delta_lambda.e = link_load - link_capacity;
+delta_lambda.n = load.Node - node_capacity;
+delta_lambda.e = load.Link - link_capacity;
 idn = delta_lambda.n<0;
 ide = delta_lambda.e<0;
 step_length = 1/32*min(min(-lambda.e(ide)./delta_lambda.e(ide)),...
@@ -117,9 +118,9 @@ while true
         prev_dual_fval = dual_fval;
     end
     
-    [node_load, link_load] = this.getNetworkLoad([], 'sum');
-    delta_lambda.n = node_load - node_capacity;
-    delta_lambda.e = link_load - link_capacity;
+    load = this.getNetworkLoad([], options);
+    delta_lambda.n = load.Node - node_capacity;
+    delta_lambda.e = load.Link - link_capacity;
     if isempty(find([delta_lambda.n>0; delta_lambda.e>0],1))
         this.saveStates;
     end
@@ -135,12 +136,12 @@ prim_fval = 0;
 for s = 1:NS
     prim_fval = prim_fval + this.slices{s}.weight*sum(fcnUtility(this.slices{s}.FlowTable.Rate));
 end
-[node_load, link_load] = this.getNetworkLoad;
-this.setNodeField('Load', node_load);
-this.setLinkField('Load', link_load);
+load = this.getNetworkLoad;
+this.setNodeField('Load', load.Node);
+this.setLinkField('Load', load.Link);
 prim_fval = prim_fval - this.getNetworkCost;
 if ~isempty(DEBUG) && DEBUG
-    fprintf('\tOptimal solution: fx = %G, g(¦Ë) = %G.\n', prim_fval, dual_fval);
+    fprintf('\tOptimal solution: fx = %G, g(ï¿½ï¿½) = %G.\n', prim_fval, dual_fval);
     fprintf('\tIteration number: %d, Evaluation Number: %G.\n', iter_num, eval_num);
 end
 end

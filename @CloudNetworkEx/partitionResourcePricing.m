@@ -27,17 +27,17 @@ node_uc = this.getNodeCost;
 % Initial Price
 t1 = 1;           % {0.1|1}
 if nargin >= 2 && ~isempty(init_price)
-    link_price = t1 * init_price.Link;
-    node_price = t1 * init_price.Node;
+    prices.Link = t1 * init_price.Link;
+    prices.Node = t1 * init_price.Node;
 else
     init_price.Link = t1* link_uc;
-    link_price = init_price.Link;
+    prices.Link = init_price.Link;
     init_price.Node = t1* node_uc;
-    node_price = init_price.Node;
+    prices.Node = init_price.Node;
 end
 t0 = 10^-1;     % {1|0.1|0.01}
-delta_link_price = t0 * link_uc;  % init_price.link
-delta_node_price = t0 * node_uc;
+delta_price.Link = t0 * link_uc;  % init_price.link
+delta_price.Node = t0 * node_uc;
 
 number_iter = 1;
 part_factor = 1;
@@ -50,7 +50,7 @@ while true
     sliceOptimization;
     
     %% Price adjustment    
-    % Slices solve P1 with ¦Ñ_k, return the node (link) load v(y);
+    % Slices solve P1 with ï¿½ï¿½_k, return the node (link) load v(y);
     % announce the resource price and optimize each network slice
     % Compute the new resource price according to the resource consumption
     b_link_violate = (link_capacity - aggr_link_load)<0;
@@ -61,26 +61,26 @@ while true
     else
         b_violate = true;
     end
-    link_price(b_link_violate)  = link_price(b_link_violate) + delta_link_price(b_link_violate);
-    delta_link_price(b_link_violate) = delta_link_price(b_link_violate) * 2;
-    node_price(b_node_violate) = node_price(b_node_violate) + delta_node_price(b_node_violate);
-    delta_node_price(b_node_violate) = delta_node_price(b_node_violate) * 2;
+    prices.Link(b_link_violate)  = prices.Link(b_link_violate) + delta_price.Link(b_link_violate);
+    delta_price.Link(b_link_violate) = delta_price.Link(b_link_violate) * 2;
+    prices.Node(b_node_violate) = prices.Node(b_node_violate) + delta_price.Node(b_node_violate);
+    delta_price.Node(b_node_violate) = delta_price.Node(b_node_violate) * 2;
 end
 
 %% Stage 1-2
-% delta_link_price = t0 * link_price;  % 0.01 * init_price.link
-% delta_node_price = t0 * node_price;
-step_weight = 1./link_price / min(1./link_price);
-delta_link_price = step_weight.*link_uc;  
-step_weight = 1./node_price / min(1./node_price);
-delta_node_price = step_weight.*node_uc;
-min_delta_link_price = delta_link_price;
-min_delta_node_price = delta_node_price;
+% delta_price.Link = t0 * prices.Link;  % 0.01 * init_price.link
+% delta_price.Node = t0 * prices.Node;
+step_weight = 1./prices.Link / min(1./prices.Link);
+delta_price.Link = step_weight.*link_uc;  
+step_weight = 1./prices.Node / min(1./prices.Node);
+delta_price.Node = step_weight.*node_uc;
+min_delta_link_price = delta_price.Link;
+min_delta_node_price = delta_price.Node;
 d0 = 10^-2;
 d1 = 10^-1;
-stop_cond1 = ~isempty(find(delta_link_price > d0 * link_uc, 1));
-stop_cond2 = ~isempty(find(delta_node_price > d0 * node_uc, 1));
-stop_cond3 = this.checkProfitRatio(aggr_node_load, aggr_link_load, node_price, link_price, options);
+stop_cond1 = ~isempty(find(delta_price.Link > d0 * link_uc, 1));
+stop_cond2 = ~isempty(find(delta_price.Node > d0 * node_uc, 1));
+stop_cond3 = this.checkProfitRatio(prices, options);
 partial_link_violate = false(NL, 1);
 partial_node_violate = false(NN, 1);
 b_first = true;
@@ -88,15 +88,15 @@ while stop_cond1 && stop_cond2 && stop_cond3
     if ~isempty(DEBUG) && DEBUG
         disp('----link price    delta link price----')
     end
-    disp([link_price delta_link_price]);
-    b_link = link_price > delta_link_price;
-    link_price(b_link) = link_price(b_link) - delta_link_price(b_link);
+    disp([prices.Link delta_price.Link]);
+    b_link = prices.Link > delta_price.Link;
+    prices.Link(b_link) = prices.Link(b_link) - delta_price.Link(b_link);
     if ~isempty(DEBUG) && DEBUG
         disp('----node price    delta node price----')
     end
-    disp([node_price delta_node_price]);
-    b_node = node_price > delta_node_price;
-    node_price(b_node) = node_price(b_node) - delta_node_price(b_node);
+    disp([prices.Node delta_price.Node]);
+    b_node = prices.Node > delta_price.Node;
+    prices.Node(b_node) = prices.Node(b_node) - delta_price.Node(b_node);
 
     sliceOptimization;
     
@@ -106,67 +106,67 @@ while stop_cond1 && stop_cond2 && stop_cond3
     assert_node_1 = isempty(find(b_node_violate==1,1));			% no violate node
     if assert_link_1 && assert_node_1
         if b_first
-            delta_link_price = delta_link_price * 2;
-            delta_node_price = delta_node_price * 2;
+            delta_price.Link = delta_price.Link * 2;
+            delta_price.Node = delta_price.Node * 2;
         else
-            delta_link_price = delta_link_price + min_delta_link_price;
-            delta_node_price = delta_node_price + min_delta_node_price;
+            delta_price.Link = delta_price.Link + min_delta_link_price;
+            delta_price.Node = delta_price.Node + min_delta_node_price;
         end
         partial_link_violate = false(NL, 1);
         partial_node_violate = false(NN, 1);
-        stop_cond3 = this.checkProfitRatio(aggr_node_load, aggr_link_load, node_price, link_price, options);
+        stop_cond3 = this.checkProfitRatio(prices, options);
     else
         b_first = false;
-        link_price(b_link) = link_price(b_link) + delta_link_price(b_link);
-        node_price(b_node) = node_price(b_node) + delta_node_price(b_node);
-        assert_link_2 = isempty(find(delta_link_price > d1 * link_uc, 1));		% the vector is less than a threshold
-        assert_node_2 = isempty(find(delta_node_price > d1 * node_uc, 1));		% the vector is less than a threshold
+        prices.Link(b_link) = prices.Link(b_link) + delta_price.Link(b_link);
+        prices.Node(b_node) = prices.Node(b_node) + delta_price.Node(b_node);
+        assert_link_2 = isempty(find(delta_price.Link > d1 * link_uc, 1));		% the vector is less than a threshold
+        assert_node_2 = isempty(find(delta_price.Node > d1 * node_uc, 1));		% the vector is less than a threshold
         if assert_link_2
             partial_link_violate = partial_link_violate | b_link_violate;
-            delta_link_price(partial_link_violate) = 0;
+            delta_price.Link(partial_link_violate) = 0;
         else
             partial_link_violate = false(NL, 1);
         end
-        delta_link_price = delta_link_price / 2;
-        min_delta_link_price = min(delta_link_price/4, min_delta_link_price);
+        delta_price.Link = delta_price.Link / 2;
+        min_delta_link_price = min(delta_price.Link/4, min_delta_link_price);
         if assert_node_2
             partial_node_violate = partial_node_violate | b_node_violate;
-            delta_node_price(partial_node_violate) = 0;
+            delta_price.Node(partial_node_violate) = 0;
         else
             partial_node_violate = false(NN, 1);
         end
-        delta_node_price = delta_node_price / 2;
-        min_delta_node_price = min(delta_node_price/4, min_delta_node_price);
+        delta_price.Node = delta_price.Node / 2;
+        min_delta_node_price = min(delta_price.Node/4, min_delta_node_price);
     end
     
     partitionWeightUpdate;
     
     partitionFactorUpdate;
 
-    %     stop_cond1 = norm(delta_link_price) > norm(10^-4 * link_uc);
-    %     stop_cond2 = norm(delta_node_price) > norm(10^-4 * node_uc);
-    stop_cond1 = ~isempty(find(delta_link_price > d0 * link_uc, 1));
-    stop_cond2 = ~isempty(find(delta_node_price > d0 * node_uc, 1));
+    %     stop_cond1 = norm(delta_price.Link) > norm(10^-4 * link_uc);
+    %     stop_cond2 = norm(delta_price.Node) > norm(10^-4 * node_uc);
+    stop_cond1 = ~isempty(find(delta_price.Link > d0 * link_uc, 1));
+    stop_cond2 = ~isempty(find(delta_price.Node > d0 * node_uc, 1));
     number_iter = number_iter + 1;
 end
 
 %% Stage 2
 %% Profit ratio aware price adjustment
-delta_link_price = t1 * link_price;
-delta_node_price = t1 * node_price;
-stop_cond3 = ~this.checkProfitRatio(aggr_node_load, aggr_link_load, node_price, link_price, options);
+delta_price.Link = t1 * prices.Link;
+delta_price.Node = t1 * prices.Node;
+stop_cond3 = ~this.checkProfitRatio(prices, options);
 % only adjust price when the network's profit lower than the threshold.
 if stop_cond3
     while stop_cond3
-        link_price = link_price + delta_link_price;
-        node_price = node_price + delta_node_price;
+        prices.Link = prices.Link + delta_price.Link;
+        prices.Node = prices.Node + delta_price.Node;
         
         sliceOptimization;
         
-        stop_cond3 = ~this.checkProfitRatio(aggr_node_load, aggr_link_load, node_price, link_price, options);
+        stop_cond3 = ~this.checkProfitRatio(prices, options);
         if ~stop_cond3
-            delta_link_price = delta_link_price * 2;
-            delta_node_price = delta_node_price * 2;
+            delta_price.Link = delta_price.Link * 2;
+            delta_price.Node = delta_price.Node * 2;
         end
         
         partitionWeightUpdate;
@@ -179,14 +179,14 @@ if stop_cond3
     h = 1;
     new_opts = options;
     new_opts.Epsilon = 10^-3;
-    while this.checkProfitRatio(aggr_node_load, aggr_link_load, node_price, link_price, new_opts)
+    while this.checkProfitRatio(prices, new_opts)
         alpha = (l+h)/2;
-        link_price = link_price + delta_link_price * alpha;
-        node_price = node_price + delta_node_price * alpha;
+        prices.Link = prices.Link + delta_price.Link * alpha;
+        prices.Node = prices.Node + delta_price.Node * alpha;
         
         sliceOptimization;
         
-        if this.checkProfitRatio(aggr_node_load, aggr_link_load, node_price, link_price, options)
+        if this.checkProfitRatio(prices, options)
             h = alpha;
         else
             l = alpha;
@@ -212,8 +212,8 @@ for s = 1:NS
     sl.VirtualLinks.Load = sl.getLinkLoad;
     sl.FlowTable.Rate = sl.getFlowRate;
 end
-this.setLinkField('Price', link_price);
-this.setNodeField('Price', node_price);
+this.setLinkField('Price', prices.Link);
+this.setNodeField('Price', prices.Node);
 this.setNodeField('Load', aggr_node_load);
 this.setLinkField('Load', aggr_link_load);
 
@@ -227,8 +227,8 @@ this.setLinkField('Load', aggr_link_load);
 % |AccuratePrice|.
 % # Flow rate of all flows in the network.
 %% TODO: replace with calculateOutput
-output.node_price = node_price;
-output.link_price = link_price;
+output.node_price = prices.Node;
+output.link_price = prices.Link;
 output.node_load = aggr_node_load;
 output.link_load = aggr_link_load;
 output.welfare_approx = 0;
@@ -272,7 +272,7 @@ for s = 1:NS
     % _Accurate Model_ with proportion profit.
     %
     % *NOTE*: fcnNetProfit here evaluate the raw profit with resource cost.
-    p = Slice.fcnNetProfit(var_x, sl);
+    p = SimpleSlice.fcnNetProfit(var_x, sl);
     output.welfare_approx = output.welfare_approx + p;
     output.welfare_accurate = output.welfare_accurate...
         + sl.weight*sum(fcnUtility(sl.FlowTable.Rate));
@@ -290,7 +290,7 @@ for s = 1:NS
     %
     % *NOTE*: it is not accurate to calculate the static cost of each slice with this
     % method.
-    p = Slice.fcnNetProfit(var_x, sl, options);
+    p = SimpleSlice.fcnNetProfit(var_x, sl, options);
     if this.static_factor ~= 0
         idx = sl.VirtualNodes.Load>0;
         nid = sl.VirtualNodes.PhysicalNode;
@@ -317,7 +317,7 @@ for s = 1:NS
     %                 = sum(slice_payment(price))) - cost(approximate/accurate)
     %
     % *NOTE*: fcnProfit evalute the profit using offered price.
-    output.profit.ApproximatePrice(s) = Slice.fcnProfit(sl,options);
+    output.profit.ApproximatePrice(s) = SimpleSlice.fcnProfit(sl,options);
 end
 if ~isempty(this.eta)
     embed_profit_approx = this.eta*this.getNetworkCost;
@@ -368,8 +368,8 @@ end
                 sl.VirtualNodes.Capacity(sb_node_violate) = ...
                     part_factor*partition_ratio.*this.getNodeField('Capacity', violate_node_id);
             end
-            sl.prices.Link = link_price(link_id);
-            sl.prices.Node = node_price(node_id);
+            sl.prices.Link = prices.Link(link_id);
+            sl.prices.Node = prices.Node(node_id);
             %%%
             % optimal each slice with price and resource constraints.
             if nargout == 2

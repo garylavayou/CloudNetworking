@@ -12,9 +12,9 @@
 % requirement is easily meeted. However, when the cost function is strictly convex, the
 % resource cost cannot be separated into independent slices.
 %% Dual decomposition
-% # An initial point of the dual variable is given as ¦Ë=1 (all constraints are active)
+% # An initial point of the dual variable is given as ï¿½ï¿½=1 (all constraints are active)
 % or 0 (the Lagrangian only contains objective function).
-% ¦Ë = [¦Ë(p,f,s), ¦Ë(n), ¦Ë(e)]
+% ï¿½ï¿½ = [ï¿½ï¿½(p,f,s), ï¿½ï¿½(n), ï¿½ï¿½(e)]
 % # Independently solve the subproblems for each slice.
 % # Update the dual variable
 % # Repeat the second and third steps, until the optimal solution is reached.
@@ -58,13 +58,13 @@ while true
         %             -lambda.pf{i}(alpha_idx)./delta_lambda.pf{i}(alpha_idx));
     end
     % check the primal feasibility
-    [node_load, link_load] = this.getNetworkLoad([], 'sum');
+    load = this.getNetworkLoad([], struct('Stage', 'temp'));
     b_feasible = true;
-    if ~isempty(find(node_load>node_capacity,1))
+    if ~isempty(find(load.Node>node_capacity,1))
         b_feasible = false;
         lambda.n = lambda.n*5;
     end
-    if ~isempty(find(link_load>link_capacity,1))
+    if ~isempty(find(load.Link>link_capacity,1))
         b_feasible = false;
         lambda.e = lambda.e*5;
     end
@@ -77,8 +77,8 @@ this.saveStates;
       
 step_length = 0.01;
 % compute the gradient of lambda.n/e
-delta_lambda.n = node_load-node_capacity;
-delta_lambda.e = link_load-link_capacity;
+delta_lambda.n = load.Node-node_capacity;
+delta_lambda.e = load.Link-link_capacity;
 partial_step.e = step_length*ones(NL, 1);
 partial_step.n = step_length*ones(NN, 1);
 th = 100;
@@ -121,9 +121,9 @@ while true
         end
         
         % check the primal feasibility
-        [node_load, link_load] = this.getNetworkLoad([], 'sum');
-        ide = link_load>link_capacity;
-        idn = node_load>node_capacity;
+        load = this.getNetworkLoad([], struct('Stage', 'temp'));
+        ide = load.Link>link_capacity;
+        idn = load.Node>node_capacity;
         b_feasible = true;
         if ~isempty(find(ide,1)) || ~isempty(find(idn,1))
             b_feasible = false;
@@ -265,8 +265,8 @@ utility = 0;
 for i = 1:NS
     utility = utility + this.slices{i}.weight*sum(fcnUtility(this.slices{i}.FlowTable.Rate));
 end
-[node_load, link_load] = this.getNetworkLoad;
-primal_fval = utility - this.getNetworkCost(node_load ,link_load);
+load = this.getNetworkLoad;
+primal_fval = utility - this.getNetworkCost(load);
 fprintf('\tOptimal solution: dual objective: %G, primal objective %G.\n', ...
     dual_fval, primal_fval);
 end
@@ -278,15 +278,15 @@ end
 
 %% Find the maximum feasible step length in the dual ascent direction.
 % # Determine maximum feasible step length (less than the default step length)
-% for ¦Ë>=0. the dual variable after the updates must still be in the feasible domain.
-% # Determine maximum step length (less than the feasible step length) of ¦Ë_n
+% for ï¿½ï¿½>=0. the dual variable after the updates must still be in the feasible domain.
+% # Determine maximum step length (less than the feasible step length) of ï¿½ï¿½_n
 % for g(z)>=0.
-% # Determine maximum step length of ¦Ë_pf for g(z)>=0.
-% After finding the maximum step length for ¦Ë_n, we calculate the step length for ¦Ë_pf
+% # Determine maximum step length of ï¿½ï¿½_pf for g(z)>=0.
+% After finding the maximum step length for ï¿½ï¿½_n, we calculate the step length for ï¿½ï¿½_pf
 % of each slice, and then update the dual variables using the new step length.
 %
 % *Note*: finding an conmmon feasible step length for all dual variable is not right,
-% since in some direction the dual variable has reached the boundaries of ¦Ë or g(z,¦Ë).
+% since in some direction the dual variable has reached the boundaries of ï¿½ï¿½ or g(z,ï¿½ï¿½).
 %     for i = 1:NS
 %         NPi = this.slices{i}.NumberPaths;
 %         NFi = this.slices{i}.NumberVNFs;
@@ -298,14 +298,14 @@ end
 %         % compatible addition , gradz and delta_gradz result in 3D arraies, with dimension of N*P*F
 %         gradz = node_unit_cost(nid) + phis_n + lambda.n(nid)-lambda_pf;
 %         delta_gradz = delta_lambda.n(nid) - delta_lambda_pf;
-%         H_npf = repmat(full(this.slices{i}.I_node_path), 1, 1, NFi);
+%         H_npf = repmat(full(this.slices{i}.I_dc_path), 1, 1, NFi);
 %
 %         alpha_npf = min(step_n(nid).*ones(NNi, NPi, NFi), repmat(step_pf{i}, NNi, 1, 1));
 %         % if delta_gradz>=0, then any feasible step lengths still guarantees than gradz is postive.
 %         % otherwise, a appropriate value of step length must be calculated.
 %         alpha_idx = (delta_gradz<0) & (H_npf~=0);
 %         alpha_npf(alpha_idx) = -gradz(alpha_idx)./delta_gradz(alpha_idx);
-%         a1 = min(min(alpha_npf, [], 3), [], 2);		% find the maximum (max-min) step length for ¦Ë_n in slice i.
+%         a1 = min(min(alpha_npf, [], 3), [], 2);		% find the maximum (max-min) step length for ï¿½ï¿½_n in slice i.
 %         % new alpha_npf might be large than the feasible alpha_npf
 %         % compare the maximum step length with the prior calculated value and and update it.
 %         step_n(nid) = min(step_n(nid), a1);
@@ -322,8 +322,8 @@ end
 %         delta_lambda_pf = repmat(delta_lambda_pf, NNi,1,1);
 %         % lambda.n(nid) has been updated
 %         gradz = node_unit_cost(nid) + phis_n + lambda.n(nid)-lambda_pf;
-%         H_npf = repmat(full(this.slices{i}.I_node_path), 1, 1, NFi);
-%         % if delta_lambda_pf<= 0, any positive step length for ¦Ë_pf is feasible.
+%         H_npf = repmat(full(this.slices{i}.I_dc_path), 1, 1, NFi);
+%         % if delta_lambda_pf<= 0, any positive step length for ï¿½ï¿½_pf is feasible.
 %         % otherwise, we calculate a feasible step length
 %         alpha_npf = repmat(step_pf{i}, NNi, 1, 1);
 %         alpha_idx = (delta_lambda_pf>0) & (H_npf~=0);

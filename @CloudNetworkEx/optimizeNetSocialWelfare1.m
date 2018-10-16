@@ -46,13 +46,13 @@ while true
     end
     prev_dual_fval = dual_fval;
     % check the primal feasibility
-    [node_load, link_load] = this.getNetworkLoad([], 'sum');
+    load = this.getNetworkLoad([], struct('Stage', 'temp'));
     b_feasible = true;
-    if ~isempty(find(node_load>node_capacity,1))
+    if ~isempty(find(load.Node>node_capacity,1))
         b_feasible = false;
         lambda.n = lambda.n * 2;
     end
-    if ~isempty(find(link_load>link_capacity,1))
+    if ~isempty(find(load.Link>link_capacity,1))
         b_feasible = false;
         lambda.e = lambda.e * 2;
     end
@@ -62,8 +62,8 @@ while true
 end
 
 % Evaluate the initial step length
-delta_lambda.n = node_load - node_capacity;
-delta_lambda.e = link_load - link_capacity;
+delta_lambda.n = load.Node - node_capacity;
+delta_lambda.e = load.Link - link_capacity;
 idn = delta_lambda.n<0;
 ide = delta_lambda.e<0;
 step_length = 1/8*min(min(-lambda.e(ide)./delta_lambda.e(ide)),...
@@ -75,8 +75,8 @@ while true
     iter_num = iter_num + 1;
     eval_num = eval_num + 1;
     dual_fval = 0;
-    delta_lambda.n = node_load - node_capacity;
-    delta_lambda.e = link_load - link_capacity;
+    delta_lambda.n = load.Node - node_capacity;
+    delta_lambda.e = load.Link - link_capacity;
     if isempty(find([delta_lambda.n>0; delta_lambda.e>0],1))
         this.saveStates(lambda);
     end
@@ -94,7 +94,7 @@ while true
         dual_fval = dual_fval + fval;
     end
     dual_fval = dual_fval - dot(lambda.n, node_capacity) - dot(lambda.e, link_capacity);
-    [node_load, link_load] = this.getNetworkLoad([], 'sum');
+    load = this.getNetworkLoad([], struct('Stage', 'temp'));
     if ~isempty(DEBUG) && DEBUG
         fprintf('\tDual problem: new value: %.3e, old value: %.3e, difference: %.3e.\n', ...
             dual_fval, prev_dual_fval, dual_fval-prev_dual_fval);
@@ -126,9 +126,9 @@ for s = 1:NS
     sl.VirtualLinks.Price = link_price(sl.VirtualLinks.PhysicalLink);
     sl.VirtualNodes.Price = node_price(sl.VirtualNodes.PhysicalNode);
 end
-[node_load, link_load] = this.getNetworkLoad;
-this.setNodeField('Load', node_load);
-this.setLinkField('Load', link_load);
+load = this.getNetworkLoad;
+this.setNodeField('Load', load.Node);
+this.setLinkField('Load', load.Link);
 this.setNodeField('Price', node_price);
 this.setLinkField('Price', link_price);
 
@@ -178,11 +178,11 @@ for s = 1:NS
     %%%
     % _fcnNetWelfare_ calculates each slices net welfare, the sum of which is equal to the
     % network's total net socal welfare.
-    p = Slice.fcnNetProfit(var_x, sl);
+    p = SimpleSlice.fcnNetProfit(var_x, sl);
     output.welfare_approx = output.welfare_approx + p;
     output.profit.ApproximatePercent(s) = options.PercentFactor * p;
 
-    p = Slice.fcnNetProfit(var_x, sl, options);
+    p = SimpleSlice.fcnNetProfit(var_x, sl, options);
     %%% 
     % NOTE it is not accurate to calculate the static cost of each slice with this method.
     if this.static_factor ~= 0
@@ -198,7 +198,7 @@ for s = 1:NS
     lambda_s = struct('n', this.lambda.n(nid),'e', this.lambda.e(eid));
     %%%
     % *TODO* DEBUG the difference.
-    output.profit.ApproximatePrice(s) = Slice.subproblemObjective(var_x, lambda_s, sl);
+    output.profit.ApproximatePrice(s) = SimpleSlice.subproblemObjective(var_x, lambda_s, sl);
     output.profit.AccuratePrice(s) = sl.getProfit(options);
     
     output.welfare_accurate = output.welfare_accurate...
@@ -226,7 +226,7 @@ output.profit.ApproximatePrice(end) = output.welfare_approx - ...
 output.profit.AccuratePrice(end) = output.welfare_accurate - ...
     sum(output.profit.AccuratePrice(1:(end-1))) + embed_profit_accurate;  
 if ~isempty(DEBUG) && DEBUG
-    fprintf('\tOptimal solution: fx = %G, g(¦Ë) = %G.\n', output.welfare_accurate, dual_fval);
+    fprintf('\tOptimal solution: fx = %G, g(ï¿½ï¿½) = %G.\n', output.welfare_accurate, dual_fval);
     fprintf('\tIteration number: %d, Evaluation Number: %G.\n', iter_num, eval_num);
 end
 end

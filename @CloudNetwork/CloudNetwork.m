@@ -8,7 +8,7 @@
 %
 % The topology of CloudNetwork is predefined.
 %%
-classdef CloudNetwork < PhysicalNetwork
+classdef SimpleCloudNetwork < PhysicalNetwork
 	methods
 		%%
 		% * *options*:
@@ -18,7 +18,7 @@ classdef CloudNetwork < PhysicalNetwork
 		%
 		% NOTE: only put common options ('SlicingMethod', 'Form', etc.)in the constructor. Put
 		% those method-specific options to the correspongding method.
-		function this = CloudNetwork(varargin)
+		function this = SimpleCloudNetwork(varargin)
 			this@PhysicalNetwork(varargin{:});
 			this.Topology.Edges{:,'Price'} = 0;
 			this.DataCenters{:,'Price'} = 0;
@@ -175,6 +175,97 @@ classdef CloudNetwork < PhysicalNetwork
 		end
 	end
 	
+	methods (Access = {?CloudNetwork, ?SubstrateNetwork})
+		%%%
+		% * *getSliceProviderProfit*
+		% |slices|: if |slices| is provided, only calsulate the revenue and
+		%						cost of the specified |slices|.
+		% |prices|: if |prices| are not provided, the stored price are used.
+		% |options|: |PricingPolicy| must be specified.
+		%
+		% Reconfiguration cost does not influence the profit of Slice Provider,
+		% see also <optimizeResourcePriceNew>.
+		function [profit, revenue] = getSliceProviderProfit(this, slices, prices, options)
+			defaultopts = struct(...
+				'PricingPolicy', 'quadratic');  % {linear|quadratic}
+			if nargin <= 3
+				options = defaultopts;
+			else
+				options = structupdate(defaultopts, options);
+			end
+			options.Stage = 'temp';			
+			
+			if nargin <= 1 || isempty(slices)
+				slices = this.slices;
+			end
+			if nargin <= 2 || isempty(prices)
+				prices.Node = this.getDataCenterField('Price');
+				prices.Link = this.getLinkField('Price');
+			end
+			load = this.getNetworkLoad(slices, options);
+			revenue = 0;
+			switch options.PricingPolicy
+				case {'quadratic-price', 'quadratic'}
+					for s = 1:length(options.Slices)
+						sl = options.Slices{s};
+						link_id = sl.VirtualLinks.PhysicalLink;
+						dc_id = sl.getDCPI;
+						% To get the revenue of slice provider, we need to how much
+						% resource the slices occupy.
+						revenue = revenue + ...
+							sl.fcnLinkPricing(prices.Link(link_id), sl.getLinkCapacity(false)) + ...
+							sl.fcnNodePricing(price.Node(dc_id), sl.getNodeCapacity(false));
+					end
+				case 'linear'
+					revenue = dot(load.Node, prices.Node) + dot(load.Link, prices.Link);
+				otherwise
+					error('%s: invalid pricing policy', calledby);
+			end
+			profit = revenue - this.getNetworkCost(load);
+		end
+		
+		%%%
+		% * *Finalize substrate network*
+		%
+		% # Record the resource allocation variables, flow rate, virtual node/link load of
+		%   each slice.
+		% # Virtual Nodes/Links' capacity is derived from node/link load;
+		% # Calculate and announce the resource prices to each slice.
+		% # Record/update the substrate network's node/link load, price.
+		%
+		% Usually, this function should be provided with 3 arguments, except that it is
+		% called by
+		% <file:///E:/workspace/MATLAB/Projects/Documents/CloudNetworking/singleSliceOptimization.html singleSliceOptimization>.
+		% NOTE: the price here might be only prcing parameters (for varing pricing
+		% policy). To calculate the payment, using _fcnLinkPricing_ and _fcnNodePricing_
+		% function.
+		function finalize(this, prices, slices)
+			if nargin <= 3
+				slices = this.slices;
+			end
+			num_slices = length(slices);
+			for i = 1:num_slices
+				slices{i}.finalize(prices);
+			end
+			load = this.getNetworkLoad;
+			this.setLinkField('Load', load.Link);
+			this.setDataCenterField('Load', load.Node);
+			if nargin >= 3
+				% NOTE: prices in the substrate network is updated, while the
+				% links/nodes that are not involved in the update procedure, do not
+				% change their prices.
+				% See also <DynamicCloudNetwork>.<optimizeResourcePriceNew>.
+				pre_link_idx = prices.Link==0;
+				prices.Link(pre_link_idx) = this.getLinkField('Price', pre_link_idx);
+				this.setLinkField('Price', prices.Link);
+				pre_node_idx = prices.Link==0;
+				prices.Link(pre_node_idx) = this.getDataCenterField('Price', pre_node_idx);
+				this.setDataCenterField('Price', prices.Link);
+			end
+		end
+		argout = calculateOutput(this, argin, new_opts);
+	end
+	
 	methods (Access=protected)
 		function graph = residualgraph(this, slice_opt)
 			if slice_opt.SlicingMethod.IsStatic
@@ -241,7 +332,7 @@ classdef CloudNetwork < PhysicalNetwork
 		end
 		
 		function sl = createslice(this, slice_opt, varargin)
-			this.slices{end+1} = Slice(slice_opt);
+			this.slices{end+1} = SimpleSlice(slice_opt);
 			sl = this.slices{end};
 		end
 		%%%
@@ -254,30 +345,24 @@ classdef CloudNetwork < PhysicalNetwork
 		%
 		% NOTE: _checkProfitRatio_ is a stop condition, which is not directly related to
 		% the optimization problem.
-		function [b, profit_gap] = checkProfitRatio(this, node_price, link_price, new_opts)
-			DEBUG = false;
+		function [b, profit_gap] = checkProfitRatio(this, prices, options)
+			global DEBUG;
 			
 			slice_profit_ratio = zeros(this.NumberSlices,1);
-			if nargin < 4
-				new_opts = struct;
-			else
-				new_opts = rmstructfields(new_opts, 'Slices');
-			end
 			for s = 1:this.NumberSlices
 				sl = this.slices{s};
 				revenue = sl.getRevenue;        % get utility
 				% Prices announced to each slice.
-				new_opts.bFinal = sl.isFinal();
-				if ~new_opts.bFinal
-					sl.prices.Link = link_price(sl.VirtualLinks.PhysicalLink);
-					sl.prices.Node = node_price(sl.getDCPI);
+				options.bFinal = sl.isFinal();
+				if ~options.bFinal
+					sl.prices.Link = prices.Link(sl.VirtualLinks.PhysicalLink);
+					sl.prices.Node = prices.Node(sl.getDCPI);
 				end
-				slice_profit_ratio(s) = sl.getProfit(new_opts)/revenue;
+				slice_profit_ratio(s) = sl.getProfit(options)/revenue;
 			end
 			clear revenue;
 			
-			[sp_profit, sp_revenue] = this.getSliceProviderProfit(...
-				node_price, link_price, new_opts);
+			[sp_profit, sp_revenue] = this.getSliceProviderProfit([], prices, options);
 			network_profit_ratio = sp_profit/sp_revenue;
 			% a = 1;        % {0.5|0.75|1}
 			switch this.options.Threshold
@@ -290,8 +375,8 @@ classdef CloudNetwork < PhysicalNetwork
 				otherwise
 					error('error: invalid option (Threshold = %s)', this.options.Threshold);
 			end
-			if nargin == 4  && isfield(new_opts, 'Epsilon')
-				if abs(network_profit_ratio - profit_threshold) < new_opts.Epsilon
+			if nargin == 4  && isfield(options, 'Epsilon')
+				if abs(network_profit_ratio - profit_threshold) < options.Epsilon
 					b = true;
 				else
 					b = false;
@@ -306,90 +391,34 @@ classdef CloudNetwork < PhysicalNetwork
 			if nargout == 2
 				profit_gap = network_profit_ratio - profit_threshold;
 			end
-			if DEBUG
-				disp('Profit ratio {slices|network}:'); %#ok<UNRCH>
+			if ~isempty(DEBUG) && DEBUG
+				disp('Profit ratio {slices|network}:'); 
 				disp([slice_profit_ratio; network_profit_ratio]);
 			end
 		end
 		
-		%%%
-		% * *getSliceProviderProfit*
-		% If |node_price| and |link_price| are not provided, the stored price are used.
-		% |options|: |PricingPolicy| must be specified.
-		%            if |Slices| is provided, only calsulate the revenue and cost of
-		%            the specified |Slices|.
-		%
-		% Reconfiguration cost does not influence the profit of Slice Provider, see also
-		% <optimizeResourcePriceNew>.
-		function [profit, revenue] = ...
-				getSliceProviderProfit(this, node_price, link_price, new_opts)
-			if nargin <= 3
-				new_opts = struct();
-			end
-			new_opts = structmerge(...
-				getstructfields(new_opts, {'Slices'}, 'default-ignore', this.slices), ...
-				getstructfields(new_opts, 'PricingPolicy', 'default', 'quadratic'));
-			
-			[node_load, link_load] = this.getNetworkLoad(new_opts.Slices, 'sum');
-			if isempty(node_price) || isempty(link_price)
-				node_price = this.getDataCenterField('Price');
-				link_price = this.getLinkField('Price');
-			end
-			revenue = 0;
-			switch new_opts.PricingPolicy
-				case {'quadratic-price', 'quadratic'}
-					for s = 1:length(new_opts.Slices)
-						sl = new_opts.Slices{s};
-						link_id = sl.VirtualLinks.PhysicalLink;
-						dc_id = sl.getDCPI;
-						% To get the revenue of slice provider, we need to how much
-						% resource the slices occupy.
-						revenue = revenue + ...
-							sl.fcnLinkPricing(link_price(link_id), sl.getLinkCapacity(false)) + ...
-							sl.fcnNodePricing(node_price(dc_id), sl.getNodeCapacity(false));
+		function info = updateDemandInfo(this, slice_opt)
+			switch slice_opt.FlowPattern
+				case FlowPattern.RandomInterDataCenter
+					info.NumberFlows = this.NumberDataCenters*(this.NumberDataCenters-1);
+					if isfield(slice_opt, 'NodeSet')
+						info.NodeSet = slice_opt.NodeSet;
+					else
+						info.NodeSet = this.DataCenters.Node;
 					end
-				case 'linear'
-					revenue = dot(node_load, node_price) + dot(link_load, link_price);
+					info.NumberNodes = length(info.NodeSet);
 				otherwise
-					error('%s: invalid pricing policy', calledby);
+					info = updateDemandInfo@PhysicalNetwork(this, slice_opt);
 			end
-			profit = revenue - this.getNetworkCost(node_load, link_load);
 		end
-		%%%
-		% * *Finalize substrate network*
-		%
-		% # Record the resource allocation variables, flow rate, virtual node/link load of
-		%   each slice.
-		% # Virtual Nodes/Links' capacity is derived from node/link load;
-		% # Calculate and announce the resource prices to each slice.
-		% # Record/update the substrate network's node/link load, price.
-		%
-		% Usually, this function should be provided with 3 arguments, except that it is
-		% called by
-		% <file:///E:/workspace/MATLAB/Projects/Documents/CloudNetworking/singleSliceOptimization.html singleSliceOptimization>.
-		% NOTE: the price here might be only prcing parameters (for varing pricing
-		% policy). To calculate the payment, using _fcnLinkPricing_ and _fcnNodePricing_
-		% function.
-		function finalize(this, node_price, link_price, sub_slices)
-			if nargin <= 3
-				sub_slices = this.slices;
-			end
-			num_slices = length(sub_slices);
-			for i = 1:num_slices
-				sub_slices{i}.finalize(node_price, link_price);
-			end
-			[node_load, link_load] = this.getNetworkLoad;
-			this.setLinkField('Load', link_load);
-			this.setDataCenterField('Load', node_load);
-			if nargin >= 3
-				% NOTE: prices in the substrate network is updated, while the prices
-				% formerlly offered to slices is not change.
-				pre_link_idx = link_price==0;
-				link_price(pre_link_idx) = this.getLinkField('Price', pre_link_idx);
-				this.setLinkField('Price', link_price);
-				pre_node_idx = node_price==0;
-				node_price(pre_node_idx) = this.getDataCenterField('Price', pre_node_idx);
-				this.setDataCenterField('Price', node_price);
+		
+		function end_points = generateEndPoints(this, info, slice_opt)
+			switch slice_opt.FlowPattern
+				case FlowPattern.RandomInterDataCenter
+					id = unique_randi(info.NumberNodes, 2, 'stable');
+					end_points = info.NodeSet(id);
+				otherwise
+					end_points = generateEndPoints@PhysicalNetwork(this, info, slice_opt);
 			end
 		end
 		
@@ -400,12 +429,19 @@ classdef CloudNetwork < PhysicalNetwork
 				% path at least transit one VNF-capable node.
 				% no matter when, the DataCenters is the middle nodes. However, if the MiddleNodes
 				% option is not provided, the route calculation will be performed in a different way.
-				options.MiddleNodes = this.DataCenters.NodeIndex;
+				options.MiddleNodes = this.DataCenters.Node;
 			end
 		end
 		
 		%% ISSUE: VNFlist is not conmmonly shared.
 		function slice_data = updateSliceData(this, slice_data, options)
+			defaultopts = struct('SlicingMethod', SlicingMethod.SingleNormal);
+			if nargin <= 2
+				options = defaultopts;
+			else
+				options = structupdate(defaultopts, options);
+			end
+			options.Stage = 'temp';
 			if options.SlicingMethod == SlicingMethod.SingleNormal
 				if options.bCompact
 					b_vnf = false(this.NumberVNFs, 1);
@@ -421,24 +457,24 @@ classdef CloudNetwork < PhysicalNetwork
 				end
 			end
 		end
-		% This function use intermediate results.
+		
+		%% This function use intermediate results.
 		function output = calculateOptimalOutput(this, ss)
 			global DEBUG;
 			if ~exist('DEBUG', 'var')
 				DEBUG = false;
 			end
 			
-			[node_load, link_load] = this.getNetworkLoad(ss, 'sum');
+			load = this.getNetworkLoad(ss, struct('Stage', 'temp'));
 			output.WelfareOptimal = sum(...
 				ss.FlowTable.Weight.*fcnUtility(ss.getFlowRate(ss.temp_vars.x))) ...
-				- this.getNetworkCost(node_load, link_load);
+				- this.getNetworkCost(load);
 			if DEBUG
 				cprintf('Comments','Info: [%s] The optimal net social welfare of the network: %G.\n', ...
 					calledby, output.WelfareOptimal);
 			end
 		end
 		
-		argout = calculateOutput(this, argin, new_opts);
 		% Now the same as <PhysicalNetwork>, subclasses might override it.
 		%         function [flow_table, phy_adjacent, flag] = ...
 		%                 generateFlowTable(this, graph, slice_opt)
@@ -448,8 +484,8 @@ classdef CloudNetwork < PhysicalNetwork
 	end
 	
 	methods (Access = private)
-		[node_price, link_price, runtime] = pricingFactorAdjustment(this, new_opts);
-		function runtime = priceIteration(this, node_price, link_price, options)
+		[prices, runtime] = pricingFactorAdjustment(this, new_opts);
+		function runtime = priceIteration(this, prices, options)
 			if nargout == 1
 				slice_runtime = 0;
 				runtime.Serial = 0;
@@ -458,8 +494,8 @@ classdef CloudNetwork < PhysicalNetwork
 				sl = this.slices{s};
 				link_id = sl.VirtualLinks.PhysicalLink;
 				dc_id = sl.getDCPI;
-				sl.prices.Link= link_price(link_id);
-				sl.prices.Node = node_price(dc_id);
+				sl.prices.Link = prices.Link(link_id);
+				sl.prices.Node = prices.Link(dc_id);
 				%%%
 				% optimize each slice with price and resource constraints.
 				if nargout == 1

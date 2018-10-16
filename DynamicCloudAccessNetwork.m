@@ -62,8 +62,8 @@ classdef DynamicCloudAccessNetwork < CloudAccessNetwork & DynamicNetwork
         end
         %%
         % |finalize| should only be called when dimensiong network slices.
-        function finalize(this, node_price, link_price)
-            finalize@CloudAccessNetwork(this, node_price, link_price);
+        function finalize(this, prices)
+            finalize@CloudAccessNetwork(this, prices);
             %             finalize@DynamicNetwork(this);    % >>> no need to call twice the finalize
             %             function.
         end

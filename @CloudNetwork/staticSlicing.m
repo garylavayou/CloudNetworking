@@ -41,9 +41,9 @@ if nargin>=2 && ~isempty(slice)
     slice.prices.Node = [];
 end
 
-[node_load, link_load] = this.getNetworkLoad;
-this.setDataCenterField('Load', node_load);
-this.setLinkField('Load', link_load);
+load = this.getNetworkLoad;
+this.setDataCenterField('Load', load.Node);
+this.setLinkField('Load', load.Link);
 
 % Calculate the output
 options.Slices = this.slices;

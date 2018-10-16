@@ -33,7 +33,7 @@ if nargin <= 1 || isempty(slice_weight)
         % count the usage of edge with slice weight.
         % I_edge_path*I_flow_path' = I_edge_flow _> 
         I_edge_flow = sl.I_edge_path*sl.I_flow_path';
-        I_node_flow = sl.I_node_path*sl.I_flow_path';
+        I_node_flow = sl.I_dc_path*sl.I_flow_path';
         link_id = sl.VirtualLinks.PhysicalLink;
         node_id = sl.VirtualNodes.PhysicalNode;
         link_usage(link_id,s) = sum(I_edge_flow,2)*sl.weight;
@@ -65,13 +65,13 @@ end
 
 %% Independently optimize each network slice
 if nargout == 2
-    [node_price, link_price, runtime] = pricingFactorAdjustment(this);
+    [prices, runtime] = pricingFactorAdjustment(this);
 else
-    [node_price, link_price] = pricingFactorAdjustment(this);
+    [prices] = pricingFactorAdjustment(this);
 end
 
 % Finalize substrate network
-this.finalize(node_price, link_price);
+this.finalize(prices);
 
 %% calculate the output (net social welfare)
 output = this.calculateOutput();

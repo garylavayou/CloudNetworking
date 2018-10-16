@@ -25,11 +25,12 @@ if nargin <= 2
 	slices = this.slices;       % all slices are involved in slice dimensioning
 end
 options.Slices = slices;
+options.Stage = 'temp';
 
 % network data
-NC = this.NumberDataCenters;
-NS = length(slices);
-NL = this.NumberLinks;
+Nc = this.NumberDataCenters;
+Ns = length(slices);
+Nl = this.NumberLinks;
 if nargin <= 2
 	node_capacity = this.getDataCenterField('Capacity');
 	link_capacity = this.getLinkField('Capacity');
@@ -38,13 +39,16 @@ else
 	% residual capacity + reallocatable capacity.
 	node_capacity = this.getDataCenterField('ResidualCapacity');
 	link_capacity = this.getLinkField('ResidualCapacity');
-	for i = 1:NS
+	for i = 1:Ns
 		sl = slices{i};
 		node_capacity(sl.getDCPI) = node_capacity(sl.getDCPI) + ...
 			sl.VirtualDataCenters.Capacity;
 		link_capacity(sl.VirtualLinks.PhysicalLink) = ...
 			link_capacity(sl.VirtualLinks.PhysicalLink) + sl.VirtualLinks.Capacity;
 	end
+end
+for i = 1:Ns
+	slices{i}.initialize();
 end
 link_uc = this.getLinkCost;
 node_uc = this.getNodeCost;
@@ -55,30 +59,30 @@ t1 = 1;           % {0.1|0.8|1}
 if nargin >=2 && ~isempty(init_price)
 	link_usage = false(this.NumberLinks,1);
 	node_usage = false(this.NumberDataCenters,1);
-	for i = 1:NS
+	for i = 1:Ns
 		link_usage(slices{i}.VirtualLinks.PhysicalLink) = true;
 		node_usage(slices{i}.getDCPI) = true;
 	end
 	if find([init_price.Link(link_usage)==0;init_price.Node(node_usage)==0],1)
-		link_price = t1*link_uc;
-		node_price = t1*node_uc;
-		%         init_price.Link = link_price
-		%         init_price.Node = node_price;
+		prices.Link = t1*link_uc;
+		prices.Node = t1*node_uc;
+		%         init_price.Link = prices.Link
+		%         init_price.Node = prices.Node;
 	else
-		link_price = init_price.Link;
-		node_price = init_price.Node;
+		prices.Link = init_price.Link;
+		prices.Node = init_price.Node;
 	end
 else
-	link_price = t1* link_uc;
-	node_price = t1* node_uc;
+	prices.Link = t1* link_uc;
+	price.Node = t1* node_uc;
 end
-for i = 1:NS
+for i = 1:Ns
 	slices{i}.VirtualLinks{:,'Price'} = 0;      % Reset it to make <isFinal()=false>.
 	slices{i}.VirtualDataCenters{:,'Price'} = 0;
 end
 t0 = 10^-1;     % {1|0.1|0.01}
-delta_link_price = t0 * link_uc;  % init_price.link
-delta_node_price = t0 * node_uc;
+delta_price.Link = t0 * link_uc;  % init_price.link
+delta_price.Node = t0 * node_uc;
 
 number_iter = 1;
 %% Initial Price
@@ -91,21 +95,21 @@ number_iter = 1;
 % to large, and we set the initial price to zero.
 % guess_init_link_price = t1*link_uc;
 % guess_init_node_price = t1*node_uc;
-% if find(guess_init_link_price>link_price,1)
-%     guess_init_link_price = link_price;
+% if find(guess_init_link_price>prices.Link,1)
+%     guess_init_link_price = prices.Link;
 % end
-% if find(guess_init_node_price>node_price,1)
-%     guess_init_node_price = node_price;
+% if find(guess_init_node_price>prices.Node,1)
+%     guess_init_node_price = prices.Node;
 % end
-% link_price_prev = [guess_init_link_price, link_price];
-% node_price_prev = [guess_init_node_price, node_price];
-link_price_prev = [zeros(this.NumberLinks,1), link_price];
-node_price_prev = [zeros(this.NumberDataCenters,1), node_price];
+% price_prev.Link = [guess_init_link_price, prices.Link];
+% price_prev.Node = [guess_init_node_price, prices.Node];
+price_prev.Link = [zeros(this.NumberLinks,1), prices.Link];
+price_prev.Node = [zeros(this.NumberDataCenters,1), prices.Node];
 if b_profit_ratio
 	b_forced_break = false;
 end
-SolveSCP(node_price, link_price);
-sp_profit = this.getSliceProviderProfit(node_price, link_price, options);
+SolveSCP(prices);
+sp_profit = this.getSliceProviderProfit(prices, options);
 
 b_initial_trial = true;
 while true
@@ -117,45 +121,45 @@ while true
 	% the increase amount of those resources is larger. Thus we let the increase amount
 	% associated with the utilization ratio.
 	%
-	% If the capacity tends to infinity, |delta_link_price| and |delta_node_price| stay
-	% the same, while |link_price| and |node_price| still increases in a constant rate.
+	% If the capacity tends to infinity, |delta_price.Link| and |delta_price.Node| stay
+	% the same, while |prices.Link| and |prices.Node| still increases in a constant rate.
 	%
 	% we only increase the price of those resources that are utilized (resource
-	% utilization ��>0), since increasing the price of idle resources will not increase the
+	% utilization θ>0), since increasing the price of idle resources will not increase the
 	% profit of SP.
-	[node_load, link_load] = this.getNetworkLoad(slices, 'sum');
-	delta_link_price = delta_link_price.*(1+min(1,link_load./link_capacity));
-	delta_node_price = delta_node_price.*(1+min(1,node_load./node_capacity));
-	node_id = node_load>0;
-	link_id = link_load>0;
-	link_price(link_id) = link_price(link_id) + delta_link_price(link_id);
-	node_price(node_id) = node_price(node_id) + delta_node_price(node_id);
+	load = this.getNetworkLoad(slices, options);
+	delta_price.Link = delta_price.Link.*(1+min(1,load.Link./link_capacity));
+	delta_price.Node = delta_price.Node.*(1+min(1,load.Node./node_capacity));
+	node_id = load.Node>0;
+	link_id = load.Link>0;
+	prices.Link(link_id) = prices.Link(link_id) + delta_price.Link(link_id);
+	price.Node(node_id) = prices.Node(node_id) + delta_price.Node(node_id);
 	
-	SolveSCP(node_price, link_price);
-	sp_profit_new = this.getSliceProviderProfit(node_price, link_price, options);
+	SolveSCP(prices);
+	sp_profit_new = this.getSliceProviderProfit(prices, options);
 	%% Stop condtion
 	% if the profit of SP is non-increasing, or the profit ratio reaches the predefined
 	% threshold, then no need to further increase the resource prices.
 	if sp_profit >= sp_profit_new
-		%         if ~isempty(find(link_price_prev(:,1),1)) || ...
-		%                 ~isempty(find(node_price_prev(:,1),1))
+		%         if ~isempty(find(price_prev.Link(:,1),1)) || ...
+		%                 ~isempty(find(price_prev.Node(:,1),1))
 		if b_initial_trial
 			% initial price is too high
-			link_price_prev(:,2) = link_price_prev(:,2)/2;
-			node_price_prev(:,2) = node_price_prev(:,2)/2;
-			link_price = link_price_prev(:,2);
-			node_price = node_price_prev(:,2);
+			price_prev.Link(:,2) = price_prev.Link(:,2)/2;
+			price_prev.Node(:,2) = price_prev.Node(:,2)/2;
+			prices.Link = price_prev.Link(:,2);
+			prices.Node = price_prev.Node(:,2);
 			t0 = t0/2;
-			delta_link_price = t0 * link_uc;  % init_price.link
-			delta_node_price = t0 * node_uc;
-			SolveSCP(node_price, link_price);
-			sp_profit = this.getSliceProviderProfit(node_price, link_price, options);
+			delta_price.Link = t0 * link_uc;  % init_price.link
+			delta_price.Node = t0 * node_uc;
+			SolveSCP(prices);
+			sp_profit = this.getSliceProviderProfit(prices, options);
 			continue;
 		else
-			link_price_prev(:,1) = link_price_prev(:,2);
-			link_price_prev(:,2) = link_price;
-			node_price_prev(:,1) = node_price_prev(:,2);
-			node_price_prev(:,2) = node_price;
+			price_prev.Link(:,1) = price_prev.Link(:,2);
+			price_prev.Link(:,2) = price.Link;
+			price_prev.Node(:,1) = price_prev.Node(:,2);
+			price_prev.Node(:,2) = prices;
 			break;
 		end
 	end
@@ -163,11 +167,11 @@ while true
 		b_initial_trial = false;
 	end
 	sp_profit = sp_profit_new;
-	link_price_prev(:,1) = link_price_prev(:,2);
-	link_price_prev(:,2) = link_price;
-	node_price_prev(:,1) = node_price_prev(:,2);
-	node_price_prev(:,2) = node_price;
-	if b_profit_ratio && this.checkProfitRatio(node_price, link_price, options)
+	price_prev.Link(:,1) = price_prev.Link(:,2);
+	price_prev.Link(:,2) = prices.Link;
+	price_prev.Node(:,1) = price_prev.Node(:,2);
+	price_prev.Node(:,2) = prices.node;
+	if b_profit_ratio && this.checkProfitRatio(prices, options)
 		b_forced_break = true;
 		break;
 	end
@@ -180,22 +184,20 @@ if ~b_profit_ratio || ~b_forced_break
 	epsilon = 10^-3;
 	while true  %|| (h-l) > 0.05
 		number_iter = number_iter + 1;
-		node_price_middle = [(2/3)*node_price_prev(:,1)+(1/3)*node_price_prev(:,2), ...
-			(1/3)*node_price_prev(:,1)+(2/3)*node_price_prev(:,2)];
-		link_price_middle = [(2/3)*link_price_prev(:,1)+(1/3)*link_price_prev(:,2), ...
-			(1/3)*link_price_prev(:,1)+(2/3)*link_price_prev(:,2)];
+		price_middle = struct('Node', ...
+			{(2/3)*price_prev.Node(:,1)+(1/3)*price_prev.Node(:,2), (1/3)*price_prev.Node(:,1)+(2/3)*price_prev.Node(:,2)},...
+			'Link', ...
+			{(2/3)*price_prev.Link(:,1)+(1/3)*price_prev.Link(:,2), (1/3)*price_prev.Link(:,1)+(2/3)*price_prev.Link(:,2)});
 		for i = 1:2
-			SolveSCP(node_price_middle(:,i), link_price_middle(:,i));
-			sp_profit_new(i) = this.getSliceProviderProfit(...
-				node_price_middle(:,i), link_price_middle(:,i), ...
-				getstructfields(options, {'Slices','PricingPolicy'}));
+			SolveSCP(price_middle(i));
+			sp_profit_new(i) = this.getSliceProviderProfit(price_middle, options);
 		end
 		if sp_profit_new(1) > sp_profit_new(2)
-			node_price_prev(:,2) = node_price_middle(:,2);
-			link_price_prev(:,2) = link_price_middle(:,2);
+			price_prev.Node(:,2) = price_middle(2).Node;
+			price_prev.Link(:,2) = price_middle(2).Link;
 		else
-			node_price_prev(:,1) = node_price_middle(:,1);
-			link_price_prev(:,1) = link_price_middle(:,1);
+			price_prev.Node(:,1) = price_middle(1).Node;
+			price_prev.Link(:,1) = price_middle(1).Link;
 		end
 		%%%
 		% the stop condition can also be set as the difference of price.
@@ -205,104 +207,100 @@ if ~b_profit_ratio || ~b_forced_break
 			sp_profit = max(sp_profit_new);
 		end
 	end
-	node_price = node_price_prev(:,1);       % temp_node_price
-	link_price = link_price_prev(:,1);       % temp_link_price
+	prices.Node = price_prev.Node(:,1);       % temp_node_price
+	prices.Link = price_prev.Link(:,1);       % temp_link_price
 end
 %%
-% |delta_link_price| and |delta_node_price| of the first step can still be used, to
+% |delta_price.Link| and |delta_price.Node| of the first step can still be used, to
 % improve the convergence rate. Alternatively, one can reset the two vectors as follows
 %
-%    delta_link_price = t0 * link_uc;         % init_price.link
-%    delta_node_price = t0 * node_uc;
+%    delta_price.Link = t0 * link_uc;         % init_price.link
+%    delta_price.Node = t0 * node_uc;
 k = 1;
 while true
 	%%% Compute the new resource price according to the resource consumption
-	[node_load, link_load] = this.getNetworkLoad(slices, 'sum');
-	b_link_violate = (link_capacity-link_load) < 1;
-	b_node_violate = (node_capacity-node_load) < 1;
+	load = this.getNetworkLoad(slices, options);
+	b_link_violate = (link_capacity-load.Link) < 1;
+	b_node_violate = (node_capacity-load.Node) < 1;
 	if isempty(find(b_link_violate==1,1)) && isempty(find(b_node_violate==1,1))
 		break;
 	end
-	link_price(b_link_violate)  = link_price(b_link_violate) + delta_link_price(b_link_violate);
-	delta_link_price(b_link_violate) = delta_link_price(b_link_violate) .* ...
-		(link_load(b_link_violate)./link_capacity(b_link_violate));     % {2|(k+1)/k}
-	node_price(b_node_violate) = node_price(b_node_violate) + delta_node_price(b_node_violate);
-	delta_node_price(b_node_violate) = delta_node_price(b_node_violate) .* ...
-		(node_load(b_node_violate)./node_capacity(b_node_violate));     % {2|(k+1)/k}
+	prices.Link(b_link_violate) = prices.Link(b_link_violate) + delta_price.Link(b_link_violate);
+	delta_price.Link(b_link_violate) = delta_price.Link(b_link_violate) .* ...
+		(load.Link(b_link_violate)./link_capacity(b_link_violate));     % {2|(k+1)/k}
+	prices.Node(b_node_violate) = prices.Node(b_node_violate) + delta_price.Node(b_node_violate);
+	delta_price.Node(b_node_violate) = delta_price.Node(b_node_violate) .* ...
+		(load.Node(b_node_violate)./node_capacity(b_node_violate));     % {2|(k+1)/k}
 	% Slices solve P1 with $��_k$, return the node (link) load v(y);
 	% announce the resource price and optimize each network slice
 	number_iter = number_iter + 1;
-	SolveSCP(node_price, link_price);
+	SolveSCP(prices);
 	k = k+1;
 end
 
 if k>1
-	delta_link_price = t0 * link_price;  % 0.01 * init_price.link
-	delta_node_price = t0 * node_price;
-	min_delta_link_price = delta_link_price;
-	min_delta_node_price = delta_node_price;
+	delta_price.Link = t0 * prices.Link;  % 0.01 * init_price.link
+	delta_price.Node = t0 * prices.Node;
+	min_delta_price.Link = delta_price.Link;
+	min_delta_price.Node = delta_price.Node;
 	d0 = 10^-1;
 	d1 = 10^-0;
-	stop_cond1 = ~isempty(find(delta_link_price > d0 * link_uc, 1));
-	stop_cond2 = ~isempty(find(delta_node_price > d0 * node_uc, 1));
+	stop_cond1 = ~isempty(find(delta_price.Link > d0 * link_uc, 1));
+	stop_cond2 = ~isempty(find(delta_price.Node > d0 * node_uc, 1));
 	if b_profit_ratio
-		stop_cond3 = this.checkProfitRatio(node_price, link_price, ...
-			getstructfields(options, {'PricingPolicy'}));
+		stop_cond3 = this.checkProfitRatio(prices, options);
 	else
-		sp_profit = this.getSliceProviderProfit(node_price, link_price, ...
-			getstructfields(options, {'Slices','PricingPolicy'}));
+		sp_profit = this.getSliceProviderProfit(prices, options);
 		stop_cond3 = true;
 	end
-	partial_link_violate = false(NL, 1);
-	partial_node_violate = false(NC, 1);
+	partial_link_violate = false(Nl, 1);
+	partial_node_violate = false(Nc, 1);
 	b_first = true;
 	while (stop_cond1 || stop_cond2) && stop_cond3
 		number_iter = number_iter + 1;
 		if ~isempty(DEBUG) && DEBUG
 			disp('----link price    delta link price----')
-			disp([link_price delta_link_price]);
+			disp([prices.Link delta_price.Link]);
 		end
-		b_link = link_price > delta_link_price;
-		link_price(b_link) = link_price(b_link) - delta_link_price(b_link);
+		b_link = prices.Link > delta_price.Link;
+		prices.Link(b_link) = prices.Link(b_link) - delta_price.Link(b_link);
 		if ~isempty(DEBUG) && DEBUG
 			disp('----node price    delta node price----')
-			disp([node_price delta_node_price]);
+			disp([prices.Node delta_price.Node]);
 		end
-		b_node = node_price > delta_node_price;
-		node_price(b_node) = node_price(b_node) - delta_node_price(b_node);
-		SolveSCP(node_price, link_price);
-		[node_load, link_load] = this.getNetworkLoad(slices, 'sum');
+		b_node = prices.Node > delta_price.Node;
+		prices.Node(b_node) = prices.Node(b_node) - delta_price.Node(b_node);
+		SolveSCP(prices);
+		load = this.getNetworkLoad(slices, options);
 		
 		if b_profit_ratio
 			% the profit ratio of SP should not less than the predefined threshold.
-			stop_cond3 = this.checkProfitRatio(node_price, link_price, ...
-				getstructfields(options, 'PricingPolicy'));
+			stop_cond3 = this.checkProfitRatio(prices, options);
 		else
 			% we decrease the price, the profit of SP should increase.
-			sp_profit_new = this.getSliceProviderProfit(node_price, link_price, ...
-				getstructfields(options, {'Slices','PricingPolicy'}));
+			sp_profit_new = this.getSliceProviderProfit(prices, options);
 			stop_cond3 = sp_profit_new >= sp_profit;
 		end
-		b_link_violate = (link_capacity - link_load)<0;
-		b_node_violate = (node_capacity - node_load)<0;
+		b_link_violate = (link_capacity - load.Link)<0;
+		b_node_violate = (node_capacity - load.Node)<0;
 		assert_link_1 = isempty(find(b_link_violate==1,1));			% no violate link
 		assert_node_1 = isempty(find(b_node_violate==1,1));			% no violate node
 		if assert_link_1 && assert_node_1 && stop_cond3
 			if b_first
-				delta_link_price = delta_link_price * 2;
-				delta_node_price = delta_node_price * 2;
+				delta_price.Link = delta_price.Link * 2;
+				delta_price.Node = delta_price.Node * 2;
 			else
-				delta_link_price = delta_link_price + min_delta_link_price;
-				delta_node_price = delta_node_price + min_delta_node_price;
+				delta_price.Link = delta_price.Link + min_delta_price.Link;
+				delta_price.Node = delta_price.Node + min_delta_price.Node;
 			end
-			partial_link_violate = false(NL, 1);
-			partial_node_violate = false(NC, 1);
+			partial_link_violate = false(Nl, 1);
+			partial_node_violate = false(Nc, 1);
 		else
 			b_first = false;
-			link_price(b_link) = link_price(b_link) + delta_link_price(b_link);
-			node_price(b_node) = node_price(b_node) + delta_node_price(b_node);
+			prices.Link(b_link) = prices.Link(b_link) + delta_price.Link(b_link);
+			prices.Node(b_node) = prices.Node(b_node) + delta_price.Node(b_node);
 			if ~stop_cond3 && assert_link_1 && assert_node_1
-				SolveSCP(node_price, link_price);
+				SolveSCP(prices);
 				break;
 			end
 			%%%
@@ -310,29 +308,29 @@ if k>1
 			%  resources with residual capacity will continue reduce their price, i.e. the
 			%  components of step $\Delta_\rho$ corresponding to those overloaded
 			%  resources is set to 0.
-			assert_link_2 = isempty(find(delta_link_price > d1 * link_uc, 1));		% the vector is less than a threshold
-			assert_node_2 = isempty(find(delta_node_price > d1 * node_uc, 1));		% the vector is less than a threshold
+			assert_link_2 = isempty(find(delta_price.Link > d1 * link_uc, 1));		% the vector is less than a threshold
+			assert_node_2 = isempty(find(delta_price.Node > d1 * node_uc, 1));		% the vector is less than a threshold
 			if assert_link_2
 				partial_link_violate = partial_link_violate | b_link_violate;
-				delta_link_price(partial_link_violate) = 0;
+				delta_price.Link(partial_link_violate) = 0;
 			else
-				partial_link_violate = false(NL, 1);
+				partial_link_violate = false(Nl, 1);
 			end
-			delta_link_price = delta_link_price / 2;
-			min_delta_link_price = min(delta_link_price/4, min_delta_link_price);
+			delta_price.Link = delta_price.Link / 2;
+			min_delta_price.Link = min(delta_price.Link/4, min_delta_price.Link);
 			if assert_node_2
 				partial_node_violate = partial_node_violate | b_node_violate;
-				delta_node_price(partial_node_violate) = 0;
+				delta_price.Node(partial_node_violate) = 0;
 			else
-				partial_node_violate = false(NC, 1);
+				partial_node_violate = false(Nc, 1);
 			end
-			delta_node_price = delta_node_price / 2;
-			min_delta_node_price = min(delta_node_price/4, min_delta_node_price);
+			delta_price.Node = delta_price.Node / 2;
+			min_delta_price.Node = min(delta_price.Node/4, min_delta_price.Node);
 		end
-		%     stop_cond1 = norm(delta_link_price) > norm(10^-4 * link_uc);
-		%     stop_cond2 = norm(delta_node_price) > norm(10^-4 * node_uc);
-		stop_cond1 = ~isempty(find(delta_link_price > d0 * link_uc, 1));
-		stop_cond2 = ~isempty(find(delta_node_price > d0 * node_uc, 1));
+		%     stop_cond1 = norm(delta_price.Link) > norm(10^-4 * link_uc);
+		%     stop_cond2 = norm(delta_price.Node) > norm(10^-4 * node_uc);
+		stop_cond1 = ~isempty(find(delta_price.Link > d0 * link_uc, 1));
+		stop_cond2 = ~isempty(find(delta_price.Node > d0 * node_uc, 1));
 	end
 end
 
@@ -341,7 +339,7 @@ end
 % slice.
 % # After the optimization, each network slice has record the final prices.
 % # Record the substrate network's node/link load, price.
-this.finalize(node_price, link_price, slices);
+this.finalize(prices, slices);
 
 % Calculate the output
 if nargout >= 1
@@ -360,10 +358,10 @@ end
 
 %% sub-problem
 	function SolveSCP(node_price_t, link_price_t)
-		for s = 1:NS
+		for s = 1:Ns
 			sl = slices{s};
 			sl.prices.Link = link_price_t(sl.VirtualLinks.PhysicalLink);
-			% |node_price| only contain the price of data center nodes.
+			% |prices.Node| only contain the price of data center nodes.
 			dc_id = sl.getDCPI;
 			sl.prices.Node = node_price_t(dc_id);
 			options.ResidualCapacity.Link = link_capacity(sl.VirtualLinks.PhysicalLink);

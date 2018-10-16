@@ -84,7 +84,7 @@ slice_data.NumberPaths = [];             % avoid warning, no use here.
 slice_data.SlicingMethod = [];
 slice_data.Parent = this;
 % the flow id and path id has been allocated in each slice already, no need to reallocate.
-ss = Slice(slice_data);
+ss = SimpleSlice(slice_data);
 if options.SlicingMethod == SlicingMethod.SingleFunction
     ss.getAs_res(flow_owner, slice_data.Alpha_f);
     options.Alpha_f = slice_data.Alpha_f;
@@ -119,7 +119,7 @@ if options.SlicingMethod == SlicingMethod.SingleNormal
     nz = ss.NumberDataCenters*ss.NumberPaths;
     z_index = 1:nz;
     for v = 1:ss.NumberVNFs
-        mask_npf = ss.I_node_path.*I_path_function(:,v)'; % compatible arithmetic operation
+        mask_npf = ss.I_dc_path.*I_path_function(:,v)'; % compatible arithmetic operation
         ss.temp_vars.z(z_index) = mask_npf(:).*ss.temp_vars.z(z_index);
         z_index = z_index + nz;
     end
@@ -156,14 +156,14 @@ end
 %% Compute the real resource demand with given prices
 options = structmerge(options, getstructfields(new_opts, 'PricingPolicy', 'ignore'));
 if nargout == 2
-    [node_price, link_price, rt] = pricingFactorAdjustment(this, options);
+    [prices, rt] = pricingFactorAdjustment(this, options);
     runtime.Serial = runtime.Serial + rt.Serial;
     runtime.Parallel = runtime.Parallel + rt.Parallel;
 else
-    [node_price, link_price] = pricingFactorAdjustment(this, options);
+    [prices] = pricingFactorAdjustment(this, options);
 end
 % Finalize substrate network
-this.finalize(node_price, link_price);
+this.finalize(prices);
 
 %% Calculate the output
 output.SingleSlice = ss;

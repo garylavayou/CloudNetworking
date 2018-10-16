@@ -75,9 +75,9 @@ prim_fval = 0;
 for s = 1:NS
     prim_fval = prim_fval + this.slices{s}.weight*sum(fcnUtility(this.slices{s}.FlowTable.Rate));
 end
-[node_load, link_load] = this.getNetworkLoad;
-prim_fval = prim_fval - this.getNetworkCost(node_load, link_load);
-fprintf('Optimal solution: fx = %G, g(¦Ë) = %G.\n', prim_fval, dual_fval);
+load = this.getNetworkLoad;
+prim_fval = prim_fval - this.getNetworkCost(load);
+fprintf('Optimal solution: fx = %G, g(ï¿½ï¿½) = %G.\n', prim_fval, dual_fval);
 fprintf('Iteration number: %d, Evaluation Number: %G.\n', iter_num, eval_num);
 end
 

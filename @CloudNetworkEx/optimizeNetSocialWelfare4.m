@@ -26,9 +26,9 @@ for s = 1:NS
 end
 prev_dual_fval = dual_fval - dot(lambda.n, node_capacity) - dot(lambda.e, link_capacity);
     
-[node_load, link_load] = this.getNetworkLoad([], 'sum');
-delta_lambda.n = node_load-node_capacity;
-delta_lambda.e = link_load-link_capacity;
+load = this.getNetworkLoad([], struct('Stage', 'temp'));
+delta_lambda.n = load.Node-node_capacity;
+delta_lambda.e = load.Link-link_capacity;
 idn = delta_lambda.n<0;
 ide = delta_lambda.e<0;
 step_length = min(min(-lambda.e(ide)./delta_lambda.e(ide)),...
@@ -53,7 +53,7 @@ while true
         [fval, ~, ~] = this.slices{s}.subproblemNetSocialWelfare(lambda_s);
         dual_fval = dual_fval + fval;
     end
-    [node_load, link_load] = this.getNetworkLoad([], 'sum');
+    load = this.getNetworkLoad([], struct('Stage', 'temp'));
     dual_fval = dual_fval - dot(lambda.n, node_capacity) - ...
         dot(lambda.e, link_capacity);
     fprintf('\tDual problem: new value: %.3e, old value: %.3e, difference: %.3e.\n', ...
@@ -64,8 +64,8 @@ while true
     else
         prev_dual_fval = dual_fval;
     end
-    delta_lambda.n = node_load-node_capacity;
-    delta_lambda.e = link_load-link_capacity;
+    delta_lambda.n = load.Node-node_capacity;
+    delta_lambda.e = load.Link-link_capacity;
 %     if isempty(find([delta_lambda.n>0; delta_lambda.e>0],1))
 %         this.saveStates;
 %     end
@@ -81,9 +81,9 @@ prim_fval = 0;
 for s = 1:NS
     prim_fval = prim_fval + this.slices{s}.weight*sum(fcnUtility(this.slices{s}.FlowTable.Rate));
 end
-[node_load, link_load] = this.getNetworkLoad;
-prim_fval = prim_fval - this.getNetworkCost(node_load, link_load);
-fprintf('Optimal solution: fx = %G, g(¦Ë) = %G.\n', prim_fval, dual_fval);
+load = this.getNetworkLoad;
+prim_fval = prim_fval - this.getNetworkCost(load);
+fprintf('Optimal solution: fx = %G, g(ï¿½ï¿½) = %G.\n', prim_fval, dual_fval);
 fprintf('Iteration number: %d, Evaluation Number: %G.\n', iter_num, eval_num);
 end
 
