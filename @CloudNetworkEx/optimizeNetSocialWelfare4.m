@@ -4,8 +4,8 @@ function [prim_fval] = optimizeNetSocialWelfare4( this )
 NN = this.NumberNodes;
 NS = this.NumberSlices;
 NL = this.NumberLinks;
-node_capacity = this.getNodeField('Capacity');
-link_capacity = this.getLinkField('Capacity');
+node_capacity = this.readNode('Capacity');
+link_capacity = this.readLink('Capacity');
 
 %% iteration records
 iter_num = 0;

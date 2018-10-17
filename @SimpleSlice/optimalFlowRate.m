@@ -55,8 +55,8 @@ parameters.bs = [sparse(this.num_lcon_res,1);
 %%%
 % * *Upper Bound*: Not necessary, to facilitate the algorithm, we give a relaxed
 % upper-bound.
-% max(this.Parent.getLinkField('Capacity'))*ones(NP,1);...
-%     max(this.Parent.getDataCenterField('Capacity'))*ones(this.num_vars-NP,1)
+% max(this.Parent.readLink('Capacity'))*ones(NP,1);...
+%     max(this.Parent.readDataCenter('Capacity'))*ones(this.num_vars-NP,1)
 parameters.ub = [];
 %%%
 % * Remove the capacity constraints with infinity capacity;

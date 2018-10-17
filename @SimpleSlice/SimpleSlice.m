@@ -327,12 +327,12 @@ classdef SimpleSlice < Slice & EventReceiver
 		
 		function c = link_unit_cost(this)
 			% the virtual links's unit cost
-			c = this.Parent.getLinkField('UnitCost', this.VirtualLinks.PhysicalLink);
+			c = this.Parent.readLink('UnitCost', this.VirtualLinks.PhysicalLink);
 		end
 		
 		function c = node_unit_cost(this)
 			% the virtual data center nodes's unit cost
-			c = this.Parent.getNodeField('UnitCost', this.getDCNI);
+			c = this.Parent.readNode('UnitCost', this.getSNPI);
 		end
 		
 		function sc = getSliceCost(this, node_load, link_load, model)
@@ -478,8 +478,8 @@ classdef SimpleSlice < Slice & EventReceiver
 		%             end
 		%
 		%             pn = this.Parent;
-		%             link_uc = pn.getLinkField('UnitCost', this.VirtualLinks.PhysicalLink); % the virtual links's unit cost
-		%             node_uc = pn.getNodeField('UnitCost', this.VirtualNodes.PhysicalNode); % the virtual nodes's unit cost
+		%             link_uc = pn.readLink('UnitCost', this.VirtualLinks.PhysicalLink); % the virtual links's unit cost
+		%             node_uc = pn.readNode('UnitCost', this.VirtualNodes.PhysicalNode); % the virtual nodes's unit cost
 		%             epsilon = pn.unitStaticNodeCost;
 		%
 		%             if strcmp(model, 'Approximate')

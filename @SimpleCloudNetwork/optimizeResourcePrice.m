@@ -21,8 +21,8 @@ end
 NC = this.NumberDataCenters;
 NS = this.NumberSlices;
 NL = this.NumberLinks;
-node_capacity = this.getDataCenterField('Capacity');
-link_capacity = this.getLinkField('Capacity');
+node_capacity = this.readDataCenter('Capacity');
+link_capacity = this.readLink('Capacity');
 link_uc = this.getLinkCost;
 node_uc = this.getNodeCost;
 

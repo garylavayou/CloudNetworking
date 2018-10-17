@@ -18,10 +18,10 @@ options = getstructfields(options, {'Slices', 'PricingPolicy'}, 'default', ...
     {this.slices,'quadratic'});
 options.bFinal = true;
 
-argout.LinkPrice = this.getLinkField('Price');
-argout.NodePrice = this.getNodeField('Price');            
-argout.LinkLoad = this.getLinkField('Load');
-argout.NodeLoad = this.getNodeField('Load');       
+argout.LinkPrice = this.readLink('Price');
+argout.NodePrice = this.readNode('Price');            
+argout.LinkLoad = this.readLink('Load');
+argout.NodeLoad = this.readNode('Load');       
 argout.FlowRate = [];
 argout.Welfare = 0;
 

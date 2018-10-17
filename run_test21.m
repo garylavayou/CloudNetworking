@@ -61,16 +61,16 @@ if b_optimal
     net_opt.SlicingMethod = SlicingMethod.SingleNormal;
     PN = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
     PN.slice_template = Slice.loadSliceTemplate(slice_type);
-    link_capacity = PN.getLinkField('Capacity');
-    node_capacity = PN.getDataCenterField('Capacity');
+    link_capacity = PN.readLink('Capacity');
+    node_capacity = PN.readDataCenter('Capacity');
     seed = floor(now);
     slice_opt = PN.slice_template(1);
     fprintf('\nSingle Slice Optimization:\n');
     fprintf('\tAverage unit link cost: %.2G, average unit node cost: %.2G.\n', ...
-        mean(PN.getLinkField('UnitCost')), ...
-        mean(PN.getDataCenterField('UnitCost')));
+        mean(PN.readLink('UnitCost')), ...
+        mean(PN.readDataCenter('UnitCost')));
     fprintf('\t\t(Ratio of unit node cost to unit link cost: %.2G.)\n\n',...
-        mean(PN.getDataCenterField('UnitCost'))/mean(PN.getLinkField('UnitCost')));
+        mean(PN.readDataCenter('UnitCost'))/mean(PN.readLink('UnitCost')));
     N = 5;
     while true && N > 0
         slice_opt.RandomSeed = seed;
@@ -88,8 +88,8 @@ if b_optimal
         fprintf('\tnet profit of substrate network:\n');
         fprintf('\t\t%f\n',output.Profit(end,:));
         fprintf('\tNetwork utilization ratio %f.\n',PN.utilizationRatio);
-        fprintf('\t\t(Node utilization: %.2G)\n', sum(PN.getDataCenterField('Load')/sum(node_capacity)));
-        fprintf('\t\t(Link utilization: %.2G)\n\n', sum(PN.getLinkField('Load')/sum(link_capacity)));
+        fprintf('\t\t(Node utilization: %.2G)\n', sum(PN.readDataCenter('Load')/sum(node_capacity)));
+        fprintf('\t\t(Link utilization: %.2G)\n\n', sum(PN.readLink('Load')/sum(link_capacity)));
         if ~b_repeat
             break;
         else
@@ -102,12 +102,12 @@ if b_static
     net_opt.SlicingMethod = SlicingMethod.StaticPricing;
     PN_static = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
     PN_static.slice_template = Slice.loadSliceTemplate(slice_type);
-    link_capacity = PN_static.getLinkField('Capacity');
-    node_capacity = PN_static.getDataCenterField('Capacity');
+    link_capacity = PN_static.readLink('Capacity');
+    node_capacity = PN_static.readDataCenter('Capacity');
     link_price = PN_static.getLinkCost * (1 + net_opt.PricingFactor);
     node_price = PN_static.getNodeCost * (1 + net_opt.PricingFactor);
-    PN_static.setLinkField('Price', link_price);
-    PN_static.setDataCenterField('Price', node_price);
+    PN_static.writeLink('Price', link_price);
+    PN_static.writeDataCenter('Price', node_price);
     slice_opt = PN_static.slice_template(1);
     if b_repeat
         slice_opt.AdmitPolicy = 'reject-slice';
@@ -132,17 +132,17 @@ if b_static
         fprintf('\t\t%f\n',output.Profit(end,:));
         fprintf('\tNetwork utilization ratio %f.\n',PN_static.utilizationRatio);
         fprintf('\t\t(Node utilization: %.2G)\n', ...
-            sum(PN_static.getDataCenterField('Load')/sum(node_capacity)));
+            sum(PN_static.readDataCenter('Load')/sum(node_capacity)));
         fprintf('\t\t(Link utilization: %.2G)\n\n', ...
-            sum(PN_static.getLinkField('Load')/sum(link_capacity)));
+            sum(PN_static.readLink('Load')/sum(link_capacity)));
         if ~b_repeat
             break;
         end
     end
     fprintf('\tAverage unit link cost: %.2G, average unit node cost: %.2G.\n', ...
-        mean(PN_static.getLinkField('UnitCost')), ...
-        mean(PN_static.getDataCenterField('UnitCost')));
+        mean(PN_static.readLink('UnitCost')), ...
+        mean(PN_static.readDataCenter('UnitCost')));
     fprintf('\t\t(Ratio of unit node cost to unit link cost: %.2G.)\n\n',...
-        mean(PN_static.getDataCenterField('UnitCost'))/...
-        mean(PN_static.getLinkField('UnitCost')));
+        mean(PN_static.readDataCenter('UnitCost'))/...
+        mean(PN_static.readLink('UnitCost')));
 end

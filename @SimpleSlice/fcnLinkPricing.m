@@ -19,12 +19,12 @@ aggr_link_usage = this.Parent.AggregateLinkUsage;
 % NOTE: we may compute prices for only a part of slices, while we do not use the residual
 % capacity and the involved slices, since this might lead to very low prices (when
 % residual resource is plentful, and involved slices is few). 
-a = (theta-1)*b.*aggr_link_usage(link_id)./this.Parent.getLinkField('Capacity', link_id);
+a = (theta-1)*b.*aggr_link_usage(link_id)./this.Parent.readLink('Capacity', link_id);
 
 %%%
 % When computing hession matrix, the first two output arguments are not needed.
-% [payment, grad] = fcnLinkPricing(¡¤) is called in <fcnProfit>,
-% [~, ~, hess] = fcnLinkPricing(¡¤) is called in <fcnHession>.
+% [payment, grad] = fcnLinkPricing(ï¿½ï¿½) is called in <fcnProfit>,
+% [~, ~, hess] = fcnLinkPricing(ï¿½ï¿½) is called in <fcnHession>.
 % See also <fcnNodePricing>
 if nargout == 3  
     pseudo_hess = a;

@@ -19,12 +19,12 @@ end
 if nargin>=2 && ~isempty(slice)
     %% Allocate Resource to the new arrival slice
     % The residual capacity of the substrate network is available to the slice.
-    slice.VirtualLinks.Price = this.getLinkField('Price',slice.VirtualLinks.PhysicalLink);
-    slice.VirtualDataCenters.Price = this.getDataCenterField('Price',slice.getDCPI);
+    slice.VirtualLinks.Price = this.readLink('Price',slice.VirtualLinks.PhysicalLink);
+    slice.VirtualDataCenters.Price = this.readDataCenter('Price',slice.getDCPI);
     % ss = slice.copy;
-    slice.VirtualDataCenters.Capacity = this.getDataCenterField('ResidualCapacity', slice.getDCPI);
+    slice.VirtualDataCenters.Capacity = this.readDataCenter('ResidualCapacity', slice.getDCPI);
     slice.VirtualLinks.Capacity = ...
-        this.getLinkField('ResidualCapacity', slice.VirtualLinks.PhysicalLink);
+        this.readLink('ResidualCapacity', slice.VirtualLinks.PhysicalLink);
     slice.prices.Link = slice.VirtualLinks.Price;
     slice.prices.Node = slice.VirtualDataCenters.Price;
     [~] = slice.optimalFlowRate(options);
@@ -42,8 +42,8 @@ if nargin>=2 && ~isempty(slice)
 end
 
 load = this.getNetworkLoad;
-this.setDataCenterField('Load', load.Node);
-this.setLinkField('Load', load.Link);
+this.writeDataCenter('Load', load.Node);
+this.writeLink('Load', load.Link);
 
 % Calculate the output
 options.Slices = this.slices;

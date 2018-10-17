@@ -19,8 +19,8 @@ NS = this.NumberSlices;
 NL = this.NumberLinks;
 node_load = zeros(NN, NS);
 link_load = zeros(NL, NS);
-node_capacity = this.getNodeField('Capacity');
-link_capacity = this.getLinkField('Capacity');
+node_capacity = this.readNode('Capacity');
+link_capacity = this.readLink('Capacity');
 link_uc = this.getLinkCost;
 node_uc = this.getNodeCost;
 

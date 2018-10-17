@@ -162,8 +162,8 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             end
             if ~isempty(idle_slices)
                 % recycle all resources
-                prices.Link = this.getLinkField('Price');
-                prices.Node = this.getDataCenterField('Price');
+                prices.Link = this.readLink('Price');
+                prices.Node = this.readDataCenter('Price');
                 for i = 1:length(idle_slices)
                     idle_slices{i}.finalize(prices);
                 end
@@ -455,7 +455,7 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 slice.VirtualNodes{new_node_index, 'PhysicalNode'} = new_phy_node_id;
                 slice.PhysicalNodeMap{new_phy_node_id, 'VirtualNode'} = new_node_index;
                 new_dc_node_index = pre_num_nodes + ...
-                    find(this.getNodeField('Capacity', new_phy_node_id) > 0);
+                    find(this.readNode('Capacity', new_phy_node_id) > 0);
                 num_new_dcs = length(new_dc_node_index);
                 new_dc_index = pre_num_dcs+(1:num_new_dcs)';
                 slice.VirtualDataCenters{new_dc_index, :} = 0;
@@ -477,7 +477,7 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
                 % construct new adjacent matrix for the update graph
                 new_vhead = slice.PhysicalNodeMap.VirtualNode(new_phy_head);
                 new_vtail = slice.PhysicalNodeMap.VirtualNode(new_phy_tail);
-                props.Weight = this.getLinkField('Weight', ...
+                props.Weight = this.readLink('Weight', ...
                     slice.VirtualLinks{new_edge_index ,'PhysicalLink'});
                 slice.Topology.Update(new_vhead, new_vtail, props);
                 
@@ -518,21 +518,21 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
         function updateRedimensionCost(this, slice)
             global DEBUG; %#ok<NUSED>
             link_id = slice.VirtualLinks.PhysicalLink;
-            node_id = slice.getDCNI;
-            link_load = this.getLinkField('Load', link_id);
-            node_load = this.getNodeField('Load', node_id);
+            node_id = slice.getSNPI;
+            link_load = this.readLink('Load', link_id);
+            node_load = this.readNode('Load', node_id);
             zero_load_link_id = link_load==0;
             zero_load_node_id = node_load==0;
-            link_load(zero_load_link_id) = this.getLinkField('Capacity', ...
+            link_load(zero_load_link_id) = this.readLink('Capacity', ...
                 link_id(zero_load_link_id)) * (1/20);
-            node_load(zero_load_node_id) = this.getNodeField('Capacity', ...
+            node_load(zero_load_node_id) = this.readNode('Capacity', ...
                 node_id(zero_load_node_id)) * (1/20);
             if ~isempty(slice.prices)
-                link_price = min(slice.prices.Link,this.getLinkField('Price', link_id));
-                node_price = min(slice.prices.Node, this.getNodeField('Price', node_id));
+                link_price = min(slice.prices.Link,this.readLink('Price', link_id));
+                node_price = min(slice.prices.Node, this.readNode('Price', node_id));
             else
-                link_price = this.getLinkField('Price', link_id);
-                node_price = this.getNodeField('Price', node_id);
+                link_price = this.readLink('Price', link_id);
+                node_price = this.readNode('Price', node_id);
             end
             %% ISSUE: HOW TO DETERMINE RECONFIG COST
             [~, slice.VirtualLinks.ReconfigCost] = ...
@@ -556,18 +556,18 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
         %                 link_id = slice.VirtualLinks.PhysicalLink;
         %             end
         %             if nargin <= 3
-        %                 node_id = slice.getDCNI;
+        %                 node_id = slice.getSNPI;
         %             end
-        %             link_load = this.getLinkField('Load', link_id);
-        %             node_load = this.getNodeField('Load', node_id);
+        %             link_load = this.readLink('Load', link_id);
+        %             node_load = this.readNode('Load', node_id);
         %             zero_load_link_id = link_load==0;
         %             zero_load_node_id = node_load==0;
-        %             link_load(zero_load_link_id) = this.getLinkField('Capacity', ...
+        %             link_load(zero_load_link_id) = this.readLink('Capacity', ...
         %                 link_id(zero_load_link_id)) * (1/20);
-        %             node_load(zero_load_node_id) = this.getNodeField('Capacity', ...
+        %             node_load(zero_load_node_id) = this.readNode('Capacity', ...
         %                 node_id(zero_load_node_id)) * (1/20);
-        %             link_price = this.getLinkField('Price', link_id);
-        %             node_price = this.getNodeField('Price', node_id);
+        %             link_price = this.readLink('Price', link_id);
+        %             node_price = this.readNode('Price', node_id);
         %             [~, link_reconfig_cost] = slice.fcnLinkPricing(link_price, link_load);
         %             [~, node_reconfig_cost] = slice.fcnNodePricing(node_price, node_load);
         %         end

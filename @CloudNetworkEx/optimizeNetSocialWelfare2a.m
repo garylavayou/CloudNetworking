@@ -5,8 +5,8 @@ NS = this.NumberSlices;
 NL = this.NumberLinks;
 node_load = zeros(NN, NS);
 link_load = zeros(NL, NS);
-node_capacity = this.getNodeField('Capacity');
-link_capacity = this.getLinkField('Capacity');
+node_capacity = this.readNode('Capacity');
+link_capacity = this.readLink('Capacity');
 this.clearStates;
 
 %% iteration records
@@ -124,8 +124,8 @@ for s = 1:NS
     prim_fval = prim_fval + this.slices{s}.weight*sum(fcnUtility(this.slices{s}.FlowTable.Rate));
 end
 load = this.getNetworkLoad;
-this.setNodeField('Load', load.Node);
-this.setLinkField('Load', load.Link);
+this.writeDataCenter('Load', load.Node);
+this.writeLink('Load', load.Link);
 prim_fval = prim_fval - this.getNetworkCost;
 fprintf('Optimal solution: fx = %G, g(��) = %G.\n', prim_fval, dual_fval);
 fprintf('Iteration number: %d, Evaluation Number: %G.\n', iter_num, eval_num);

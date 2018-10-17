@@ -79,17 +79,17 @@ classdef DynamicCloudAccessNetwork < CloudAccessNetwork & DynamicNetwork
         function slice_opt = updateDynamicSliceOptions(slice, slice_opt)
             switch slice.options.FlowPattern
                 case FlowPattern.RandomInterDataCenter
-                    slice_opt.NodeSet = slice.getDCNI;
+                    slice_opt.NodeSet = slice.getSNPI;
                 case FlowPattern.RandomInterBaseStation
                     slice_opt.NodeSet = slice.getBSNI;
                 case FlowPattern.RandomDataCenter2BaseStation
                     slice_opt.BSNodeSet = slice.getBSNI;
-                    slice_opt.DCNodeSet = slice.getDCNI;
+                    slice_opt.DCNodeSet = slice.getSNPI;
                 otherwise
                     error('error: cannot handle the flow pattern <%s>.', ...
                         slice.options.FlowPattern.char);
             end
-            slice_opt.MiddleNodes = slice.getDCNI;
+            slice_opt.MiddleNodes = slice.getSNPI;
         end
     end
     methods(Access=protected)          

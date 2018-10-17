@@ -18,8 +18,8 @@ node_load = zeros(NN, NS);
 link_load = zeros(NL, NS);
 aggr_link_load = zeros(NL,1);
 aggr_node_load = zeros(NS,1);
-node_capacity = this.getNodeField('Capacity');
-link_capacity = this.getLinkField('Capacity');
+node_capacity = this.readNode('Capacity');
+link_capacity = this.readLink('Capacity');
 link_uc = this.getLinkCost;  % dynamic and static unit cost
 node_uc = this.getNodeCost;
 
@@ -212,10 +212,10 @@ for s = 1:NS
     sl.VirtualLinks.Load = sl.getLinkLoad;
     sl.FlowTable.Rate = sl.getFlowRate;
 end
-this.setLinkField('Price', prices.Link);
-this.setNodeField('Price', prices.Node);
-this.setNodeField('Load', aggr_node_load);
-this.setLinkField('Load', aggr_link_load);
+this.writeLink('Price', prices.Link);
+this.writeDataCenter('Price', prices.Node);
+this.writeDataCenter('Load', aggr_node_load);
+this.writeLink('Load', aggr_link_load);
 
 %% Calculate the output
 % The output variables includes,
@@ -294,8 +294,8 @@ for s = 1:NS
     if this.static_factor ~= 0
         idx = sl.VirtualNodes.Load>0;
         nid = sl.VirtualNodes.PhysicalNode;
-        p = p - dot(sl.VirtualNodes.Load(idx)./this.getNodeField('Load', nid(idx)),...
-            this.getNodeField('StaticCost', nid(idx)));
+        p = p - dot(sl.VirtualNodes.Load(idx)./this.readNode('Load', nid(idx)),...
+            this.readNode('StaticCost', nid(idx)));
     end
     output.profit.AccuratePercent(s) = options.PercentFactor * p;
     %%%
@@ -361,12 +361,12 @@ end
                 violate_link_id = link_id(sb_link_violate);
                 partition_ratio = link_load(violate_link_id,si) ./ aggr_link_load(violate_link_id);
                 sl.VirtualLinks.Capacity(sb_link_violate) = ...
-                    part_factor*partition_ratio.*this.getLinkField('Capacity', violate_link_id);
+                    part_factor*partition_ratio.*this.readLink('Capacity', violate_link_id);
                 sb_node_violate = b_node_violate(node_id);
                 violate_node_id = node_id(sb_node_violate);
                 partition_ratio = node_load(violate_node_id,si) ./ aggr_node_load(violate_node_id);
                 sl.VirtualNodes.Capacity(sb_node_violate) = ...
-                    part_factor*partition_ratio.*this.getNodeField('Capacity', violate_node_id);
+                    part_factor*partition_ratio.*this.readNode('Capacity', violate_node_id);
             end
             sl.prices.Link = prices.Link(link_id);
             sl.prices.Node = prices.Node(node_id);

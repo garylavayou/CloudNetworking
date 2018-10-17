@@ -6,9 +6,9 @@ function [ payment, grad, pseudo_hess ] = fcnNodePricing(this, node_price, node_
 % $b = \frac{2}{3} \rho_s$ and $a = \frac{b \cdot |S|}{V_n}$
 theta = 3;
 b = node_price;
-node_id = this.getDCNI;
+node_id = this.getSNPI;
 aggr_node_usage = this.Parent.AggregateNodeUsage;
-a = (theta-1)*b.*aggr_node_usage(node_id)./this.Parent.getNodeField('Capacity', node_id);
+a = (theta-1)*b.*aggr_node_usage(node_id)./this.Parent.readNode('Capacity', node_id);
 
 if nargout == 3
     pseudo_hess = a;

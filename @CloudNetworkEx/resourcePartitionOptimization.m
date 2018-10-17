@@ -56,11 +56,11 @@ for s = 1:NS
     link_id = this.slices{s}.VirtualLinks.PhysicalLink;
     partition_ratio = link_usage(link_id,s) ./ aggr_link_usage(link_id);
     this.slices{s}.VirtualLinks.Capacity = ...
-        partition_ratio.*this.getLinkField('Capacity', link_id);
+        partition_ratio.*this.readLink('Capacity', link_id);
     node_id = this.slices{s}.VirtualNodes.PhysicalNode;
     partition_ratio = node_usage(node_id,s) ./ aggr_node_usage(node_id);
     this.slices{s}.VirtualNodes.Capacity = ...
-        partition_ratio.*this.getNodeField('Capacity', node_id);
+        partition_ratio.*this.readNode('Capacity', node_id);
 end
 
 %% Independently optimize each network slice

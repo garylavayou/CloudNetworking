@@ -47,10 +47,10 @@ NS = this.NumberSlices;
 slice_data.Adjacent = this.graph.Adjacent;
 slice_data.LinkMapS2P = (1:NL)';
 slice_data.LinkMapP2S = (1:NL)';
-slice_data.LinkCapacity = this.getLinkField('Capacity');
+slice_data.LinkCapacity = this.readLink('Capacity');
 slice_data.NodeMapS2P = (1:NN)';
 slice_data.NodeMapP2S = (1:NN)';
-slice_data.NodeCapacity = this.getDataCenterField('Capacity');
+slice_data.NodeCapacity = this.readDataCenter('Capacity');
 slice_data.FlowTable = table([],[],[],[],[],[],[],'VariableNames',...
     {this.slices{1}.FlowTable.Properties.VariableNames{:,:},'Weight'});
 NF = this.NumberFlows;
@@ -150,8 +150,8 @@ for s = 1:NS
 %     node_load(nid) = node_load(nid) + sl.VirtualNodes.Capacity;
 %     link_load(eid) = link_load(eid) + sl.VirtualLinks.Capacity;
 end
-% disp(max(node_load-this.getNodeField('Capacity')));
-% disp(max(link_load-this.getLinkField('Capacity')));
+% disp(max(node_load-this.readNode('Capacity')));
+% disp(max(link_load-this.readLink('Capacity')));
 
 %% Compute the real resource demand with given prices
 options = structmerge(options, getstructfields(new_opts, 'PricingPolicy', 'ignore'));

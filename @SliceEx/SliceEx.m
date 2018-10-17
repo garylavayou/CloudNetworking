@@ -18,8 +18,8 @@ classdef SliceEx < SimpleSlice
         end
         
         %         function pc = getPathCost(this, lambda_e, lambda_n)
-        %             link_uc = this.Parent.getLinkField('UnitCost', this.VirtualLinks.PhysicalLink); % the virtual links's unit cost
-        %             node_uc = this.Parent.getNodeField('UnitCost', this.VirtualNodes.PhysicalNode); % the virtual nodes's unit cost
+        %             link_uc = this.Parent.readLink('UnitCost', this.VirtualLinks.PhysicalLink); % the virtual links's unit cost
+        %             node_uc = this.Parent.readNode('UnitCost', this.VirtualNodes.PhysicalNode); % the virtual nodes's unit cost
         %             pc = cell(this.NumberFlows, 1);
         %             p = 1;
         %             for i = 1:this.NumberFlows
@@ -109,7 +109,7 @@ classdef SliceEx < SimpleSlice
         end
         
         %         function [nc, nid] = getPathNodeCost(this, pid, lambda_n)
-        %            node_uc = this.Parent.getNodeField('UnitCost', this.VirtualNodes.PhysicalNode);
+        %            node_uc = this.Parent.readNode('UnitCost', this.VirtualNodes.PhysicalNode);
         %            nid = find(this.I_dc_path(:,pid)~=0);
         %            nc = node_uc(nid) + lambda_n(nid) + this.Parent.phis_n;
         %         end

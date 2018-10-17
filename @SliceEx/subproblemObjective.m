@@ -35,8 +35,8 @@ else
     %  whether the gradient on node variable is zeros is depend on the node-path
     %  incidence matrix, so the number of non-zero elements is less than i.e.
     %  |nnz(I_dc_path)*F|.
-    link_uc = S.Parent.getLinkField('UnitCost', S.VirtualLinks.PhysicalLink);
-    node_uc = S.Parent.getNodeField('UnitCost', S.VirtualNodes.PhysicalNode);
+    link_uc = S.Parent.readLink('UnitCost', S.VirtualLinks.PhysicalLink);
+    node_uc = S.Parent.readNode('UnitCost', S.VirtualNodes.PhysicalNode);
     grad = spalloc(length(var_x),1, S.NumberPaths+nnz(S.I_dc_path)*S.NumberVNFs);
     for p = 1:S.NumberPaths
         i = S.path_owner(p);

@@ -49,10 +49,10 @@ classdef CloudNetworkEx < CloudNetwork
                 if isfield(options, 'EmbedProfit')
                     if ~isempty(options.EmbedProfit)
                         this.eta = options.EmbedProfit;
-                        link_uc = this.getLinkField('UnitCost');
-                        this.setLinkField('UnitCost', link_uc/(1-this.eta));
-                        node_uc = this.getDataCenterField('UnitCost');
-                        this.setDataCenterField('UnitCost', node_uc/(1-this.eta));
+                        link_uc = this.readLink('UnitCost');
+                        this.writeLink('UnitCost', link_uc/(1-this.eta));
+                        node_uc = this.readDataCenter('UnitCost');
+                        this.writeDataCenter('UnitCost', node_uc/(1-this.eta));
                     end
                     options = rmfield(options, 'EmbedProfit');
                 end
@@ -60,11 +60,11 @@ classdef CloudNetworkEx < CloudNetwork
             end
             % Add slice data
             %             if nargin >=5
-            %                 this.setLinkField('Beta', beta{1});
-            %                 this.setDataCenterField('Beta', beta{2});
+            %                 this.writeLink('Beta', beta{1});
+            %                 this.writeDataCenter('Beta', beta{2});
             %             else
-            %                 this.setLinkField('Beta', 1*this.getLinkField('Capacity'));
-            %                 this.setDataCenterField('Beta', 1*this.getDataCenterField('Capacity'));
+            %                 this.writeLink('Beta', 1*this.readLink('Capacity'));
+            %                 this.writeDataCenter('Beta', 1*this.readDataCenter('Capacity'));
             %             end
             %                 options.beta.node = 1;          % NOTE: this is not used temporarily
             %                 options.beta.link = 1;            
@@ -101,8 +101,8 @@ classdef CloudNetworkEx < CloudNetwork
         
         function theta = utilizationRatio(this, node_load, link_load)
             if nargin == 1
-                node_load = this.getDataCenterField('Load');
-                link_load = this.getLinkField('Load');
+                node_load = this.readDataCenter('Load');
+                link_load = this.readLink('Load');
             end
             theta_v = sum(node_load)/this.totalNodeCapacity;
             theta_l = sum(link_load)/this.totalLinkCapacity;
@@ -110,15 +110,15 @@ classdef CloudNetworkEx < CloudNetwork
         end  
         
         function c = unitStaticNodeCost(this)
-            c = mean(this.getDataCenterField('StaticCost'));
+            c = mean(this.readDataCenter('StaticCost'));
         end
         
         function c = getStaticCost(this, node_load, link_load)
             if nargin <= 2
-                link_load = this.getLinkField('Load');
+                link_load = this.readLink('Load');
             end
             if nargin <=1
-                node_load = this.getDataCenterField('Load');
+                node_load = this.readDataCenter('Load');
             end
             if this.static_factor == 0 
                 c = 0;
@@ -143,10 +143,10 @@ classdef CloudNetworkEx < CloudNetwork
         %         function c = getNetworkCost(this, node_load, link_load, model)
         function c = getNetworkCost(this, node_load, link_load, model)
             if nargin <=1 || isempty(node_load)
-                node_load = this.getDataCenterField('Load');
+                node_load = this.readDataCenter('Load');
             end
             if nargin <= 2 || isempty(link_load)
-                link_load = this.getLinkField('Load');
+                link_load = this.readLink('Load');
             end
             if nargin <= 3
                 warning('model is set as Approximate.');
@@ -159,7 +159,7 @@ classdef CloudNetworkEx < CloudNetwork
             elseif strcmp(model, 'Accurate')
                 if this.static_factor ~= 0
                     b_deployed = node_load > 0;
-                    c = c + sum(this.getDataCenterField('StaticCost', b_deployed));
+                    c = c + sum(this.readDataCenter('StaticCost', b_deployed));
                 end
             else
                 error('error: unknown model (%s).', model);
@@ -168,12 +168,12 @@ classdef CloudNetworkEx < CloudNetwork
 
         %%% compute link cost. Subclass may override this to provide cost.
         function link_uc = getLinkCost(this)
-            link_uc = this.getLinkField('UnitCost') + this.phis_l;
+            link_uc = this.readLink('UnitCost') + this.phis_l;
         end
         
         %%% compute node cost. Subclass may override this to provide cost.
         function node_uc = getNodeCost(this)
-            node_uc = this.getDataCenterField('UnitCost') + this.phis_n;
+            node_uc = this.readDataCenter('UnitCost') + this.phis_n;
         end
     end
 
@@ -199,7 +199,7 @@ classdef CloudNetworkEx < CloudNetwork
                         node_uc = this.DataCenters.UnitCost;
                         avg_static_cost = mean(node_capacity.*node_uc)...
                             .*(rand([this.NumberDataCenters, 1])*(scr(2)-scr(1))+scr(1));
-                        this.setDataCenterField('StaticCost', round(avg_static_cost));
+                        this.writeDataCenter('StaticCost', round(avg_static_cost));
                     elseif VNF_opt.StaticCostOption == NodeStaticCostOption.NetworkSpecified
                         % TODO
                     elseif VNF_opt.StaticCostOption == NodeStaticCostOption.None

@@ -19,7 +19,7 @@ if ~this.checkFeasible(x0)
 end
 bs = sparse(this.num_lcon_res,1);
 lbs = sparse(this.num_vars,1);
-% node_capacity = this.Parent.getNodeField('Capacity', this.VirtualNodes.PhysicalNode);
+% node_capacity = this.Parent.readNode('Capacity', this.VirtualNodes.PhysicalNode);
 % ubs = [inf*ones(this.NumberPaths,1);
 %     repmat(node_capacity, this.NumberPaths*this.NumberVNFs, 1)];
 % Algorithm option

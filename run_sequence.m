@@ -29,8 +29,8 @@ if b_static_slice
     PN_static.slice_template = Slice.loadSliceTemplate(type.Index);
     link_price = PN_static.getLinkCost * (1 + net_opt.PricingFactor);
     node_price = PN_static.getNodeCost * (1 + net_opt.PricingFactor);
-    PN_static.setLinkField('Price', link_price);
-    PN_static.setDataCenterField('Price', node_price);
+    PN_static.writeLink('Price', link_price);
+    PN_static.writeDataCenter('Price', node_price);
     clear link_uc node_uc link_price node_price;
 end
 

@@ -14,7 +14,7 @@ classdef DynamicAccessSlice < DynamicSlice
             % *Virtual Base Stations*
             % Select the base station nodes from all the virtual nodes of this slice.
             bs_virtual_node_index = ...
-                find(this.Parent.getNodeField('BaseStation', this.VirtualNodes.PhysicalNode)>0);
+                find(this.Parent.readNode('BaseStation', this.VirtualNodes.PhysicalNode)>0);
             this.VirtualBaseStations = ...
                 table(bs_virtual_node_index, 'VariableNames', {'VirtualNode'});
             this.VirtualNodes.BaseStation = zeros(this.NumberVirtualNodes,1);
@@ -41,7 +41,7 @@ classdef DynamicAccessSlice < DynamicSlice
             else
                 bs_node_id = this.getBSNI(bs_index);
             end
-            bs_phy_index = this.Parent.getNodeField('BaseStation', bs_node_id);
+            bs_phy_index = this.Parent.readNode('BaseStation', bs_node_id);
         end
     end
     

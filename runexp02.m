@@ -109,8 +109,8 @@ for exp_id = 1:num_config
         PN_static.slice_template = Slice.loadSliceTemplate(slice_config.Type);
         link_price = PN_static.getLinkCost * (1 + net_opt.PricingFactor);
         node_price = PN_static.getNodeCost * (1 + net_opt.PricingFactor);
-        PN_static.setLinkField('Price', link_price);
-        PN_static.setDataCenterField('Price', node_price);
+        PN_static.writeLink('Price', link_price);
+        PN_static.writeDataCenter('Price', node_price);
     end
     if b_single_optimal || b_price_adjust1 || b_price_adjust2
         PN = instantiateclass(net_opt.ClassName, ...

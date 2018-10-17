@@ -43,8 +43,8 @@ type.FixedCount = [3; 13; 27];      % Number of persistent slices: {1|2|3...}
 net_opt.SlicingMethod = SlicingMethod.SingleNormal;
 PN = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
 PN.slice_template = Slice.loadSliceTemplate(type.Index);
-link_capacity = PN.getLinkField('Capacity');
-node_capacity = PN.getDataCenterField('Capacity');
+link_capacity = PN.readLink('Capacity');
+node_capacity = PN.readDataCenter('Capacity');
 seed_dynamic = floor(now);
 num_type = length(type.Index);
 num_fix_type = length(type.Fixed);
@@ -66,8 +66,8 @@ fprintf('\t\t%f\n',output_optimal.Profit(1:(end-1),:));
 fprintf('\tnet profit of substrate network:\n');
 fprintf('\t\t%f\n',output_optimal.Profit(end,:));
 fprintf('\tNetwork utilization ratio %f.\n',PN.utilizationRatio);
-fprintf('\t\t(Node utilization: %.2G)\n', sum(PN.getDataCenterField('Load')/sum(node_capacity)));
-fprintf('\t\t(Link utilization: %.2G)\n\n', sum(PN.getLinkField('Load')/sum(link_capacity)));
+fprintf('\t\t(Node utilization: %.2G)\n', sum(PN.readDataCenter('Load')/sum(node_capacity)));
+fprintf('\t\t(Link utilization: %.2G)\n\n', sum(PN.readLink('Load')/sum(link_capacity)));
 
 %%
 % output_price = PN.optimizeResourcePriceNew();    
@@ -77,6 +77,6 @@ fprintf('\t\t(Link utilization: %.2G)\n\n', sum(PN.getLinkField('Load')/sum(link
 % fprintf('\tnet profit of substrate network:\n');
 % fprintf('\t\t%f\n',output_price.Profit(end,:));
 % fprintf('\tNetwork utilization ratio %f.\n',PN.utilizationRatio);
-% fprintf('\t\t(Node utilization: %.2G)\n', sum(PN.getDataCenterField('Load')/sum(node_capacity)));
-% fprintf('\t\t(Link utilization: %.2G)\n\n', sum(PN.getLinkField('Load')/sum(link_capacity)));
+% fprintf('\t\t(Node utilization: %.2G)\n', sum(PN.readDataCenter('Load')/sum(node_capacity)));
+% fprintf('\t\t(Link utilization: %.2G)\n\n', sum(PN.readLink('Load')/sum(link_capacity)));
 

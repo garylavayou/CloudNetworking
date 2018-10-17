@@ -16,12 +16,12 @@ end
 options.OptimizeOrder = 0;
 Ns = length(slices);
 if nargin == 1
-	node_capacity = this.getDataCenterField('Capacity');
-	link_capacity = this.getLinkField('Capacity');
+	node_capacity = this.readDataCenter('Capacity');
+	link_capacity = this.readLink('Capacity');
 else
 	% residual capacity + reallocatable capacity.
-	node_capacity = this.getDataCenterField('ResidualCapacity');
-	link_capacity = this.getLinkField('ResidualCapacity');
+	node_capacity = this.readDataCenter('ResidualCapacity');
+	link_capacity = this.readLink('ResidualCapacity');
 	for i = 1:NS
 		sl = slices{i};
 		node_capacity(sl.getDCPI) = node_capacity(sl.getDCPI) + ...

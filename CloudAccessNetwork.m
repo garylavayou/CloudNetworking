@@ -29,14 +29,14 @@ classdef CloudAccessNetwork < CloudNetwork
 	end
 	
 	methods
-		function value = getNodeField(this, name, node_id)
+		function value = readNode(this, name, node_id)
 			if strcmp(name, 'BaseStation')
 				value = this.Topology.Nodes{node_id, 'BaseStation'};
 			else
 				if nargin == 2
-					value = getNodeField@CloudNetwork(this, name);
+					value = readNode@CloudNetwork(this, name);
 				else
-					value = getNodeField@CloudNetwork(this, name, node_id);
+					value = readNode@CloudNetwork(this, name, node_id);
 				end
 			end
 		end

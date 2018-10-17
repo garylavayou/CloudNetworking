@@ -86,8 +86,8 @@ for s = 1:this.NumberSlices
                     nid = sl.DCNI;
                     idx = sl.VirtualDataCenters.Load>0;
                     sw = sw - ...
-                        dot(sl.VirtualDataCenters.Load(idx)./this.getNodeField('Load', nid(idx)),...
-                        this.getNodeField('StaticCost', nid(idx)));
+                        dot(sl.VirtualDataCenters.Load(idx)./this.readNode('Load', nid(idx)),...
+                        this.readNode('StaticCost', nid(idx)));
                 end
                 profit_table(s,i) = options.PercentFactor * sw;
             case 'ApproximatePrice'

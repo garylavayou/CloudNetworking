@@ -11,8 +11,8 @@ options = getstructfields(this.options, {'PricingFactor', 'PercentFactor'});
 NN = this.NumberNodes;
 NS = this.NumberSlices;
 NL = this.NumberLinks;
-node_capacity = this.getNodeField('Capacity');
-link_capacity = this.getLinkField('Capacity');
+node_capacity = this.readNode('Capacity');
+link_capacity = this.readLink('Capacity');
 this.clearStates;
 
 % iteration records
@@ -127,10 +127,10 @@ for s = 1:NS
     sl.VirtualNodes.Price = node_price(sl.VirtualNodes.PhysicalNode);
 end
 load = this.getNetworkLoad;
-this.setNodeField('Load', load.Node);
-this.setLinkField('Load', load.Link);
-this.setNodeField('Price', node_price);
-this.setLinkField('Price', link_price);
+this.writeDataCenter('Load', load.Node);
+this.writeLink('Load', load.Link);
+this.writeDataCenter('Price', node_price);
+this.writeLink('Price', link_price);
 
 %% Calculate the primal optimal value
 % If strong duality holds, dual objective value equals to primal objective value.
@@ -187,8 +187,8 @@ for s = 1:NS
     % NOTE it is not accurate to calculate the static cost of each slice with this method.
     if this.static_factor ~= 0
         idx = sl.VirtualNodes.Load>0;
-        p = p - dot(sl.VirtualNodes.Load(idx)./this.getNodeField('Load', nid(idx)),...
-            this.getNodeField('StaticCost', nid(idx)));
+        p = p - dot(sl.VirtualNodes.Load(idx)./this.readNode('Load', nid(idx)),...
+            this.readNode('StaticCost', nid(idx)));
     end
     output.profit.AccuratePercent(s) = options.PercentFactor * p;
     %%%

@@ -26,8 +26,8 @@ end
 NN = this.NumberNodes;
 NS = this.NumberSlices;
 NL = this.NumberLinks;
-node_capacity = this.getNodeField('Capacity');
-link_capacity = this.getLinkField('Capacity');
+node_capacity = this.readNode('Capacity');
+link_capacity = this.readLink('Capacity');
 
 % Initial Price
 if nargin >=2 && ~isempty(init_price)
