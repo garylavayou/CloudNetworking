@@ -16,7 +16,8 @@ classdef VirtualNetwork < INetwork
 	methods
 		function this = VirtualNetwork(vnet_data)
 			if nargin == 0
-				args = cell(0);
+				% args = cell(0);
+				return;
 			else
 				args = {vnet_data};
 			end
@@ -35,7 +36,7 @@ classdef VirtualNetwork < INetwork
 			% Virtual Data Center Nodes
 			% Select the data center nodes from all the virtual nodes of this slice.
 			dc_vn_index = ...
-				find(this.Parent.getNodeField('Capacity', this.Nodes.PhysicalNode) > 0);
+				find(this.Parent.readNode('Capacity', this.Nodes.PhysicalNode) > 0);
 			this.ServiceNodes = array2table(dc_vn_index, 'VariableNames', {'VirtualNode'});
 			this.Nodes.DataCenter = zeros(this.NumberNodes,1);
 			this.Nodes{dc_vn_index, 'DataCenter'} = (1:height(this.ServiceNodes))';
@@ -52,6 +53,12 @@ classdef VirtualNetwork < INetwork
 	methods (Access = protected)
 		% function newobj = copyElement(this)
 		% [Parent]: should be updated by caller of <copy>.
+		function [cap, load] = readCapacityLoad(this)
+			cap.node = this.ServiceNodes{:,'Capacity'};
+			cap.link = this.Links{:,'Capacity'};
+			load.node = this.ServiceNodes{:,'Load'};
+			load.link = this.Links{:,'Load'};
+		end
 	end
 	
 	methods
@@ -68,69 +75,31 @@ classdef VirtualNetwork < INetwork
 			map = zeros(this.Parent.NumberNodes,1);
 			map(this.Nodes.PhysicalNode) = 1:this.NumberNodes;
 		end
+		
 	end
 	
 	methods
 		%%%
-		% Get physical node index of data center
-		function dc_node_id = getDCNI(this, dc_index)
+		% Get physical node index of service nodes
+		function sn_id = getSNPI(this, sn_index)
 			if nargin == 1
-				dc_index = 1:this.NumberDataCenters;
+				sn_index = 1:this.NumberServiceNodes;
 			end
-			vn_id = this.ServiceNodes.VirtualNode(dc_index);
-			dc_node_id = this.Nodes.PhysicalNode(vn_id);
+			vn_id = this.ServiceNodes{sn_index, 'VirtualNode'};
+			sn_id = this.Nodes{vn_id, 'PhysicalNode'};
 		end
 		
 		%%%
-		% Get the physical index of data center.
-		function dc_phy_index =getDCPI(this,dc_index)
+		% Get the data center index of the service node.
+		function dc_index =getDCPI(this,sn_index)
 			if nargin == 1
-				dc_node_id = this.getDCNI;
+				sn_id = this.getSNPI;
 			else
-				dc_node_id = this.getDCNI(dc_index);
+				sn_id = this.getSNPI(sn_index);
 			end
-			dc_phy_index = this.Parent.getNodeField('DataCenter', dc_node_id);
+			dc_index = this.Parent.readNode('DataCenter', sn_id);
 		end
 		
 	end
 	
-	methods
-		%% Resource Utilization
-		% Calculate the average and overall resource utilization ratio. 
-		% Also, calculate the resource utilization of links and nodes separately. 
-		%
-		% NOTE: Exclude the resource with no capacity.
-		%
-		% Subclasses might override this method to provide different measure of
-		% resource utilization.
-		function [theta, t_link, t_node] = utilizationRatio(this)
-			capacities = [this.ServiceNodes.Capacity; this.Links.Capacity];
-			load = [this.ServiceNodes.Load; this.Links.Load];
-			idx = capacities>eps;
-			if isempty(idx)
-				error('error: this virtual network has no capacity.');
-			end
-
-			theta.Mean = mean(load(idx)./capacities(idx));
-			theta.Overall = sum(load)/sum(capacities);
-			if nargout >= 2
-				eidx = this.Links.Capacity>eps;
-				if isempty(eidx)
-					error('error: no link capacity.');
-				end
-				t_link.Mean = mean(this.Links.Load(eidx)./this.Links.Capacity(eidx));
-				t_link.Overall = sum(this.Links.Load(eidx))/sum(this.Links.Capacity(eidx));
-			end
-			if nargout >= 3
-				nidx = this.ServiceNodes.Capacity>eps;
-				if isempty(nidx)
-					t_link = struct([]);
-					warning('no node capacity.');
-				end
-				t_node.Mean = mean(this.Nodes.Load(nidx)./this.Nodes.Capacity(nidx));
-				t_node.Overall = sum(this.Nodes.Load(nidx))/sum(this.Nodes.Capacity(nidx));
-			end
-		end
-		
-	end
 end

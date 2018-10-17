@@ -4,7 +4,6 @@ classdef Slice < VirtualNetwork
 		
 		FlowTable;      % flow information in the slice
 		VNFList;        % List of virtual network functions in the slice
-
 	end
 	
 	properties (Dependent)

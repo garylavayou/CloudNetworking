@@ -9,6 +9,10 @@
 % The topology of CloudNetwork is predefined.
 %%
 classdef SimpleCloudNetwork < PhysicalNetwork
+	
+	properties (Dependent)
+		NumberPaths;         % Number of candidate paths of all slices
+	end
 	methods
 		%%
 		% * *options*:
@@ -23,6 +27,7 @@ classdef SimpleCloudNetwork < PhysicalNetwork
 			this.Topology.Edges{:,'Price'} = 0;
 			this.DataCenters{:,'Price'} = 0;
 			
+
 			if nargin >= 4
 				new_opts = varargin{4};
 			else
@@ -48,16 +53,73 @@ classdef SimpleCloudNetwork < PhysicalNetwork
 		end
 	end
 	
+	methods 
+		function n = get.NumberPaths(this)
+			n = 0;
+			for i = 1:this.NumberSlices
+				n = n + this.slices{i}.NumberPaths;
+			end
+		end
+	end
+	
 	methods
 		function sl = AddSlice(this, slice_opt, varargin)
 			slice_opt = this.preAddingSlice(slice_opt);
 			sl = AddSlice@PhysicalNetwork(this, slice_opt, varargin);
 		end
 		
+		function V = totalNodeCapacity(this)
+			V = sum(this.readDataCenter('Capacity'));
+		end
+		
+		function C = totalLinkCapacity(this)
+			C = sum(this.readLink('Capacity'));
+		end
+		
+		function [r_mean, r_max, r_min, r_std] = nodeUtilization(this)
+			node_load = this.readDataCenter('Load');
+			node_capacity = this.readDataCenter('Capacity');
+			% 			node_index = node_load > 1;
+			%%%
+			% Another method: ratio = sum(node_load)/sum(node_capacity);
+			ratio = node_load ./ node_capacity;
+			r_mean = mean(ratio);
+			%%%
+			% The range of node utilization may large, since the load of nodes depends on
+			% the flow's location, the node's cost, and our objective is not to balancing
+			% the node load.
+			if nargout >= 2
+				r_max = max(ratio);
+			end
+			if nargout >= 3
+				r_min = min(ratio);
+			end
+			if nargout >= 4
+				r_std = std(ratio);
+			end
+		end
+		
+		function [r_mean, r_max, r_min, r_std] = linkUtilization(this)
+			link_load = this.readLink('Load');
+			link_capacity = this.readLink('Capacity');
+			% link_index = link_load > 1;
+			ratio = link_load ./ link_capacity;
+			r_mean = mean(ratio);
+			if nargout >= 2
+				r_max = max(ratio);
+			end
+			if nargout >= 3
+				r_min = min(ratio);
+			end
+			if nargout >= 4
+				r_std = std(ratio);
+			end
+		end
+		
 		%%% compute the total link cost.
 		function c = getTotalLinkCost(this, link_load)
 			if nargin == 1
-				c = dot(this.getLinkField('Load'), this.getLinkCost);
+				c = dot(this.readLink('Load'), this.getLinkCost);
 			else
 				c = dot(link_load, this.getLinkCost);
 			end
@@ -86,10 +148,10 @@ classdef SimpleCloudNetwork < PhysicalNetwork
 		%         function c = getNetworkCost(this, node_load, link_load, model)
 		function c = getNetworkCost(this, node_load, link_load)
 			if nargin <=1 || isempty(node_load)
-				node_load = this.getDataCenterField('Load');
+				node_load = this.readDataCenter('Load');
 			end
 			if nargin <= 2 || isempty(link_load)
-				link_load = this.getLinkField('Load');
+				link_load = this.readLink('Load');
 			end
 			
 			c = this.getTotalNodeCost(node_load) + this.getTotalLinkCost(link_load);
@@ -97,8 +159,8 @@ classdef SimpleCloudNetwork < PhysicalNetwork
 		
 		function theta = utilizationRatio(this, node_load, link_load)
 			if nargin == 1
-				node_load = this.getDataCenterField('Load');
-				link_load = this.getLinkField('Load');
+				node_load = this.readDataCenter('Load');
+				link_load = this.readLink('Load');
 			end
 			theta_v = sum(node_load)/this.totalNodeCapacity;
 			theta_l = sum(link_load)/this.totalLinkCapacity;
@@ -136,9 +198,9 @@ classdef SimpleCloudNetwork < PhysicalNetwork
 		%%% compute link cost. Subclass may override this to provide cost.
 		function link_uc = getLinkCost(this, link_id)
 			if nargin == 1
-				link_uc = this.getLinkField('UnitCost');
+				link_uc = this.readLink('UnitCost');
 			else
-				link_uc = this.getLinkField('UnitCost', link_id);
+				link_uc = this.readLink('UnitCost', link_id);
 			end
 		end
 		
@@ -146,9 +208,9 @@ classdef SimpleCloudNetwork < PhysicalNetwork
 		% * *dc_id*: data center index (not the node index of the substrate physical node).
 		function node_uc = getNodeCost(this, dc_id)
 			if nargin == 1
-				node_uc = this.getDataCenterField('UnitCost');
+				node_uc = this.readDataCenter('UnitCost');
 			else
-				node_uc = this.getDataCenterField('UnitCost', dc_id);
+				node_uc = this.readDataCenter('UnitCost', dc_id);
 			end
 		end
 		
@@ -175,7 +237,7 @@ classdef SimpleCloudNetwork < PhysicalNetwork
 		end
 	end
 	
-	methods (Access = {?CloudNetwork, ?SubstrateNetwork})
+	methods
 		%%%
 		% * *getSliceProviderProfit*
 		% |slices|: if |slices| is provided, only calsulate the revenue and
@@ -199,8 +261,8 @@ classdef SimpleCloudNetwork < PhysicalNetwork
 				slices = this.slices;
 			end
 			if nargin <= 2 || isempty(prices)
-				prices.Node = this.getDataCenterField('Price');
-				prices.Link = this.getLinkField('Price');
+				prices.Node = this.readDataCenter('Price');
+				prices.Link = this.readLink('Price');
 			end
 			load = this.getNetworkLoad(slices, options);
 			revenue = 0;
@@ -248,19 +310,19 @@ classdef SimpleCloudNetwork < PhysicalNetwork
 				slices{i}.finalize(prices);
 			end
 			load = this.getNetworkLoad;
-			this.setLinkField('Load', load.Link);
-			this.setDataCenterField('Load', load.Node);
+			this.writeLink('Load', load.Link);
+			this.writeDataCenter('Load', load.Node);
 			if nargin >= 3
 				% NOTE: prices in the substrate network is updated, while the
 				% links/nodes that are not involved in the update procedure, do not
 				% change their prices.
 				% See also <DynamicCloudNetwork>.<optimizeResourcePriceNew>.
 				pre_link_idx = prices.Link==0;
-				prices.Link(pre_link_idx) = this.getLinkField('Price', pre_link_idx);
-				this.setLinkField('Price', prices.Link);
+				prices.Link(pre_link_idx) = this.readLink('Price', pre_link_idx);
+				this.writeLink('Price', prices.Link);
 				pre_node_idx = prices.Link==0;
-				prices.Link(pre_node_idx) = this.getDataCenterField('Price', pre_node_idx);
-				this.setDataCenterField('Price', prices.Link);
+				prices.Link(pre_node_idx) = this.readDataCenter('Price', pre_node_idx);
+				this.writeDataCenter('Price', prices.Link);
 			end
 		end
 		argout = calculateOutput(this, argin, new_opts);
@@ -273,8 +335,8 @@ classdef SimpleCloudNetwork < PhysicalNetwork
 				% from the grpah.
 				% If a node's residual capacity is zero, then this node and the adjacent
 				% links should be removed from the graph.
-				link_capacity = this.getLinkField('ResidualCapacity');
-				node_capacity = this.getDataCenterField('ResidualCapacity');
+				link_capacity = this.readLink('ResidualCapacity');
+				node_capacity = this.readDataCenter('ResidualCapacity');
 				link_capacity(link_capacity<1) = 0;
 				node_capacity(node_capacity<1) = 0;
 				A = spalloc(this.NumberNodes, this.NumberNodes, this.NumberLinks);
@@ -433,6 +495,14 @@ classdef SimpleCloudNetwork < PhysicalNetwork
 			end
 		end
 		
+		function allocatepathid(this, slice)
+			for j = 1:height(slice.FlowTable)
+				path_list = slice.FlowTable.Paths(j).paths;
+				for k = 1:length(path_list)
+					path_list{k}.id = this.path_identifier_generator.next;
+				end
+			end
+		end
 		%% ISSUE: VNFlist is not conmmonly shared.
 		function slice_data = updateSliceData(this, slice_data, options)
 			defaultopts = struct('SlicingMethod', SlicingMethod.SingleNormal);
