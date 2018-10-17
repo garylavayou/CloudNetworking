@@ -63,7 +63,7 @@ switch node_opt.Model
         %% link information
         % For the convenience of assigning link capacity and other properties to the edge
         % table, we find the edges row-by-row.
-        [tail, head, link_capacity]=find(capacity');
+        [head, tail, link_capacity]=find(capacity);
     case NetworkModel.Sample2
         capacity = [   % source: traffic engineering in software defined network
             0 1 1 1 0 0 0 0 0 0 0 0 0 0 0;    %1
@@ -83,10 +83,10 @@ switch node_opt.Model
             0 0 0 0 0 0 0 0 1 0 0 0 0 1 0];   %15
         location = [96,-211; 221,-76; 173,-178; 138,-290; 327,-51; 278,-147; 234,-250;
             211,-341; 315,-327; 348,-256; 359,-119; 474,-84; 425,-184; 468,-259; 422,-327]; 
-        [tail, head, link_capacity]=find(capacity');
+        [head, tail, link_capacity]=find(capacity);
     case NetworkModel.SD_RAN
         capacity = link_opt.Capacity;
-        [tail, head, link_capacity]=find(capacity');
+        [head, tail, link_capacity]=find(capacity);
         location = node_opt.Location;
     otherwise
         error('error: cannot process this network model.')
@@ -118,10 +118,12 @@ switch link_opt.DelayModel
         description = 'Each link''s latency is random within a range';
 end
 
+graph_data.Edges = table([head, tail], link_delay, ...
+	'VariableNames', {'EndNodes', 'Delay'});
 if exist('node_name','var')
-    graph_data = digraph(head, tail, link_delay, node_name);
+    graph_data.Nodes = table(node_name, 'VariableNames', {'Name'});
 else
-    graph_data = digraph(head, tail, link_delay);
+    graph_data.Nodes = table();
 end
 graph_data.Edges.Properties.VariableDescriptions{2}=description;
 
