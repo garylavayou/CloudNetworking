@@ -1,12 +1,10 @@
 %% Physical Network
 % network resource abstraction and allocation description; No resource allocation method
 % defined, which can be realized by subclasses, see also <CloudNetwork>. 
-classdef PhysicalNetwork < matlab.mixin.Copyable 
+classdef PhysicalNetwork < INetwork
     
     %% Properties
     properties (Dependent)
-        NumberNodes;         % Number of physical nodes
-        NumberLinks;         % Number of physical links
         NumberSlices;        % Number of network slices
         NumberDataCenters;   % Number of data centers
         %%%
@@ -22,16 +20,16 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
         NodeOptions;         % Options for node properties
     end
     
-    properties (GetAccess = public)
+    properties
         %%%
-        % * *Topology*: including a NodeTable |Nodes| and an EdgeTable |Edges|.
+        % * *topo*: including a NodeTable |Nodes| and an EdgeTable |Edges|.
         %
         % |Nodes|: the fields in node table include _Name_, _Location_, _Capacity_,
         % _StaticCost_, _Load_, _Price_.
         %
         % |Edges|: the fields in the edge table include _EndNodes_, _Weight_, _Capacity_,
         % _Index_, _Load_, _Price_. 
-        Topology;            % Class <digraph> object
+        topo;            % Class <digraph> object
         graph;               % Class <DirectedGraph> object
         DataCenters;         % the forwarding node mapping of data center.
                              % data_center(dc_id) returns the physical node id;
@@ -43,12 +41,7 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
     
     properties
         slice_template;
-    end
-    
-    properties (Access = {?PhysicalNetwork, ?SubstrateNetwork, ?Slice})
-        % |options| will be visited by <CloudNetwork> and <DynamicNetwork>
-        options;
-    end    
+		end
 
     properties (Access = protected)
         path_identifier_generator;
@@ -59,37 +52,39 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
         %% Constructor
         %   PhysicalNetwork(node_opt, link_opt, VNF_opt, options)
         function this = PhysicalNetwork(varargin)
-            if isempty(varargin)
-                return;
-            elseif isa(varargin{1}, 'PhysicalNetwork')
-                this = varargin{1}.copy;
-                return;
-            elseif length(varargin)<3
-                return;
-            end
-            node_opt = varargin{1};
-            link_opt = varargin{2};
-            VNF_opt = varargin{3};
-            % Store graph information
-            this.Topology = PhysicalNetwork.loadNetworkData(node_opt, link_opt);
-            dc_node_index = find(this.Topology.Nodes.Capacity>0);
+					if nargin >= 2
+						node_opt = varargin{1};
+						link_opt = varargin{2};
+						netdata.topo = PhysicalNetwork.loadNetworkData(node_opt, link_opt);
+						args = {netdata}; 
+					else
+						args = cell(0);
+					end
+					this@INetwork(args{:});
+					if isempty(varargin)
+						return;
+					end
+					
+					VNF_opt = varargin{3};
+          this.topo = net_data.topo; 					% Store graph information
+            dc_node_index = find(this.topo.Nodes.Capacity>0);
             this.DataCenters = table(dc_node_index, 'VariableName', {'Node'});
             c = 1;
-            while c<=width(this.Topology.Nodes)
-                name = this.Topology.Nodes.Properties.VariableNames{c};
+            while c<=width(this.topo.Nodes)
+                name = this.topo.Nodes.Properties.VariableNames{c};
                 switch name
                     case {'Name', 'Location'}
                         c = c + 1;
                     otherwise
                         this.DataCenters{:,{name}} = ...
-                            this.Topology.Nodes{dc_node_index, {name}};
-                        this.Topology.Nodes(:,{name}) = [];
+                            this.topo.Nodes{dc_node_index, {name}};
+                        this.topo.Nodes(:,{name}) = [];
                 end
             end
-            this.Topology.Nodes.DataCenter = zeros(this.NumberNodes,1);
-            this.Topology.Nodes{dc_node_index, 'DataCenter'} = ...
+            this.topo.Nodes.DataCenter = zeros(this.NumberNodes,1);
+            this.topo.Nodes{dc_node_index, 'DataCenter'} = ...
                 (1:height(this.DataCenters))';            
-            this.graph = DirectedGraph(this.Topology);
+            this.graph = DirectedGraph(this.topo);
             %%%
             % *Edge Index Mapping*:
             % In the edge table, link is indexed by rows, which is different from the
@@ -102,10 +97,10 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
 						%
 						%% TODO: change the definition of Adjacency matric of DirectedGraph
 						% row as tail, column as head of link.
-            [s,t] = this.Topology.findedge;
+            [s,t] = this.topo.findedge;
             idx = this.graph.IndexEdge(s,t);
-            this.Topology.Edges.Index = idx;
-            this.Topology.Edges.Properties.VariableDescriptions{5} = ...
+            this.topo.Edges.Index = idx;
+            this.topo.Edges.Properties.VariableDescriptions{5} = ...
                 'Index the edges by column in the adjacent matrix.';
             this.setLinkField('Load', 0);
             this.setDataCenterField('Load', 0);
@@ -254,15 +249,15 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
     % property access functions
     methods
         function opt = get.LinkOptions(this)
-            opt = this.Topology.Edges.Properties.UserData{1};
+            opt = this.topo.Edges.Properties.UserData{1};
         end
         
         function opt = get.NodeOptions(this)
-            opt = this.Topology.Nodes.Properties.UserData{1};
+            opt = this.topo.Nodes.Properties.UserData{1};
         end
         
         function n = get.NumberNodes(this)
-            n = this.Topology.numnodes;
+            n = this.topo.numnodes;
         end
         
         function n = get.NumberSlices(this)
@@ -274,7 +269,7 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
         end
         
         function m = get.NumberLinks(this)
-            m = this.Topology.numedges;
+            m = this.topo.numedges;
         end
         
         function n = get.NumberVNFs(this)
@@ -352,9 +347,9 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
                 error('Index cannot be set from the outside.');
             end
             if isscalar(value)
-                this.Topology.Edges{:,{name}} = value;
+                this.topo.Edges{:,{name}} = value;
             else
-                this.Topology.Edges{:,{name}} = value(this.Topology.Edges.Index);
+                this.topo.Edges{:,{name}} = value(this.topo.Edges.Index);
             end
         end
         %%%
@@ -373,11 +368,11 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
             end
             switch name
                 case 'ResidualCapacity'
-                    value(this.Topology.Edges.Index,1) = ...
-                        this.Topology.Edges{:,{'Capacity'}} - ...
-                        this.Topology.Edges{:,{'Load'}};
+                    value(this.topo.Edges.Index,1) = ...
+                        this.topo.Edges{:,{'Capacity'}} - ...
+                        this.topo.Edges{:,{'Load'}};
                 otherwise
-                    value(this.Topology.Edges.Index,1) = this.Topology.Edges{:,{name}};
+                    value(this.topo.Edges.Index,1) = this.topo.Edges{:,{name}};
             end
             value = value(link_id);
         end
@@ -389,7 +384,7 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
             if nargin == 3
                 node_index = 1:this.NumberNodes;
             end
-            this.Topology.Nodes{node_index,{name}} = value;
+            this.topo.Nodes{node_index,{name}} = value;
             
         end
         
@@ -417,7 +412,7 @@ classdef PhysicalNetwork < matlab.mixin.Copyable
             end
             switch name
                 case {'Name', 'Location', 'DataCenter'}
-                    value = this.Topology.Nodes{node_id, {name}};
+                    value = this.topo.Nodes{node_id, {name}};
                 otherwise
                     value = zeros(this.NumberNodes, 1);
                     value(this.DataCenters.Node) = this.getDataCenterField(name);

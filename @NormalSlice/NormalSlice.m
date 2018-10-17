@@ -943,7 +943,6 @@ classdef FlowEdgeSlice < Slice
 	
 	methods(Access = protected)
 		function cp = copyElement(this)
-			% Shallow copy object
 			cp = copyElement@Slice(this);
 			cp.AugmentedTopology = this.AugmentedTopology.copy();
 		end

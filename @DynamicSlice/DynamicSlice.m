@@ -1037,13 +1037,13 @@ classdef DynamicSlice < SimpleSlice & EventSender
         
         %% Copy
         function newobj = copyElement(this)
-            newobj = copyElement@SimpleSlice(this);
-						newobj = copyElement@EventSender(newobj);
-						%% Reset the listener of the new instance
-						% We should reconfigure the listeners by using AddListeners 
-						% outside.
-            % see <EventSender>, <RepeatSliceReconfiguration>.
-						newobj.ClearListener();
+					newobj = copyElement@SimpleSlice(this);
+					newobj = copyElement@EventSender(newobj);
+					%% Reset the listener of the new instance
+					% We should reconfigure the listeners by using AddListeners
+					% outside.
+					% see <EventSender>, <RepeatSliceReconfiguration>.
+					newobj.ClearListener();
         end
         
         %% fast slice reconfiguration when flow arriving and depaturing
