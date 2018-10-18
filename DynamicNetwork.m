@@ -88,7 +88,7 @@ classdef (Abstract) DynamicNetwork < EventSender & EventReceiver
                     % flow of this slice departs, we remove the slice.
                     sl = ev.userdata;
                     if strcmpi(source.flow_depart_option, 'naturaldepart')
-                        sl.b_ondepart = true;
+                        sl.bOnDepart = true;
                     else
                         this.RemoveSlice(sl);
                         data = FlowEventData(ev, sl, []);
@@ -119,7 +119,7 @@ classdef (Abstract) DynamicNetwork < EventSender & EventReceiver
                     data = FlowEventData(ev, sl, flow_id);
                     notify(this, 'FlowDepart', data);
                     if strcmpi(source.flow_depart_option, 'naturaldepart')
-                        if sl.b_ondepart && sl.NumberFlows == 0
+                        if sl.bOnDepart && sl.NumberFlows == 0
                             % Finally remove the slice from the network
                             this.RemoveSlice(sl);
                             % then remove the slice entity form the entity list.

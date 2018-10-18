@@ -75,14 +75,14 @@ switch this.options.ReconfigMethod
         stat.ReconfigType = ReconfigType.Dimensioning;
         if ~this.b_dim
             stat.ReconfigType = ReconfigType.FastReconfigure;
-        elseif this.getOption('Adhoc')
+        elseif this.options.Adhoc
             % If the slice do not support Adhoc flows, then we do not release resource
             % decriptors for the slice.
             this.release_resource_description();
         end
     case ReconfigMethod.DimBaseline
         if this.b_dim
-            if this.getOption('Adhoc')
+            if this.options.Adhoc'
                 this.release_resource_description();
             end
             stat.ReconfigType = ReconfigType.Dimensioning;

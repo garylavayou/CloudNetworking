@@ -72,7 +72,7 @@ if isempty(fieldnames(this.net_changes))
         end
     end
     if ~this.b_dim
-        switch this.getOption('Trigger')
+        switch this.options.Trigger
             case 'TimeBased'
                 if this.time.Current - this.time.LastDimensioning >= this.options.TimeInterval
                     this.b_dim = true;

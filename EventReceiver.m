@@ -1,5 +1,4 @@
-classdef (Abstract) EventReceiver < handle & matlab.mixin.Heterogeneous
-    % Heterogeneous array can define empty array.
+classdef (Abstract, HandleCompatible) EventReceiver 
     
     properties (Access = protected)
         event = struct('Count', 0);     %statistics of events

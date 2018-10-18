@@ -364,6 +364,7 @@ classdef SimpleSlice < Slice & EventReceiver
 		
 		function eventhandler(~, ~, ~)
 		end
+		
 		function tf = isDynamicFlow(~)
 			tf = false;
 		end

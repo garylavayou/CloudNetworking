@@ -1,4 +1,4 @@
-classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
+classdef DynamicCloudNetwork < PhysicalNetwork & DynamicNetwork
     
     properties
         %%
@@ -356,7 +356,7 @@ classdef DynamicCloudNetwork < CloudNetwork & DynamicNetwork
             end
             assert(isempty(fieldnames(slice.net_changes)), ...
                 'error: <slice.net_changes> not reset.');
-            if slice.getOption('Adhoc')==false || ~slice.isAdhocFlow
+            if slice.options.Adhoc ==false || ~slice.isAdhocFlow
                 ft = createflow@DynamicNetwork(this, slice, numflow);
                 ft{:,'Type'} = FlowType.Normal;
                 if nargout >= 2
