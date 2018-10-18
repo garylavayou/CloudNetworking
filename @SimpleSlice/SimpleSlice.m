@@ -6,7 +6,7 @@ classdef SimpleSlice < Slice & EventReceiver
 		NumberPaths;					% Number of paths in the slice
 	end
 	% Specify the properties that can only be modified by Physcial Network directly
-	properties (SetAccess = {?CloudNetwork,?SubstrateNetwork,?SliceFlowEventDispatcher})
+	properties
 		temp_vars = struct; % [x,z]: temporary variables that will not be rounded.
 		Variables;          % [x,z]: final results from |temp_vars|, with rounding.
 		weight;             % weight for the slice user's utility.
@@ -43,25 +43,22 @@ classdef SimpleSlice < Slice & EventReceiver
 	methods
 		function this = SimpleSlice(slice_data)
 			if nargin == 0
-				slice_data = {};
-			end
-			this@Slice(slice_data);
-			if nargin == 0
 				return;
 			end
+			this@Slice(slice_data);
 			%%%
 			% Link price
 			if isfield(slice_data, 'LinkPrice')
-				this.VirtualLinks.Price = slice_data.LinkPrice;
+				this.Links.Price = slice_data.LinkPrice;
 			else
-				this.VirtualLinks.Price  = zeros(this.NumberVirtualLinks,1);
+				this.Links.Price  = zeros(this.NumberLinks,1);
 			end
 			%%%
 			% Data center node price
 			if isfield(slice_data, 'NodePrice')
-				this.VirtualDataCenters.Price = slice_data.NodePrice;
+				this.ServiceNodes.Price = slice_data.NodePrice;
 			else
-				this.VirtualDataCenters.Price = zeros(this.NumberDataCenters,1);
+				this.ServiceNodes.Price = zeros(this.NumberSeviceNodes,1);
 			end
 			
 			if isfield(slice_data,'Weight')
@@ -79,13 +76,15 @@ classdef SimpleSlice < Slice & EventReceiver
 		
 		%%
 		% see also <Finalize>, <isFinal>.
-		function initialize(this)
-			this.VirtualLinks.Price = 0;
-			this.VirtualDataCenters.Price = 0;
-			this.VirtualDataCenters{:,'Load'} = 0;
-			this.VirtualLinks{:,'Load'} = 0;
-			this.VirtualDataCenters{:,'Capacity'} = 0;
-			this.VirtualLinks{:,'Capacity'} = 0;
+		function initialize(this, prices)
+			if nargin >= 2
+				this.Links.Price = prices.Link;
+				this.ServiceNodes.Price = prices.Node;
+			end
+			this.ServiceNodes{:,'Load'} = 0;
+			this.Links{:,'Load'} = 0;
+			this.ServiceNodes{:,'Capacity'} = 0;
+			this.Links{:,'Capacity'} = 0;
 		end
 		
 		function finalize(this, prices)
@@ -94,36 +93,36 @@ classdef SimpleSlice < Slice & EventReceiver
 				this.temp_vars.z = [];
 				this.Variables.x = [];
 				this.Variables.z = [];
-				this.VirtualDataCenters{:,'Load'} = 0;
-				this.VirtualLinks{:,'Load'} = 0;
-				this.VirtualDataCenters{:,'Capacity'} = 0;
-				this.VirtualLinks{:,'Capacity'} = 0;
+				this.ServiceNodes{:,'Load'} = 0;
+				this.Links{:,'Load'} = 0;
+				this.ServiceNodes{:,'Capacity'} = 0;
+				this.Links{:,'Capacity'} = 0;
 			else
 				% subclass inctance may have different implementation of _postProcessing_, it
 				% is recommended, that the subclass maintains the default behavior of this
 				% function.
 				this.postProcessing();
-				this.VirtualDataCenters.Load = this.getNodeLoad();
-				this.VirtualLinks.Load = this.getLinkLoad();
-				this.VirtualDataCenters.Capacity = this.VirtualDataCenters.Load;
-				this.VirtualLinks.Capacity = this.VirtualLinks.Load;
+				this.ServiceNodes.Load = this.getNodeLoad();
+				this.Links.Load = this.getLinkLoad();
+				this.ServiceNodes.Capacity = this.ServiceNodes.Load;
+				this.Links.Capacity = this.Links.Load;
 				%this.setPathBandwidth;
 				this.FlowTable.Rate = this.getFlowRate;
 			end
 			if nargin >= 2 && ~isempty(prices.Node)
-				this.VirtualDataCenters.Price = node_price(this.getDCPI);
+				this.ServiceNodes.Price = node_price(this.getDCPI);
 			end
 			if nargin >= 3 && ~isempty(prices.Link)
-				this.VirtualLinks.Price = link_price(this.VirtualLinks.PhysicalLink);
+				this.Links.Price = link_price(this.Links.PhysicalLink);
 			end
 		end
 		
 		function tf = isFinal(this)
-			if this.VirtualLinks.Price==0 % true if all elements is zero
+			if this.Links.Price==0 % true if all elements is zero
 				% At the beginning of optimization, the price vector is set to 0.
 				% See also <CloudNetwork.optimizeResourcePriceNew>.
 				tf = false;
-			elseif this.VirtualDataCenters.Price == 0
+			elseif this.ServiceNodes.Price == 0
 				tf = false;
 			else
 				% If the slice is not redimensioned, the price vector is nonzero.
@@ -145,9 +144,9 @@ classdef SimpleSlice < Slice & EventReceiver
 	
 	methods
 		function initializeState(this)
-			NC = this.NumberDataCenters;
+			NC = this.NumberServiceNodes;
 			NP = this.NumberPaths;
-			NL = this.NumberVirtualLinks;
+			NL = this.NumberLinks;
 			NF = this.NumberFlows;
 			
 			this.I_dc_path = sparse(NC, NP);
@@ -168,12 +167,12 @@ classdef SimpleSlice < Slice & EventReceiver
 						e = path.Link(k);
 						eid = this.Topology.IndexEdge(e(1),e(2));
 						this.I_edge_path(eid, pid) = 1;
-						dc_index = this.VirtualNodes{e(1),'DataCenter'};
+						dc_index = this.Nodes{e(1),'ServiceNode'};
 						if dc_index~=0
 							this.I_dc_path(dc_index, pid) = 1;
 						end
 					end
-					dc_index = this.VirtualNodes{e(2),'DataCenter'}; % last node
+					dc_index = this.Nodes{e(2),'ServiceNode'}; % last node
 					if dc_index~=0
 						this.I_dc_path(dc_index, pid) = 1;
 					end
@@ -192,7 +191,7 @@ classdef SimpleSlice < Slice & EventReceiver
 		% The base matrix is the same as in <Hdiag>.
 		function H = getHrep(this)
 			NP = this.NumberPaths;
-			NC = this.NumberDataCenters;
+			NC = this.NumberServiceNodes;
 			NV = this.NumberVNFs;
 			
 			H = spalloc(NC, this.num_varz, nnz(this.I_dc_path)*NV);
@@ -224,7 +223,7 @@ classdef SimpleSlice < Slice & EventReceiver
 		% See also <Hrep>.
 		function Hs = getHdiag(this)
 			global DEBUG; %#ok<NUSED>
-			NC = this.NumberDataCenters;
+			NC = this.NumberServiceNodes;
 			NP = this.NumberPaths;
 			Hs_np = spalloc(NC, NC*NP, nnz(this.I_dc_path));
 			col_index = 1:NC;
@@ -237,11 +236,11 @@ classdef SimpleSlice < Slice & EventReceiver
 		end
 		
 		function n = get.num_vars(this)
-			n = (this.NumberVNFs*this.NumberDataCenters+1)*this.NumberPaths;
+			n = (this.NumberVNFs*this.NumberServiceNodes+1)*this.NumberPaths;
 		end
 		
 		function n = get.num_varz(this)
-			n = this.NumberVNFs*this.NumberDataCenters*this.NumberPaths;
+			n = this.NumberVNFs*this.NumberServiceNodes*this.NumberPaths;
 		end
 		
 		function n = get.num_lcon_res(this)
@@ -294,10 +293,10 @@ classdef SimpleSlice < Slice & EventReceiver
 		end
 		
 		function vc = getVNFCapacity(this, z)
-			%       znpf = reshape(full(this.Variables.z), this.NumberDataCenters, ...
+			%       znpf = reshape(full(this.Variables.z), this.NumberServiceNodes, ...
 			%       this.NumberPaths, this.NumberVNFs);
 			%       znpf = znpf.* full(this.I_dc_path);  % compatible arithmetic operation
-			%       this.VNFCapacity = reshape(sum(znpf,2), this.NumberDataCenters*this.NumberVNFs,1);
+			%       this.VNFCapacity = reshape(sum(znpf,2), this.NumberServiceNodes*this.NumberVNFs,1);
 			if nargin <= 1
 				z = this.Variables.z;
 			end
@@ -327,7 +326,7 @@ classdef SimpleSlice < Slice & EventReceiver
 		
 		function c = link_unit_cost(this)
 			% the virtual links's unit cost
-			c = this.Parent.readLink('UnitCost', this.VirtualLinks.PhysicalLink);
+			c = this.Parent.readLink('UnitCost', this.Links.PhysicalLink);
 		end
 		
 		function c = node_unit_cost(this)
@@ -369,18 +368,18 @@ classdef SimpleSlice < Slice & EventReceiver
 			tf = false;
 		end
 		function [omega, sigma, alpha] = utilizationRatio(this)
-			n_idx = this.VirtualDataCenters.Capacity>eps;
-			e_idx = this.VirtualLinks.Capacity>eps;
-			c_node = sum(this.VirtualDataCenters.Capacity(n_idx));
-			c_link = sum(this.VirtualLinks.Capacity(e_idx));
+			n_idx = this.ServiceNodes.Capacity>eps;
+			e_idx = this.Links.Capacity>eps;
+			c_node = sum(this.ServiceNodes.Capacity(n_idx));
+			c_link = sum(this.Links.Capacity(e_idx));
 			alpha = [c_node c_link]./(c_node+c_link);
-			theta_v = sum(this.VirtualDataCenters.Load(n_idx))/c_node;
-			theta_l = sum(this.VirtualLinks.Load(e_idx))/c_link;
+			theta_v = sum(this.ServiceNodes.Load(n_idx))/c_node;
+			theta_l = sum(this.Links.Load(e_idx))/c_link;
 			omega = dot(alpha, [theta_v, theta_l]);
 			
 			if nargout == 2
-				sigma = std([this.VirtualLinks.Load(e_idx)./this.VirtualLinks.Capacity(e_idx);...
-					this.VirtualDataCenters.Load(n_idx)./this.VirtualDataCenters.Capacity(n_idx)]);
+				sigma = std([this.Links.Load(e_idx)./this.Links.Capacity(e_idx);...
+					this.ServiceNodes.Load(n_idx)./this.ServiceNodes.Capacity(n_idx)]);
 			end
 		end
 	end
@@ -467,10 +466,10 @@ classdef SimpleSlice < Slice & EventReceiver
 	methods (Access = private)
 		%         function sc = getResourceCost(this, node_load, link_load, model)
 		%             if nargin <= 1 || isempty(node_load)
-		%                 node_load = this.VirtualNodes.Load;
+		%                 node_load = this.Nodes.Load;
 		%             end
 		%             if nargin <= 2 || isempty(link_load)
-		%                 link_load = this.VirtualLinks.Load;
+		%                 link_load = this.Links.Load;
 		%             end
 		%             if nargin <=3
 		%                 warning('model is set as Approximate.');
@@ -478,8 +477,8 @@ classdef SimpleSlice < Slice & EventReceiver
 		%             end
 		%
 		%             pn = this.Parent;
-		%             link_uc = pn.readLink('UnitCost', this.VirtualLinks.PhysicalLink); % the virtual links's unit cost
-		%             node_uc = pn.readNode('UnitCost', this.VirtualNodes.PhysicalNode); % the virtual nodes's unit cost
+		%             link_uc = pn.readLink('UnitCost', this.Links.PhysicalLink); % the virtual links's unit cost
+		%             node_uc = pn.readNode('UnitCost', this.Nodes.PhysicalNode); % the virtual nodes's unit cost
 		%             epsilon = pn.unitStaticNodeCost;
 		%
 		%             if strcmp(model, 'Approximate')
@@ -504,16 +503,16 @@ classdef SimpleSlice < Slice & EventReceiver
 		% _getNetworkCost_ .
 		function rc = getResourceCost(this, node_load, link_load)
 			if nargin <= 1 || isempty(node_load)
-				node_load = this.VirtualDataCenters.Capacity;
+				node_load = this.ServiceNodes.Capacity;
 			end
 			if nargin <= 2 || isempty(link_load)
-				link_load = this.VirtualLinks.Capacity;
+				link_load = this.Links.Capacity;
 			end
 			
 			%% A temporary slice should be assigned the parent network
 			% so that |this.Parent| is valid.
 			pn = this.Parent;
-			link_uc = pn.getLinkCost(this.VirtualLinks.PhysicalLink);
+			link_uc = pn.getLinkCost(this.Links.PhysicalLink);
 			node_uc = pn.getNodeCost(this.getDCPI);
 			%% Accurate Model
 			% A slice cannot decide how to devide the static cost between slices.
@@ -565,7 +564,7 @@ classdef SimpleSlice < Slice & EventReceiver
 		% NOTE: it is not necessary to evaluate As_res each time when visiting it. so, we
 		% define a normal function to update the property |As_res|.
 		function As = getAs_res(this, flow_owner, alpha_f)
-			NC = this.NumberDataCenters;
+			NC = this.NumberServiceNodes;
 			NP = this.NumberPaths;
 			NV = this.NumberVNFs;       % For 'single-function', NV=1.
 			nnz_As = NV*(NP+nnz(this.I_dc_path));
@@ -727,9 +726,9 @@ classdef SimpleSlice < Slice & EventReceiver
 						if strcmpi(post_process, 'recover')
 							fidx = ceil(vi_idx/NV);
 							for i = 1:length(vi_idx)
-								zidx = (1:this.NumberDataCenters)+ ...
-									((fidx(i)-1)*this.NumberDataCenters*NP + ...
-									(pidx(i)-1)*this.NumberDataCenters);
+								zidx = (1:this.NumberServiceNodes)+ ...
+									((fidx(i)-1)*this.NumberServiceNodes*NP + ...
+									(pidx(i)-1)*this.NumberServiceNodes);
 								var_z(zidx) = this.temp_vars.z(zidx);  % recover
 							end
 						else
@@ -773,7 +772,7 @@ classdef SimpleSlice < Slice & EventReceiver
 		%             %%
 		%             % |node_vars| is index by |(node,path,function)|.
 		%             % node_load = sum(f, node_vars(:,:,f).*I_dc_path).
-		%             NN = this.NumberVirtualNodes;
+		%             NN = this.NumberNodes;
 		%             NP = this.NumberPaths;
 		%             NV = this.NumberVNFs;
 		%             vn = zeros(NN,1);
@@ -797,7 +796,7 @@ classdef SimpleSlice < Slice & EventReceiver
 			% |node_vars| is index by |(node,path,function)|.
 			v_n = full(this.Hrep*node_vars);
 			% node_load = sum(f, node_vars(:,:,f).*I_dc_path).
-			%             NC = this.NumberDataCenters;
+			%             NC = this.NumberServiceNodes;
 			%             NP = this.NumberPaths;
 			%             v_n = zeros(NC,1);
 			%             np = NC * NP;

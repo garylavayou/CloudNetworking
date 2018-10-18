@@ -22,12 +22,12 @@ if nargin >= 2
     if isfield(options, 'LinkPrice')
         slice.prices.Link = options.LinkPrice;
     elseif isfield(options, 'bFinal') && options.bFinal 
-        slice.prices.Link = slice.VirtualLinks.Price;
+        slice.prices.Link = slice.Links.Price;
     end
     if isfield(options, 'NodePrice')
         slice.prices.Node = options.NodePrice;
     elseif isfield(options, 'bFinal') && options.bFinal
-        slice.prices.Node= slice.VirtualDataCenters.Price;
+        slice.prices.Node= slice.ServiceNodes.Price;
     end
 end
 if nargin < 2 || ~isfield(options, 'PricingPolicy')

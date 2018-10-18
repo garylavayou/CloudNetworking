@@ -100,7 +100,7 @@ if nargout == 2
     % So, we can compute the derivatives for all |n| and |p| with fixed |f|, by the price
     % vector and the incident matrix $h_{n,p}$. The results can be directly converted into
     % a column vector.
-    nz = (slice.NumberDataCenters*slice.NumberPaths);
+    nz = (slice.NumberServiceNodes*slice.NumberPaths);
     z_index = slice.NumberPaths+(1:nz);
     for f = 1:slice.NumberVNFs
         % compatible arithmetic operation: node_price is a row vector and S.I_dc_path is

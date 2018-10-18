@@ -38,8 +38,8 @@ classdef VirtualNetwork < INetwork
 			dc_vn_index = ...
 				find(this.Parent.readNode('Capacity', this.Nodes.PhysicalNode) > 0);
 			this.ServiceNodes = array2table(dc_vn_index, 'VariableNames', {'VirtualNode'});
-			this.Nodes.DataCenter = zeros(this.NumberNodes,1);
-			this.Nodes{dc_vn_index, 'DataCenter'} = (1:height(this.ServiceNodes))';
+			this.Nodes.ServiceNode = zeros(this.NumberNodes,1);
+			this.Nodes{dc_vn_index, 'ServiceNode'} = (1:height(this.ServiceNodes))';
 			this.ServiceNodes.Capacity = zeros(height(this.ServiceNodes),1);	% Data center node capacity
 			this.ServiceNodes.Load = zeros(height(this.ServiceNodes), 1); 		% Data center node load
 		end
@@ -97,7 +97,7 @@ classdef VirtualNetwork < INetwork
 			else
 				sn_id = this.getSNPI(sn_index);
 			end
-			dc_index = this.Parent.readNode('DataCenter', sn_id);
+			dc_index = this.Parent.readNode('ServiceNode', sn_id);
 		end
 		
 	end

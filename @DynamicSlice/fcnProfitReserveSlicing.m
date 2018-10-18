@@ -27,9 +27,9 @@ if isfield(options, 'bCompact') && options.bCompact
     full_vars(this.I_active_variables) = vars;
     vars = full_vars;
 end
-ND = this.NumberDataCenters;
+ND = this.NumberServiceNodes;
 NV = this.NumberVNFs;
-NL = this.NumberVirtualLinks;
+NL = this.NumberLinks;
 NP = this.NumberPaths;
 var_x_index = 1:options.num_varx;
 idx_offset = options.num_varx+options.num_varz;

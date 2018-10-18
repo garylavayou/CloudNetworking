@@ -61,7 +61,7 @@ if nargin >= 4 && isfield(options, 'PricingPolicy')
             hs(1:NP, 1:NP) = hs(1:NP, 1:NP) + h1;
             var_node = vars((NP+1):this.num_vars);
             [~,~,nph] = this.fcnNodePricing(this.prices.Node, this.getNodeLoad(var_node));
-            NC = this.NumberDataCenters;
+            NC = this.NumberServiceNodes;
             %%%
             % Second derivatives on the node payment componet:
             % 

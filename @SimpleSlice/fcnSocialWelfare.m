@@ -53,7 +53,7 @@ else
             dot(link_price, slice.I_edge_path(:,p)); %#ok<SPRIX>
     end
     
-    nz = slice.NumberDataCenters*slice.NumberPaths;
+    nz = slice.NumberServiceNodes*slice.NumberPaths;
     z_index = slice.NumberPaths+(1:nz);
     for f = 1:slice.NumberVNFs
         % compatiable arithmetic operation

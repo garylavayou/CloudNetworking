@@ -19,8 +19,8 @@ if this.NumberFlows == 0
     return;
 end
 
-NL = this.NumberVirtualLinks;
-NN = this.NumberDataCenters;
+NL = this.NumberLinks;
+NN = this.NumberServiceNodes;
 NP = this.NumberPaths;
 NV = this.NumberVNFs;
 
@@ -80,8 +80,8 @@ As(row_offset+(1:this.num_varv), (this.num_vars+1):num_vars/2) = -eye(this.num_v
 As(row_offset+(1:this.num_varv), (num_vars/2+this.num_vars+1):end) = -eye(this.num_varv);
 
 bs = [sparse(this.num_lcon_res+this.num_varv,1);
-    this.VirtualDataCenters.Capacity; % The field will only change in slice dimensionging.
-    this.VirtualLinks.Capacity;
+    this.ServiceNodes.Capacity; % The field will only change in slice dimensionging.
+    this.Links.Capacity;
     this.topts.old_variables_x;       % which have been pre-processed, so it can be
     -this.topts.old_variables_x;      % compared with the current states.
     this.topts.old_variables_z;
@@ -161,8 +161,8 @@ this.flow_rate = this.getFlowRate(this.temp_vars.x);
 this.postProcessing();
 this.setPathBandwidth;
 this.FlowTable.Rate = this.getFlowRate;
-this.VirtualLinks.Load = this.getLinkLoad;
-this.VirtualDataCenters.Load = this.getNodeLoad;
+this.Links.Load = this.getLinkLoad;
+this.ServiceNodes.Load = this.getNodeLoad;
 if nargout >= 1
     cost = this.getSliceCost(options.PricingPolicy, 'const');
     rc_linear = this.get_reconfig_cost('linear', true);

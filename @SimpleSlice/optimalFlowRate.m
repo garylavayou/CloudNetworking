@@ -29,8 +29,8 @@ options = structmerge(new_opts, ...
     getstructfields(new_opts, 'SlicingMethod'),...
     'exclude');     
 
-NL = this.NumberVirtualLinks;
-NC = this.NumberDataCenters;
+NL = this.NumberLinks;
+NC = this.NumberServiceNodes;
 NV = this.NumberVNFs;
 NP = this.NumberPaths;
 % Coefficient for process-rate constraints
@@ -50,8 +50,8 @@ parameters.As(row_index, 1:NP) = this.I_edge_path;
 % * *Resource Constraints*: processing-rate, the right side is all-zero; capacity
 % constraints, the right side is the capacity of link and node;
 parameters.bs = [sparse(this.num_lcon_res,1); 
-    this.VirtualDataCenters.Capacity;
-    this.VirtualLinks.Capacity];
+    this.ServiceNodes.Capacity;
+    this.Links.Capacity];
 %%%
 % * *Upper Bound*: Not necessary, to facilitate the algorithm, we give a relaxed
 % upper-bound.
@@ -73,8 +73,8 @@ if options.SlicingMethod == SlicingMethod.SingleFunction
 else
 	max_alpha_f = max(this.Parent.VNFTable{this.VNFList, 'ProcessEfficiency'});
 end
-% z_min = min(this.VirtualNodes.Capacity(this.VirtualNodes.Capacity>1))/(NP*NV);
-% x_min = min(this.VirtualLinks.Capacity(this.VirtualLinks.Capacity>1))/NP;
+% z_min = min(this.Nodes.Capacity(this.Nodes.Capacity>1))/(NP*NV);
+% x_min = min(this.Links.Capacity(this.Links.Capacity>1))/NP;
 % if z_min == inf || x_min == inf
 %     x0(1:NP) = 1;
 %     x0((NP+1):end) = max_alpha_f;
@@ -142,7 +142,7 @@ if options.SlicingMethod == SlicingMethod.SingleFunction
 	this.temp_vars.z = znpf(:);
 else
 	this.temp_vars.z = x((NP+1):end);
-	nz = this.NumberDataCenters*this.NumberPaths;
+	nz = this.NumberServiceNodes*this.NumberPaths;
 	z_index = 1:nz;
 	for f = 1:this.NumberVNFs
 		this.temp_vars.z(z_index) = this.I_dc_path(:).*this.temp_vars.z(z_index);
@@ -158,8 +158,8 @@ if nargout >= 1    % final results
     this.postProcessing();
     this.setPathBandwidth;
     this.FlowTable.Rate = this.getFlowRate;
-    this.VirtualLinks.Load = this.getLinkLoad;
-    this.VirtualDataCenters.Load = this.getNodeLoad;
+    this.Links.Load = this.getLinkLoad;
+    this.ServiceNodes.Load = this.getNodeLoad;
 end
 if nargout >= 2
     cost = this.getSliceCost(options.PricingPolicy);   % method is overrided by subclasses.

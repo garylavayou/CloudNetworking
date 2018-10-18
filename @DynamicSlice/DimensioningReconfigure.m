@@ -84,7 +84,7 @@ if isempty(fieldnames(this.net_changes))
             case 'ProfitBased'
             otherwise
         end
-        if this.NumberFlows > 0 && sum(this.VirtualLinks.Capacity) == 0
+        if this.NumberFlows > 0 && sum(this.Links.Capacity) == 0
             % If the slice has no resource but new flows arrive, perform dimensioning at once.
             this.b_dim = true;
         end
@@ -109,8 +109,8 @@ if ~this.b_dim
         case ReconfigMethod.DimBaseline
             new_opts.CostModel = 'fixcost';
             new_opts.SlicingMethod = SlicingMethod.AdjustPricing;
-            this.prices.Link = this.VirtualLinks.Price;
-            this.prices.Node = this.VirtualDataCenters.Price;
+            this.prices.Link = this.Links.Price;
+            this.prices.Node = this.ServiceNodes.Price;
             [profit,cost] = this.optimalFlowRate(new_opts);
         otherwise
             error('%s: invalid reconfiguration method.', calledby);

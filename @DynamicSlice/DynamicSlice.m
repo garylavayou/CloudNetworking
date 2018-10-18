@@ -258,8 +258,8 @@ classdef DynamicSlice < SimpleSlice & EventSender
             if isfield(this.temp_vars,'v') && ~isempty(this.temp_vars.v)
                 if this.NumberFlows > 0
                     % Override the capacity setting in the super class.
-                    this.VirtualDataCenters.Capacity = full(sum(reshape(this.VNFCapacity, ...
-                        this.NumberDataCenters,this.NumberVNFs),2));
+                    this.ServiceNodes.Capacity = full(sum(reshape(this.VNFCapacity, ...
+                        this.NumberServiceNodes,this.NumberVNFs),2));
                 else
                   warning('zero flow, Variables.v not initialized.');  
                 end
@@ -269,7 +269,7 @@ classdef DynamicSlice < SimpleSlice & EventSender
                 warning('zero flow, Variables.v not initialized.');
             end
             if isfield(this.temp_vars,'c') && ~isempty(this.temp_vars.c)
-                this.VirtualLinks.Capacity = full(this.temp_vars.c);
+                this.Links.Capacity = full(this.temp_vars.c);
             end
 
             %                 if strcmp(this.options.PricingPolicy, 'quadratic-price')
@@ -280,16 +280,16 @@ classdef DynamicSlice < SimpleSlice & EventSender
             % inter-slice reoncfiguration: the VNF node resource allocation cost is
             % dependent on the total load of the substrat network.
             if this.NumberFlows > 0
-                [~, this.VirtualLinks.ReconfigCost] = this.fcnLinkPricing(...
-                    this.VirtualLinks.Price, this.VirtualLinks.Capacity);
+                [~, this.Links.ReconfigCost] = this.fcnLinkPricing(...
+                    this.Links.Price, this.Links.Capacity);
                 eta = DynamicSlice.GLOBAL_OPTIONS.get('eta');
-                this.VirtualLinks.ReconfigCost = ...
-                    (eta/this.time.ConfigureInterval) * this.VirtualLinks.ReconfigCost;
+                this.Links.ReconfigCost = ...
+                    (eta/this.time.ConfigureInterval) * this.Links.ReconfigCost;
                 % here the |node_price| is the price of all data centers.
-                [~, this.VirtualDataCenters.ReconfigCost] = this.fcnNodePricing(...
-                    this.VirtualDataCenters.Price, this.VirtualDataCenters.Capacity);
-                this.VirtualDataCenters.ReconfigCost = ...
-                    (eta/this.time.ConfigureInterval) * this.VirtualDataCenters.ReconfigCost;
+                [~, this.ServiceNodes.ReconfigCost] = this.fcnNodePricing(...
+                    this.ServiceNodes.Price, this.ServiceNodes.Capacity);
+                this.ServiceNodes.ReconfigCost = ...
+                    (eta/this.time.ConfigureInterval) * this.ServiceNodes.ReconfigCost;
             end
             %                 else
             %                 end
@@ -301,11 +301,11 @@ classdef DynamicSlice < SimpleSlice & EventSender
                 % calculate the reconfiguration cost. So in that case, we update it before
                 % performing reconfigure/redimensioning.
                 this.b_derive_vnf = false;
-                this.x_reconfig_cost = (this.I_edge_path)' * this.VirtualLinks.ReconfigCost;
-                this.z_reconfig_cost = repmat(this.VirtualDataCenters.ReconfigCost, ...
+                this.x_reconfig_cost = (this.I_edge_path)' * this.Links.ReconfigCost;
+                this.z_reconfig_cost = repmat(this.ServiceNodes.ReconfigCost, ...
                     this.NumberPaths*this.NumberVNFs, 1);
                 this.vnf_reconfig_cost = this.Parent.options.VNFReconfigCoefficient * ...
-                    repmat(this.VirtualDataCenters.ReconfigCost, this.NumberVNFs, 1);
+                    repmat(this.ServiceNodes.ReconfigCost, this.NumberVNFs, 1);
                 this.old_variables = this.Variables;
                 this.get_state;
                 this.max_flow_rate = this.FlowTable.Rate;
@@ -435,7 +435,7 @@ classdef DynamicSlice < SimpleSlice & EventSender
         % capcity might be larger than the demand.
         function c = getLinkCapacity(this, isfinal)
             if nargin == 1 || isfinal
-                c = this.VirtualLinks.Capacity;
+                c = this.Links.Capacity;
             else
                 if this.invoke_method == 0
                     c = getLinkCapacity@SimpleSlice(this, isfinal);
@@ -447,7 +447,7 @@ classdef DynamicSlice < SimpleSlice & EventSender
         
         function c = getNodeCapacity(this, isfinal) % isfinal=true by default
             if nargin == 1 || isfinal
-                c = this.VirtualDataCenters.Capacity;
+                c = this.ServiceNodes.Capacity;
             else
                 if this.invoke_method == 0
                     c = getNodeCapacity@SimpleSlice(this, isfinal);
@@ -455,7 +455,7 @@ classdef DynamicSlice < SimpleSlice & EventSender
                     % since we do not reconfigure VNF capacity through fast slice reconfiguration,
                     % the sum of VNF capacity equals to the node capacity.
                     c = sum(reshape(this.temp_vars.v, ...
-                        this.NumberDataCenters,this.NumberVNFs),2);
+                        this.NumberServiceNodes,this.NumberVNFs),2);
                 end
             end
         end
@@ -471,7 +471,7 @@ classdef DynamicSlice < SimpleSlice & EventSender
         end
         
         function n = get.num_varv(this)
-            n = this.NumberDataCenters*this.NumberVNFs;
+            n = this.NumberServiceNodes*this.NumberVNFs;
         end
     end
     
@@ -492,10 +492,10 @@ classdef DynamicSlice < SimpleSlice & EventSender
                 reconfig_cost_model = 'none';
             end
             
-            link_price = this.VirtualLinks.Price;
-            link_load = this.VirtualLinks.Capacity;
-            node_price = this.VirtualDataCenters.Price;
-            node_load = this.VirtualDataCenters.Capacity;
+            link_price = this.Links.Price;
+            link_load = this.Links.Capacity;
+            node_price = this.ServiceNodes.Price;
+            node_load = this.ServiceNodes.Capacity;
             switch pricing_policy
                 case {'quadratic-price', 'quadratic'}
                     link_payment = this.fcnLinkPricing(link_price, link_load);
@@ -567,7 +567,7 @@ classdef DynamicSlice < SimpleSlice & EventSender
                     end
                 end
                 % v_nf >= sum_{p}{z_npf}
-                n_path = nnz(this.I_dc_path)/this.NumberDataCenters;
+                n_path = nnz(this.I_dc_path)/this.NumberServiceNodes;
                 b.v = b.z/n_path;
             end
         end
@@ -838,10 +838,10 @@ classdef DynamicSlice < SimpleSlice & EventSender
             if nargout >= 1
                 s = this.old_state;
             end
-            this.old_state.link_load = this.VirtualLinks.Load;
-            this.old_state.link_capacity = this.VirtualLinks.Capacity;
-            this.old_state.node_load = this.VirtualDataCenters.Load;
-            this.old_state.node_capacity = this.VirtualDataCenters.Capacity;
+            this.old_state.link_load = this.Links.Load;
+            this.old_state.link_capacity = this.Links.Capacity;
+            this.old_state.node_load = this.ServiceNodes.Load;
+            this.old_state.node_capacity = this.ServiceNodes.Capacity;
             this.old_state.vnf_load = this.getVNFCapacity;
             this.old_state.vnf_capacity = this.VNFCapacity;
         end
@@ -883,7 +883,7 @@ classdef DynamicSlice < SimpleSlice & EventSender
                 this.temp_vars.tv = x(offset+(1:this.num_varv));
                 offset = offset + this.num_varv;
             end
-            this.temp_vars.c = x(offset+(1:this.NumberVirtualLinks));
+            this.temp_vars.c = x(offset+(1:this.NumberLinks));
             %             if nargin >= 3
             %                 this.Variables = getstructfields(this.temp_vars, {'x','z','v','c'}, 'ignore');
             %             end
@@ -895,8 +895,8 @@ classdef DynamicSlice < SimpleSlice & EventSender
             this.temp_vars.z = [];
             this.Variables.x = [];
             this.Variables.z = [];
-            this.VirtualLinks{:,'Load'} = 0;
-            this.VirtualDataCenters{:,'Load'} = 0;
+            this.Links{:,'Load'} = 0;
+            this.ServiceNodes{:,'Load'} = 0;
             % When the number of flows reduced to 0, we do not change the VNF instance
             % capcity, so that the reconfiguration cost is reduced. However, at the
             % next time when a flow arrive, the reconfiguration cost might be larger.
@@ -1005,8 +1005,8 @@ classdef DynamicSlice < SimpleSlice & EventSender
                 new_opts = struct;
             end
             theta0 = 0.9999;
-            this.VirtualDataCenters.Capacity = theta0*this.VirtualDataCenters.Capacity;
-            this.VirtualLinks.Capacity = theta0*this.VirtualLinks.Capacity;
+            this.ServiceNodes.Capacity = theta0*this.ServiceNodes.Capacity;
+            this.Links.Capacity = theta0*this.Links.Capacity;
             if ~isfield(new_opts, 'CostModel') || ~strcmpi(new_opts.CostModel, 'fixcost')
                 [profit,cost] = optimalFlowRate@SimpleSlice( this, new_opts );
             else 
@@ -1026,8 +1026,8 @@ classdef DynamicSlice < SimpleSlice & EventSender
                 end   
                 profit = profit - this.get_reconfig_cost('const');
             end
-            this.VirtualDataCenters.Capacity = this.old_state.node_capacity;
-            this.VirtualLinks.Capacity = this.old_state.link_capacity;
+            this.ServiceNodes.Capacity = this.old_state.node_capacity;
+            this.Links.Capacity = this.old_state.link_capacity;
         end
     end
     methods (Access = protected)
@@ -1087,12 +1087,12 @@ classdef DynamicSlice < SimpleSlice & EventSender
                         e = path.Link(k);
                         eid = this.Topology.IndexEdge(e(1),e(2));
                         this.I_edge_path(eid, pid) = 1;
-                        dc_index = this.VirtualNodes{e(1),'DataCenter'};
+                        dc_index = this.Nodes{e(1),'ServiceNode'};
                         if dc_index~=0
                             this.I_dc_path(dc_index, pid) = 1;
                         end
                     end
-                    dc_index = this.VirtualNodes{e(2),'DataCenter'}; % last node
+                    dc_index = this.Nodes{e(2),'ServiceNode'}; % last node
                     if dc_index~=0
                         this.I_dc_path(dc_index, pid) = 1;
                     end
@@ -1235,7 +1235,7 @@ classdef DynamicSlice < SimpleSlice & EventSender
         function identify_change(this, changed_path_index)
             global DEBUG; %#ok<NUSED>
             this.changed_index.x = logical(sparse(changed_path_index));
-            base_z_index = false(this.NumberDataCenters, this.NumberPaths);
+            base_z_index = false(this.NumberServiceNodes, this.NumberPaths);
             base_z_index(:,changed_path_index) = true;
             if ~isempty(fieldnames(this.net_changes))
                 base_z_index(this.net_changes.DCIndex,:) = true;
@@ -1243,7 +1243,7 @@ classdef DynamicSlice < SimpleSlice & EventSender
             base_z_index = sparse(base_z_index);
             this.changed_index.z = repmat(base_z_index(:), this.NumberVNFs, 1);
             if ~isempty(fieldnames(this.net_changes))
-                this.changed_index.v = sparse(this.NumberDataCenters, this.NumberVNFs);
+                this.changed_index.v = sparse(this.NumberServiceNodes, this.NumberVNFs);
                 this.changed_index.v(this.net_changes.DCIndex,:) = true;
                 this.changed_index.v = logical(this.changed_index.v(:));
             end
@@ -1271,8 +1271,8 @@ classdef DynamicSlice < SimpleSlice & EventSender
             %   a link is unused when its capcity is zero and no paths use it;
             %
             this.get_state;
-            b_removed_dcs = this.VirtualDataCenters.Capacity <= eps;
-            b_removed_links = this.VirtualLinks.Capacity <= eps;
+            b_removed_dcs = this.ServiceNodes.Capacity <= eps;
+            b_removed_links = this.Links.Capacity <= eps;
             for i = 1:this.NumberFlows
                 pathlist = this.FlowTable{i, 'Paths'};
                 for j = 1:pathlist.Width
@@ -1298,19 +1298,19 @@ classdef DynamicSlice < SimpleSlice & EventSender
             %             this.vnf_reconfig_cost(this.changed_index.v) = [];
             
             %% Update resources
-            this.PhysicalNodeMap{:,'VirtualNode'} = 0;
-            this.VirtualNodes(b_removed_nodes,:) = [];
-            this.PhysicalNodeMap{this.VirtualNodes.PhysicalNode,'VirtualNode'} = ...
-                (1:this.NumberVirtualNodes)';
-            this.PhysicalLinkMap{:,'VirtualLink'} = 0;
-            this.VirtualLinks(b_removed_links,:) = [];
-            this.PhysicalLinkMap{this.VirtualLinks.PhysicalLink,'VirtualLink'} = ...
-                (1:this.NumberVirtualLinks)';
-            dc_node_index = this.VirtualDataCenters.VirtualNode;
-            this.VirtualDataCenters(b_removed_dcs, :) = [];
-            this.VirtualNodes.DataCenter(dc_node_index(b_removed_dcs)) = 0;
+            this.PhysicalNodeMap{:,'Node'} = 0;
+            this.Nodes(b_removed_nodes,:) = [];
+            this.PhysicalNodeMap{this.Nodes.PhysicalNode,'Node'} = ...
+                (1:this.NumberNodes)';
+            this.PhysicalLinkMap{:,'Link'} = 0;
+            this.Links(b_removed_links,:) = [];
+            this.PhysicalLinkMap{this.Links.PhysicalLink,'Link'} = ...
+                (1:this.NumberLinks)';
+            dc_node_index = this.ServiceNodes.Node;
+            this.ServiceNodes(b_removed_dcs, :) = [];
+            this.Nodes{dc_node_index(b_removed_dcs), 'ServiceNode'} = 0;
             dc_node_index(b_removed_dcs) = [];
-            this.VirtualNodes.DataCenter(dc_node_index) = 1:this.NumberDataCenters;
+            this.Nodes{dc_node_index, 'ServiceNode'} = 1:this.NumberServiceNodes;
         end
         %% TODO postProcessing with reconfiguration examining
         % Fist check constraint violation, then post-process the reconfiguration.
@@ -1368,7 +1368,7 @@ classdef DynamicSlice < SimpleSlice & EventSender
                 return;
                 %{
                 find(this.As_res * [this.Variables.x; this.Variables.z]>0,1)
-                res = this.I_edge_path*this.Variables.x-this.VirtualLinks.Capacity;
+                res = this.I_edge_path*this.Variables.x-this.Links.Capacity;
                 find(res>0)
                 disp(res)
                 this.Hdiag*this.Variables.z-this.Variables.v>0
@@ -1423,7 +1423,7 @@ classdef DynamicSlice < SimpleSlice & EventSender
                 % first case: |x| does not change or the increase amount less than
                 % |tol_vec|, try to restore these changes. 
                 b_diss_x1 = s.diff_x>=0;   % x might not change while z might still change
-                Ndc = this.NumberDataCenters;
+                Ndc = this.NumberServiceNodes;
                 Np = this.NumberPaths;
                 Nvnf = this.NumberVNFs;
                 af = this.Parent.VNFTable{this.VNFList, 'ProcessEfficiency'};
@@ -1448,11 +1448,11 @@ classdef DynamicSlice < SimpleSlice & EventSender
                 % second case: |x|'s decrease amount less than |tol_vec|, try to restore
                 % these changes.  
                 b_diss_x2 = s.diff_x<0;
-                % VirtualLinks.Capacity has been updated in <finalize>.
+                % Links.Capacity has been updated in <finalize>.
                 if isfield(this.temp_vars, 'c')
                     link_capacity = this.temp_vars.c;
                 else
-                    link_capacity = this.VirtualLinks.Capacity;
+                    link_capacity = this.Links.Capacity;
                 end
                 delta_link = link_capacity - this.I_edge_path*restore_x; % residual link capacity
                 for p = (find(b_diss_x2))'
@@ -1667,7 +1667,7 @@ classdef DynamicSlice < SimpleSlice & EventSender
         % If dimensioning is applied, the orginal cost is firstly updated.
         function update_reconfig_costv(this)
             this.vnf_reconfig_cost = this.Parent.options.VNFReconfigCoefficient * ...
-                repmat(this.VirtualDataCenters.ReconfigCost, this.NumberVNFs, 1);
+                repmat(this.ServiceNodes.ReconfigCost, this.NumberVNFs, 1);
             if this.ENABLE_DYNAMIC_NORMALIZER
                 beta = this.getbeta();
                 this.topts.vnf_reconfig_cost = beta.v*this.vnf_reconfig_cost;
@@ -1689,8 +1689,8 @@ classdef DynamicSlice < SimpleSlice & EventSender
                 this.update_reconfig_costv();
             end
             if strcmpi(action, 'add')
-                this.x_reconfig_cost = (this.I_edge_path)' * this.VirtualLinks.ReconfigCost;
-                this.z_reconfig_cost = repmat(this.VirtualDataCenters.ReconfigCost, ...
+                this.x_reconfig_cost = (this.I_edge_path)' * this.Links.ReconfigCost;
+                this.z_reconfig_cost = repmat(this.ServiceNodes.ReconfigCost, ...
                     this.NumberPaths*this.NumberVNFs, 1);
                 %% Ignore the reconfiguration cost when adding flow
                 % The newly added flow's reconfiguration cost set to zero.
@@ -1718,9 +1718,9 @@ classdef DynamicSlice < SimpleSlice & EventSender
                 % Since we need maintain information of the deleted variables, we should use
                 % the old state to calculate the information.
                 this.x_reconfig_cost = ...
-                    (this.old_state.I_edge_path)' * this.VirtualLinks.ReconfigCost;
+                    (this.old_state.I_edge_path)' * this.Links.ReconfigCost;
                 old_num_paths = length(this.old_state.path_owner);
-                this.z_reconfig_cost = repmat(this.VirtualDataCenters.ReconfigCost, ...
+                this.z_reconfig_cost = repmat(this.ServiceNodes.ReconfigCost, ...
                     old_num_paths*this.NumberVNFs, 1);
                 %%
                 % The removed flow's reconfiguration cost is not considered in the

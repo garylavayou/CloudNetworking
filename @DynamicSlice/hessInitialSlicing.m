@@ -30,9 +30,9 @@ end
 if nargin >= 4 && isfield(options, 'PricingPolicy')
     switch options.PricingPolicy
         case {'quadratic-price', 'quadratic'}
-            ND = this.NumberDataCenters;
+            ND = this.NumberServiceNodes;
             NV = this.NumberVNFs;
-            NL = this.NumberVirtualLinks;
+            NL = this.NumberLinks;
             var_v_index = (options.num_varx+options.num_varz) + (1:options.num_varv);
             node_load = sum(reshape(vars(var_v_index), ND, NV),2);
             var_c_index = options.num_varx+options.num_varz+options.num_varv + (1:NL);

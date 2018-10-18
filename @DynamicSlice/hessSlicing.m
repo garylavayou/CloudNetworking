@@ -19,9 +19,9 @@ else
     weight = this.weight*ones(this.NumberFlows, 1);  % for multiple slices
 end
 NP = this.NumberPaths;
-ND = this.NumberDataCenters;
+ND = this.NumberServiceNodes;
 NV = this.NumberVNFs;
-NL = this.NumberVirtualLinks;
+NL = this.NumberLinks;
 hs = spalloc(length(vars),length(vars), NP^2 + NL + NV*ND);
 var_path = vars(1:NP);
 for p = 1:NP

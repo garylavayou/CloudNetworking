@@ -28,8 +28,8 @@ if Nf == 0
     [profit, cost] = this.handle_zero_flow(options);
     return;
 end
-Nl = this.NumberVirtualLinks;
-Ndc = this.NumberDataCenters;
+Nl = this.NumberLinks;
+Ndc = this.NumberServiceNodes;
 Nvnf = this.NumberVNFs;
 Np = this.NumberPaths;
 
@@ -154,7 +154,7 @@ if this.options.bReserve
 end
 
 cv = this.VNFCapacity(:);              % VNFCapacity not change under 'fastconfig'
-cl = this.VirtualLinks.Capacity;
+cl = this.Links.Capacity;
 bs0 = [sparse(this.num_lcon_res,1);
     theta0*cv;
     theta0*cl;
@@ -310,8 +310,8 @@ this.FlowTable.Rate = this.getFlowRate;
 % end
 
 this.setPathBandwidth;
-this.VirtualLinks.Load = this.getLinkLoad;
-this.VirtualDataCenters.Load = this.getNodeLoad;
+this.Links.Load = this.getLinkLoad;
+this.ServiceNodes.Load = this.getNodeLoad;
 if nargout >= 1
     cost = this.getSliceCost(options.PricingPolicy, 'const');
     rc_linear = this.get_reconfig_cost('linear', true);

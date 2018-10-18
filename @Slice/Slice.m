@@ -18,11 +18,9 @@ classdef Slice < VirtualNetwork
 	methods
 		function this = Slice(slice_data)
 			if nargin == 0
-				args = cell(0);
-			else
-				args = {slice_data};
+				return;
 			end
-			this@VirtualNetwork(args{:});
+			this@VirtualNetwork(slice_data);
 
 			if isfield(slice_data, 'Type')
 				this.Type = slice_data.Type;

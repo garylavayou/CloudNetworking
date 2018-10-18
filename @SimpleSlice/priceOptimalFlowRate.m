@@ -92,7 +92,7 @@ this.temp_vars.x = x(1:this.NumberPaths);
 this.temp_vars.z = x((this.NumberPaths+1):end);
 %%%
 % When compute node load, z_npf corresponding to h_np = 0 has been set as zero.
-nz = this.NumberDataCenters*this.NumberPaths;
+nz = this.NumberServiceNodes*this.NumberPaths;
 z_index = 1:nz;
 for f = 1:this.NumberVNFs
     this.temp_vars.z(z_index) = this.I_dc_path(:).*this.temp_vars.z(z_index);
@@ -108,13 +108,13 @@ end
 this.x0 = x;
 
 if nargout >= 2
-    node_load = zeros(this.Parent.NumberDataCenters,1);
+    node_load = zeros(this.Parent.NumberServiceNodes,1);
     data_center_id = this.getDCPI;
     node_load(data_center_id) = this.getNodeLoad(this.temp_vars.z);
 end
 if nargout >= 3
     link_load = zeros(this.Parent.NumberLinks,1);
-    link_load(this.VirtualLinks.PhysicalLink) = this.getLinkLoad(this.temp_vars.x);    
+    link_load(this.Links.PhysicalLink) = this.getLinkLoad(this.temp_vars.x);    
 end
 this.flow_rate = this.getFlowRate(this.temp_vars.x);
 net_profit = -fval;

@@ -38,10 +38,10 @@ options.num_varx = length(this.temp_vars.x);
 options.num_varz = length(this.temp_vars.z);
 options.num_varv = length(this.temp_vars.v);
 if bFinal
-    this.prices.Link = this.VirtualLinks.Price;
-    this.prices.Node = this.VirtualDataCenters.Price;
+    this.prices.Link = this.Links.Price;
+    this.prices.Node = this.ServiceNodes.Price;
     vars = [this.Variables.x; this.Variables.z; this.Variables.v;...
-        this.VirtualLinks.Capacity];
+        this.Links.Capacity];
     profit = DynamicSlice.fcnProfitReserveSlicing(vars, this, options);
     if this.invoke_method >= 2 && this.b_dim   
         % only slices going through redimensioning have reconfiguration cost.

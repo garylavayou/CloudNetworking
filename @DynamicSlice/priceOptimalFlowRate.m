@@ -25,8 +25,8 @@ options = structmerge(new_opts, ...
 
 Np = this.NumberPaths;
 Nvnf = this.NumberVNFs;
-Nl = this.NumberVirtualLinks;
-Ndc = this.NumberDataCenters;
+Nl = this.NumberLinks;
+Ndc = this.NumberServiceNodes;
 As_res = this.As_res;        % update As_res
 
 %% List of constaints
@@ -422,13 +422,13 @@ end
 % Passing out the load information is not necessary, since the network only reuqire the
 % information of occupied capacity.
 if nargout >= 2 
-    node_load = zeros(this.Parent.NumberDataCenters,1);
+    node_load = zeros(this.Parent.NumberServiceNodes,1);
     data_center_id = this.getDCPI;
     node_load(data_center_id) = this.getNodeCapacity(false);
 end
 if nargout >= 3 
     link_load = zeros(this.Parent.NumberLinks,1);
-    link_load(this.VirtualLinks.PhysicalLink) = this.getLinkCapacity(false);
+    link_load(this.Links.PhysicalLink) = this.getLinkCapacity(false);
 end
 this.flow_rate = this.getFlowRate(this.temp_vars.x);
 net_profit = this.getProfit(options);
@@ -455,8 +455,8 @@ sum(link_load)./sum(link_capacity)
 %}
 
 function [f,g] = fcnReconfigCost(vars, this, options)
-ND = this.NumberDataCenters;
-NL = this.NumberVirtualLinks;
+ND = this.NumberServiceNodes;
+NL = this.NumberLinks;
 NV = this.NumberVNFs;
 link_cap = vars(1:NL);
 vnf_cap = vars(NL+(1:ND*NV));
@@ -477,8 +477,8 @@ g = [link_price_grad; repmat(node_price_grad, NV, 1); this.topts.vnf_reconfig_co
 end
 
 function h = hessReconfigCost(vars, lambda, this, options) %#ok<INUSL>
-ND = this.NumberDataCenters;
-NL = this.NumberVirtualLinks;
+ND = this.NumberServiceNodes;
+NL = this.NumberLinks;
 NV = this.NumberVNFs;
 link_cap = vars(1:NL);
 vnf_cap = vars(NL+(1:ND*NV));

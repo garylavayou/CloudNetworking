@@ -8,7 +8,7 @@ function [ payment, grad, pseudo_hess ] = fcnLinkPricing(this, link_price, link_
 theta = 3;
 % b = (2/(1+theta))*link_price;
 b = link_price;
-link_id = this.VirtualLinks.PhysicalLink;
+link_id = this.Links.PhysicalLink;
 aggr_link_usage = this.Parent.AggregateLinkUsage;
 %%%
 % Since $\mathit{S}$ slices share the resource amount |V|, we consider the price when the
