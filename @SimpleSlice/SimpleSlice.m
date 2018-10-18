@@ -26,12 +26,6 @@ classdef SimpleSlice < Slice & EventReceiver
 		node_load;          % temporary results of node load.
 		flow_rate;          % temporary results of flow rate.
 		I_active_variables logical;  % indicator of active variables
-		I_edge_path logical;    % Edge-Path Incidence Matrix
-		I_dc_path logical;    % Node-Path Incidence Matrix
-		I_flow_path logical;    % Flow-Path Incidence Matrix
-		% the associated flow of path, to provide a fast inquiry method for associated
-		% flow than using |I_flow_path|.
-		path_owner;
 	end
 	properties(Dependent, GetAccess={?CloudNetwork})
 		num_vars;           % number of optimization variables in the problem
@@ -143,43 +137,7 @@ classdef SimpleSlice < Slice & EventReceiver
 	end
 	
 	methods
-		function initializeState(this)
-			NC = this.NumberServiceNodes;
-			NP = this.NumberPaths;
-			NL = this.NumberLinks;
-			NF = this.NumberFlows;
-			
-			this.I_dc_path = sparse(NC, NP);
-			this.I_edge_path = sparse(NL, NP);
-			this.I_flow_path = sparse(NF, NP);
-			this.path_owner = zeros(NP,1);
-			% this.local_path_id = zeros(this.NumberPaths, 1);
-			pid = 0;
-			for fid=1:NF
-				path_list = this.FlowTable{fid,{'Paths'}};
-				for j = 1:path_list.Width
-					pid = pid + 1;
-					this.I_flow_path(fid,pid) = 1;
-					this.path_owner(pid) = fid;
-					path = path_list.paths{j};
-					path.local_id = pid;    % record the local path in the slice.
-					for k = 1:(path.Length-1)
-						e = path.Link(k);
-						eid = this.Topology.IndexEdge(e(1),e(2));
-						this.I_edge_path(eid, pid) = 1;
-						dc_index = this.Nodes{e(1),'ServiceNode'};
-						if dc_index~=0
-							this.I_dc_path(dc_index, pid) = 1;
-						end
-					end
-					dc_index = this.Nodes{e(2),'ServiceNode'}; % last node
-					if dc_index~=0
-						this.I_dc_path(dc_index, pid) = 1;
-					end
-				end
-			end
-		end
-		
+
 		% equation:
 		%    $\sum_{p,f}{b_{np}z_{npf}} \le V_{n}$
 		%
@@ -359,8 +317,7 @@ classdef SimpleSlice < Slice & EventReceiver
 			end
 		end
 		
-		[payment, grad, pseudo_hess] = fcnLinkPricing(this, link_price, link_load);
-		[payment, grad, pseudo_hess] = fcnNodePricing(this, node_price, node_load);
+
 		
 		function eventhandler(~, ~, ~)
 		end

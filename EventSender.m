@@ -102,7 +102,8 @@ classdef (Abstract) EventSender < matlab.mixin.Copyable
 						end
 						
 						this.bCopyReady = false;
-        end
-    end
+				end
+				
+		end
 end
 

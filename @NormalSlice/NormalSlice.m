@@ -1,15 +1,15 @@
-classdef FlowEdgeSlice < Slice
+classdef NormalSlice < Slice
 	%UNTITLED Summary of this class goes here
 	%   Detailed explanation goes here
 	
 	properties (Access = protected)
 		%% Augmented Topology
-		AugmentedTopology DirectedGraph;
+		augraph DirectedGraph;
 		
 		%% Virtual Flow Table
 		% We need to segment each flow into multiple segements
 		%% TODO: remove this variable, no specific usage.
-		virtual_flow_table;
+		flow_section_table;
 		
 		%% Incidence Matrices
 		I_node_path logical;
@@ -42,9 +42,9 @@ classdef FlowEdgeSlice < Slice
 	end
 	
 	properties (Dependent)
-		NumberAugmentedVirtualNodes;
-		NumberAugmentedVirtualLinks;
-		NumberVirtualFlows;
+		NumberAugmentedNodes;
+		NumberAugmentedLinks;
+		NumberFlowSections;
 	end
 	
 	properties(Dependent, GetAccess={?FlowEdgeSlice, ?SubstrateNetwork})
@@ -58,7 +58,7 @@ classdef FlowEdgeSlice < Slice
 	end
 	
 	methods
-		function this = FlowEdgeSlice(slice_data)
+		function this = NormalSlice(slice_data)
 			if nargin == 0
 				slice_data = {};
 			end
@@ -77,22 +77,22 @@ classdef FlowEdgeSlice < Slice
 				destins = zeros(num_vflows, 1);
 				sources(1:num_segs:(this.NumberFlows-1)*num_segs+1) = this.FlowTable.Source;
 				destins(num_segs:num_segs:num_segs*this.NumberFlows) = this.FlowTable.Target;
-				this.virtual_flow_table = table(flow_idxs(:), sources, destins, ...
+				this.flow_section_table = table(flow_idxs(:), sources, destins, ...
 					'VariableNames', {'FlowIndex', 'Source', 'Destination'});
 			end
 			%%
 			
 		end
 		
-		function n = get.NumberAugmentedVirtualNodes(this)
-			n = this.AugmentedTopology.NumberNodes;
+		function n = get.NumberAugmentedNodes(this)
+			n = this.augraph.NumberNodes;
 		end
 		
-		function n = get.NumberAugmentedVirtualLinks(this)
-			n = this.AugmentedTopology.NumberEdges;
+		function n = get.NumberAugmentedLinks(this)
+			n = this.augraph.NumberEdges;
 		end
 		
-		function n = get.NumberVirtualFlows(this)
+		function n = get.NumberFlowSections(this)
 			n = this.NumberFlows * (this.NumberVNFs+1);
 		end
 		
@@ -101,7 +101,7 @@ classdef FlowEdgeSlice < Slice
 		end
 		
 		function n = get.num_vars_edge(this)
-			n = height(this.virtual_flow_table) * this.NumberAugmentedVirtualLinks;
+			n = height(this.flow_section_table) * this.NumberAugmentedLinks;
 		end
 		
 		function n = get.num_vars_node(this)
@@ -115,22 +115,22 @@ classdef FlowEdgeSlice < Slice
 		function initializeState(this)
 			initializeState@Slice(this);
 			%% Build the augmented topology
-			this.AugmentedTopology = this.Topology.copy;
-			this.VirtualDataCenters{:, 'AugmentedVirtualNode'} = ...
-				this.NumberVirtualNodes + (1:this.NumberDataCenters)';
-			this.VirtualDataCenters{:, 'AugmentedNode'} = ...
+			this.augraph = this.graph.copy;
+			this.ServiceNodes{:, 'AugmentedVirtualNode'} = ...
+				this.NumberNodes + (1:this.NumberServiceNodes)';
+			this.ServiceNodes{:, 'AugmentedNode'} = ...
 				this.Parent.DataCenters.AugmentedNode(this.getDCPI);
-			aug_heads = [this.VirtualDataCenters.VirtualNode; ...
-				this.VirtualDataCenters.AugmentedVirtualNode];
-			aug_tails = [this.VirtualDataCenters.AugmentedVirtualNode;...
-				this.VirtualDataCenters.VirtualNode];
+			aug_heads = [this.ServiceNodes.VirtualNode; ...
+				this.ServiceNodes.AugmentedVirtualNode];
+			aug_tails = [this.ServiceNodes.AugmentedVirtualNode;...
+				this.ServiceNodes.VirtualNode];
 			num_aug_links = length(aug_heads);
 			props.Weight = eps*ones(num_aug_links,1);
 			props.Capacity = inf*ones(num_aug_links,1);
-			this.AugmentedTopology.Update(aug_heads, aug_tails, props);
+			this.augraph.Update(aug_heads, aug_tails, props);		% TODO: remap
 			
 			%% Initialize edge-flow & node-flow incidence matrix
-			this.I_flow_node = sparse(this.NumberFlows, this.NumberVirtualNodes);
+			this.I_flow_node = sparse(this.NumberFlows, this.NumberNodes);
 			if ~isempty(this.I_flow_path)
 				this.I_flow_edge = double(this.I_flow_path)*double(transpose(this.I_edge_path));
 				for i = 1:this.NumberFlows
@@ -145,17 +145,17 @@ classdef FlowEdgeSlice < Slice
 				this.I_flow_node = true(this.NumberFlows, this.NumberVirtualNodes);
 			end
 			this.I_flow_edge_ex = this.I_flow_edge;
-			this.I_flow_edge_ex(this.NumberFlows, this.NumberAugmentedVirtualLinks) = 0;
+			this.I_flow_edge_ex(this.NumberFlows, this.NumberAugmentedLinks) = 0;
 			this.I_flow_node_ex = this.I_flow_node;
-			this.I_flow_node_ex(this.NumberFlows, this.NumberAugmentedVirtualNodes) = 0;
+			this.I_flow_node_ex(this.NumberFlows, this.NumberAugmentedNodes) = 0;
 			for k = 1:this.NumberFlows
-				for i = (this.NumberVirtualLinks+1):this.NumberAugmentedVirtualLinks
-					[src,dest] = this.AugmentedTopology.IndexEdge(i);
-					if src<=this.NumberVirtualNodes && this.I_flow_node(k, src)
+				for i = (this.NumberLinks+1):this.NumberAugmentedLinks
+					[src,dest] = this.augraph.IndexEdge(i);
+					if src<=this.NumberNodes && this.I_flow_node(k, src)
 						this.I_flow_edge_ex(k, i) = 1;
 						this.I_flow_node_ex(k, dest) = 1;
 					end
-					if dest<=this.NumberVirtualNodes && this.I_flow_node(k, dest)
+					if dest<=this.NumberNodes && this.I_flow_node(k, dest)
 						this.I_flow_edge_ex(k, i) = 1;
 						this.I_flow_node_ex(k, src) = 1;
 					end
@@ -177,9 +177,9 @@ classdef FlowEdgeSlice < Slice
 				x = this.Variables.x;
 			end
 			num_segs = this.NumberVNFs+1;
-			Nvn = this.NumberVirtualNodes;
-			Navn = this.NumberAugmentedVirtualNodes;
-			Nave = this.NumberAugmentedVirtualLinks;
+			Nvn = this.NumberNodes;
+			Navn = this.NumberAugmentedNodes;
+			Nave = this.NumberAugmentedLinks;
 			nidx_offset = 0;
 			eidx_offset = 0;
 			for i = 1:this.NumberFlows
@@ -206,7 +206,7 @@ classdef FlowEdgeSlice < Slice
 							eout = find(As{j}(src,:)==-1);
 							if ~isempty(eout)
 								[~,idx] = max(fx(eout));
-								[n_cur, n_next] = this.AugmentedTopology.IndexEdge(eout(idx));
+								[n_cur, n_next] = this.augraph.IndexEdge(eout(idx));
 								assert(n_cur==src);
 								path.nodes = [path.nodes; n_next];
 								path.idx_edgevar = [path.idx_edgevar; eout(idx)];
@@ -255,7 +255,7 @@ classdef FlowEdgeSlice < Slice
 				if isfield(options, 'NodePrice')
 					slice.prices.Node = options.NodePrice;
 				elseif isfield(options, 'bFinal') && options.bFinal
-					slice.prices.Node= slice.VirtualDataCenters.Price;
+					slice.prices.Node= slice.ServiceNodes.Price;
 				end
 			end
 			if nargin < 2 || ~isfield(options, 'PricingPolicy')
@@ -274,20 +274,20 @@ classdef FlowEdgeSlice < Slice
 		end
 	end
 	
-	methods (Access = {?SubstrateNetwork})
+	methods
 		%% Parallel
 		function [array, problem, indices] = initializeProblem(this, options)
 			if nargin < 2 || ~isfield(options, 'bCompact')
 				options.bCompact = false;
 			end
 			%%
-			Nave = this.NumberAugmentedVirtualLinks;
+			Nave = this.NumberAugmentedLinks;
 			Nve = this.NumberVirtualLinks;
-			Navn = this.NumberAugmentedVirtualNodes;
+			Navn = this.NumberAugmentedNodes;
 			Nvn = this.NumberVirtualNodes;
 			Nd = this.NumberDataCenters;
 			Nf = this.NumberFlows;
-			Nvf = height(this.virtual_flow_table);
+			Nvf = height(this.flow_section_table);
 			Nv = this.NumberVNFs;
 			num_seg = Nv + 1;
 			
@@ -305,15 +305,15 @@ classdef FlowEdgeSlice < Slice
 			% 3. destiniation forwarding nodes of the last segment;
 			%	4. data center nodes that potentially process flows.
 			%
-			A = this.AugmentedTopology.GetIncidentMatrix;		% There might exist single direction links in the virtual topology.
+			A = this.augraph.GetIncidentMatrix;		% There might exist single direction links in the virtual topology.
 			%{
 			n = 56;
 			eidx = find(A(n,:)==-1);
-			[s,t] = this.AugmentedTopology.IndexEdge(eidx);
+			[s,t] = this.augraph.IndexEdge(eidx);
 			fprintf('outgoing links:\n');
 			disp([s,t]);
 			eidx = find(A(n,:)==1);
-			[s,t] = this.AugmentedTopology.IndexEdge(eidx);
+			[s,t] = this.augraph.IndexEdge(eidx);
 			fprintf('incoming links:\n');
 			disp([s,t]);
 			%}
@@ -476,8 +476,7 @@ classdef FlowEdgeSlice < Slice
 				this.capacities.Node = node_capacity(dc_id);
 			end
 		end
-	end
-	methods (Access = {?CloudNetwork, ?SubstrateNetwork, ?SliceFlowEventDispatcher})
+
 		%%
 		% Override <Slice.priceOptimalFlowRate>.
 		% We introduce the quadratic penalty item of the dual-ADMM method.
@@ -944,7 +943,7 @@ classdef FlowEdgeSlice < Slice
 	methods(Access = protected)
 		function cp = copyElement(this)
 			cp = copyElement@Slice(this);
-			cp.AugmentedTopology = this.AugmentedTopology.copy();
+			cp.augraph = this.augraph.copy();
 		end
 		
 		function [tf, vars] = postProcessing(this)
@@ -1018,7 +1017,7 @@ classdef FlowEdgeSlice < Slice
 			
 			Nf = slice.NumberFlows;
 			Nv = slice.NumberVNFs;
-			Nvf = slice.NumberVirtualFlows;
+			Nvf = slice.NumberFlowSections;
 			
 			num_varxz = length(vars) - Nf;
 			flow_rate = vars((num_varxz+1):end);
@@ -1078,7 +1077,7 @@ classdef FlowEdgeSlice < Slice
 		function [profit, grad] = fcnProfitPrimalDD(vars, slice, lambda, options)
 			Nf = slice.NumberFlows;
 			Nv = slice.NumberVNFs;
-			Nvf = slice.NumberVirtualFlows;
+			Nvf = slice.NumberFlowSections;
 			nx = slice.problem.numvars(1);
 			nz = slice.problem.numvars(2);
 			nxz = nx + nz;
@@ -1126,7 +1125,7 @@ classdef FlowEdgeSlice < Slice
 			
 			Nf = slice.NumberFlows;
 			Nv = slice.NumberVNFs;
-			Nvf = slice.NumberVirtualFlows;
+			Nvf = slice.NumberFlowSections;
 			Ns = options.NumberSlices;
 			
 			num_varxz = length(vars) - Nf;
@@ -1186,7 +1185,7 @@ classdef FlowEdgeSlice < Slice
 			
 			Nf = slice.NumberFlows;
 			Nv = slice.NumberVNFs;
-			Nvf = slice.NumberVirtualFlows;
+			Nvf = slice.NumberFlowSections;
 			
 			num_varxz = length(vars) - Nf;
 			flow_rate = vars((num_varxz+1):end);
@@ -1254,7 +1253,7 @@ classdef FlowEdgeSlice < Slice
 end
 
 %{
-				Aeq = sparse(this.NumberAugmentedVirtualNodes*(this.NumberVNFs+1)*Nf, this.num_flow_vars);
+				Aeq = sparse(this.NumberAugmentedNodes*(this.NumberVNFs+1)*Nf, this.num_flow_vars);
 				beq = sparse(size(Aeq,1),1);
 				Aeq(this.I_active_rows_eq, this.I_active_variables) = this.problem.Aeq;
 				beq(this.I_active_rows_eq) = this.problem.beq;

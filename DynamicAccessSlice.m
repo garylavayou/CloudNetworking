@@ -1,28 +1,28 @@
-classdef DynamicAccessSlice < DynamicSlice
+classdef SimpleDynamicAccessSlice < SimpleDynamicSlice
     
-    properties (Access = {?DynamicAccessSlice,?CloudNetwork})
-        VirtualBaseStations;
+    properties
+        BaseStations;
     end
     properties(Dependent)
         NumberBaseStations;
     end
     
     methods
-        function this = DynamicAccessSlice(slice_data)
-            this@DynamicSlice(slice_data);
+        function this = SimpleDynamicAccessSlice(slice_data)
+            this@SimpleDynamicSlice(slice_data);
             %%%
             % *Virtual Base Stations*
             % Select the base station nodes from all the virtual nodes of this slice.
             bs_virtual_node_index = ...
-                find(this.Parent.readNode('BaseStation', this.VirtualNodes.PhysicalNode)>0);
-            this.VirtualBaseStations = ...
+                find(this.Parent.readNode('BaseStation', this.Nodes.PhysicalNode)>0);
+            this.BaseStations = ...
                 table(bs_virtual_node_index, 'VariableNames', {'VirtualNode'});
-            this.VirtualNodes.BaseStation = zeros(this.NumberVirtualNodes,1);
-            this.VirtualNodes{bs_virtual_node_index, 'BaseStation'} = ...
+            this.Nodes.BaseStation = zeros(this.NumberNodes,1);
+            this.Nodes{bs_virtual_node_index, 'BaseStation'} = ...
                 (1:this.NumberBaseStations)';
         end
         function n = get.NumberBaseStations(this)
-            n = height(this.VirtualBaseStations);
+            n = height(this.BaseStations);
         end
         %%%
         % Get physical node index of base stations
@@ -30,8 +30,8 @@ classdef DynamicAccessSlice < DynamicSlice
             if nargin == 1
                 bs_index = 1:this.NumberBaseStations;
             end
-            vn_id = this.VirtualBaseStations.VirtualNode(bs_index);
-            bs_node_id = this.VirtualNodes.PhysicalNode(vn_id);
+            vn_id = this.BaseStations.VirtualNode(bs_index);
+            bs_node_id = this.Nodes.PhysicalNode(vn_id);
         end
         %%%
         % Get the physical index of base station.
