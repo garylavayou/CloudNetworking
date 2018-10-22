@@ -2,8 +2,9 @@ classdef (Abstract) EventSender < matlab.mixin.Copyable
     % <EventSender> and <EventReceiver> are interfaces for inter-class communication.
     
     properties (Access = protected)
-        listeners;  % We need to remove some listeners, when the listeners have been destoryed. [Deprecated].
-        targets;
+        listeners;  % Save the informations about the listeners (<event.listener>).
+				% [optional] Remove some listeners when the listeners have been destoryed.
+        targets;		% handle reference to the event target.
 				bCopyReady logical = true; 
     end
     

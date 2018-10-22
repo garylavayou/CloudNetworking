@@ -1,10 +1,5 @@
 classdef SimpleDynamicSlice < SimpleSlice & IDynamicSlice
 	%DynamicSlice Event-driven to dynamic configure slice.
-	properties
-		raw_beta;
-		raw_cost;
-		raw_costv;
-	end
 	
 	properties
 		% As_res;       % has been defined in <Slice>.
@@ -265,7 +260,7 @@ classdef SimpleDynamicSlice < SimpleSlice & IDynamicSlice
 		%             if nargin <= 1
 		%                 vars = [];
 		%             else
-		%                 vars = vars(1:this.num_vars);
+		%                 vars = vars(1:this.NumberVariables);
 		%             end
 		%             if nargin <= 2
 		%                 options = struct;
@@ -580,14 +575,14 @@ classdef SimpleDynamicSlice < SimpleSlice & IDynamicSlice
 		function convert(this, x, ~)
 			NP = this.NumberPaths;
 			this.temp_vars.x = x(1:NP);
-			this.temp_vars.z = x((NP+1):this.num_vars);
-			offset = this.num_vars;
+			this.temp_vars.z = x((NP+1):this.NumberVariables);
+			offset = this.NumberVariables;
 			this.temp_vars.v = x(offset+(1:this.num_varv));
 			offset = offset + this.num_varv;
 			if this.invoke_method >= 2
 				this.temp_vars.tx = x(offset+(1:NP));
-				this.temp_vars.tz = x(offset+((NP+1):this.num_vars));
-				offset = offset + this.num_vars;
+				this.temp_vars.tz = x(offset+((NP+1):this.NumberVariables));
+				offset = offset + this.NumberVariables;
 				this.temp_vars.tv = x(offset+(1:this.num_varv));
 				offset = offset + this.num_varv;
 			end

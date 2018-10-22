@@ -20,7 +20,7 @@ NV = this.NumberVNFs;
 if nargin >= 2 && ~isempty(x0)
     this.x0 = x0;
 else%if isempty(this.x0)
-    this.x0 = zeros(this.num_vars,1);
+    this.x0 = zeros(this.NumberVariables,1);
     this.x0(1:NP) = 1;
     alpha_max = max(this.Parent.VNFTable.ProcessEfficiency(this.VNFList));
     this.x0((NP+1):end) = alpha_max;
@@ -28,7 +28,7 @@ end
 num_vars = length(this.x0);
 assert(this.checkFeasible(this.x0), 'error: infeasible start point.');
 
-bs = sparse(this.num_lcon_res,1);
+bs = sparse(this.NumberLinearConstraints,1);
 
 %% Set the optimization options
 % * *Algorithm* : since the problem contains linear constraints and bound
@@ -63,10 +63,10 @@ if strcmpi(options.Form, 'compact')
     As = this.As_res(:, this.I_active_variables);
     var0 = this.x0(this.I_active_variables);
     lbs = sparse(length(var0),1);
-    options.num_orig_vars = this.num_vars;
+    options.num_orig_vars = this.NumberVariables;
     options.bCompact = true;
 else
-    lbs = sparse(this.num_vars,1);
+    lbs = sparse(this.NumberVariables,1);
     As = this.As_res;
     var0 = this.x0;
 end

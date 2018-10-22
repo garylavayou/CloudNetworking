@@ -31,7 +31,7 @@ As_res = this.As_res;        % update As_res
 
 %% List of constaints
 % (see also <DynamicSlice.fastReconfigure2>):
-%   (1) flow processing requirement: NP*NV (this.num_lcon_res);
+%   (1) flow processing requirement: NP*NV (this.NumberLinearConstraints);
 %   (2) VNF instance capacity constraint: NV*NN (this.num_varv); virtual node capacity constraint;
 %   (3) link reconfiguration cost constraint: 2*NP;
 %   (4) VNF allocation reconfiguration cost constraint: 2*NN*NP*NV (2*this.num_varz);
@@ -75,9 +75,9 @@ end
 if ~this.b_derive_vnf % this.invoke_method ~= 1
     this.update_reconfig_cost(this.sh_options.action, true);
 end
-num_base_vars = this.num_vars + this.num_varv;
+num_base_vars = this.NumberVariables + this.num_varv;
 num_vars = num_base_vars;
-num_lcon = this.num_lcon_res + this.num_varv;
+num_lcon = this.NumberLinearConstraints + this.num_varv;
 nnz_As = nnz(As_res) + (nnz(this.Hdiag)+this.num_varv);
 if this.invoke_method ~= 1
     num_vars = num_vars + num_base_vars;
@@ -142,12 +142,12 @@ As = spalloc(num_lcon, num_vars, nnz_As);
 bs = sparse(num_lcon,1);
 lbs = sparse(num_vars, 1);
 %% (1) flow processing requirement
-As(1:this.num_lcon_res,1:this.num_vars) = As_res;
-% bs(1:this.num_lcon_res+(1:NL)) = zeros(this.num_lcon_res,1);
-row_offset = this.num_lcon_res;
+As(1:this.NumberLinearConstraints,1:this.NumberVariables) = As_res;
+% bs(1:this.NumberLinearConstraints+(1:NL)) = zeros(this.NumberLinearConstraints,1);
+row_offset = this.NumberLinearConstraints;
 %% (2) VNF instance capacity constraint
 As(row_offset+(1:this.num_varv), Np+(1:this.num_varz)) = this.Hdiag;
-As(row_offset+(1:this.num_varv), this.num_vars+(1:this.num_varv)) = -theta0*eye(this.num_varv);
+As(row_offset+(1:this.num_varv), this.NumberVariables+(1:this.num_varv)) = -theta0*eye(this.num_varv);
 % bs(row_offset+(1:this.num_varv)) = zeros(this.num_varv,1);
 row_offset = row_offset + this.num_varv;
 if this.invoke_method~=1
@@ -161,21 +161,21 @@ if this.invoke_method~=1
     bs(row_offset+(1:Np)) = -this.topts.old_variables_x;
     row_offset = row_offset + Np;
     %% (4) VNF allocation reconfiguration cost constraint
-    As(row_offset+(1:this.num_varz), (Np+1):this.num_vars) = eye(this.num_varz);
+    As(row_offset+(1:this.num_varz), (Np+1):this.NumberVariables) = eye(this.num_varz);
     As(row_offset+(1:this.num_varz), (num_base_vars+Np)+(1:this.num_varz)) = -eye(this.num_varz);
     bs(row_offset+(1:this.num_varz)) = this.topts.old_variables_z;
     row_offset = row_offset + this.num_varz;
-    As(row_offset+(1:this.num_varz), (Np+1):this.num_vars) = -eye(this.num_varz);
+    As(row_offset+(1:this.num_varz), (Np+1):this.NumberVariables) = -eye(this.num_varz);
     As(row_offset+(1:this.num_varz), (num_base_vars+Np)+(1:this.num_varz)) = -eye(this.num_varz);
     bs(row_offset+(1:this.num_varz)) = -this.topts.old_variables_z;
     row_offset = row_offset + this.num_varz;
     %% (5) VNF instance capacity reconfiguration cost constraint
-    As(row_offset+(1:this.num_varv), (this.num_vars+1):num_base_vars) = eye(this.num_varv);
-    As(row_offset+(1:this.num_varv), (num_base_vars+this.num_vars+1):num_base_vars*2) = -eye(this.num_varv);
+    As(row_offset+(1:this.num_varv), (this.NumberVariables+1):num_base_vars) = eye(this.num_varv);
+    As(row_offset+(1:this.num_varv), (num_base_vars+this.NumberVariables+1):num_base_vars*2) = -eye(this.num_varv);
     bs(row_offset+(1:this.num_varv)) = this.old_variables.v;
     row_offset = row_offset + this.num_varv;
-    As(row_offset+(1:this.num_varv), (this.num_vars+1):num_base_vars) = -eye(this.num_varv);
-    As(row_offset+(1:this.num_varv), (num_base_vars+this.num_vars+1):num_base_vars*2) = -eye(this.num_varv);
+    As(row_offset+(1:this.num_varv), (this.NumberVariables+1):num_base_vars) = -eye(this.num_varv);
+    As(row_offset+(1:this.num_varv), (num_base_vars+this.NumberVariables+1):num_base_vars*2) = -eye(this.num_varv);
     bs(row_offset+(1:this.num_varv)) = -this.old_variables.v;
     row_offset = row_offset + this.num_varv;
 end
@@ -194,7 +194,7 @@ if this.invoke_method == 3 || this.invoke_method == 4
     if isfield(this.lower_bounds, 'node')
         reduced_eye = eye(Ndc);
         reduced_eye = reduced_eye(node_idx,:);
-        As(row_offset+find(node_idx), this.num_vars+(1:this.num_varv)) = -repmat(reduced_eye,1,Nvnf);
+        As(row_offset+find(node_idx), this.NumberVariables+(1:this.num_varv)) = -repmat(reduced_eye,1,Nvnf);
         bs(row_offset+find(node_idx)) = -this.lower_bounds.node(node_idx);
         row_offset = row_offset + nn_bounds;
     end
@@ -203,9 +203,9 @@ end
 %% (10) resource utilization lower bound for resource reservation
 if this.invoke_method == 1 || this.invoke_method == 4 
     if this.options.bReserve  % overall resource utilization constraint
-        % As(row_offset+1, [NP+(1:this.num_varz), this.num_vars+(1:this.num_varv)]) = ...
+        % As(row_offset+1, [NP+(1:this.num_varz), this.NumberVariables+(1:this.num_varv)]) = ...
         % 	[ones(1,this.num_varz), -theta*ones(1,this.num_varv)];
-        As(row_offset+1, [Np+(1:this.num_varz), this.num_vars+(1:this.num_varv)]) = ...
+        As(row_offset+1, [Np+(1:this.num_varz), this.NumberVariables+(1:this.num_varv)]) = ...
             [repmat((this.I_dc_path(:))', 1, Nvnf), -theta*ones(1,this.num_varv)];
         As(row_offset+2, [1:Np, (num_vars-Nl+1):num_vars]) = ...
             [sum(this.I_edge_path,1), -theta*ones(1, Nl)];
@@ -216,7 +216,7 @@ if this.invoke_method == 1 || this.invoke_method == 4
         %% (11) virtual node capacity constraint for resource reservation
         % (optional) resource reservation for individual nodes
         As(row_offset+(1:Ndc), Np+(1:this.num_varz)) = this.Hrep;
-        As(row_offset+(1:Ndc), this.num_vars+(1:this.num_varv)) = -theta1*repmat(eye(Ndc),1,Nvnf);
+        As(row_offset+(1:Ndc), this.NumberVariables+(1:this.num_varv)) = -theta1*repmat(eye(Ndc),1,Nvnf);
         % bs(row_offset+(1:NC)) = zeros(NC,1);
         row_offset = row_offset + Ndc;
     elseif this.options.bReserve == 3
@@ -229,12 +229,12 @@ end
 % if this.invoke_method == 4
 %     if ~isempty(idx_up_node)
 %         d = repmat(eye(NC),1,NV);
-%         As(row_offset+(1:numel(idx_up_node)), this.num_vars+(1:this.num_varv)) = d(idx_up_node,:);
+%         As(row_offset+(1:numel(idx_up_node)), this.NumberVariables+(1:this.num_varv)) = d(idx_up_node,:);
 %         row_offset = row_offset + numel(idx_up_node);
 %         bs = [bs; this.upper_bounds.node(idx_up_node)];
 %     end
 %     if ~isempty(idx_up_link)
-%         As(row_offset+(1:numel(idx_up_link)), this.num_vars+(1:NP)) = this.I_edge_path(idx_up_link,:);
+%         As(row_offset+(1:numel(idx_up_link)), this.NumberVariables+(1:NP)) = this.I_edge_path(idx_up_link,:);
 %         bs = [bs; this.upper_bounds.link(idx_up_link)];
 %     end
 % end
@@ -248,7 +248,7 @@ if (this.invoke_method == 3 || this.invoke_method == 4)
     lbs(2*num_base_vars+find(link_idx)) = this.lower_bounds.link(link_idx);
     if isfield(this.lower_bounds, 'VNF')
         vnf_idx = repmat(node_idx, Nvnf, 1);
-        lbs(this.num_vars+find(vnf_idx)) = this.lower_bounds.VNF(vnf_idx);
+        lbs(this.NumberVariables+find(vnf_idx)) = this.lower_bounds.VNF(vnf_idx);
     end
 end
 
@@ -305,7 +305,7 @@ if strcmpi(options.Form, 'compact')
     end
     this.I_active_variables = [this.I_active_variables; true(Nl,1)];
     if this.invoke_method ~= 1
-        row_offset = this.num_lcon_res + this.num_varv;
+        row_offset = this.NumberLinearConstraints + this.num_varv;
         active_rows = [true(row_offset,1); tx_filter; tx_filter; tz_filter; tz_filter;
             true(2*this.num_varv,1); true(Nl,1)];
         if (this.invoke_method == 4 || this.invoke_method == 3) && ...

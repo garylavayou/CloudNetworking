@@ -139,7 +139,7 @@ for s = 1:NS
     nid = sl.getDCPI;       % here is the DC index, not the node index.
     [~, vid] = ismember(sl.VNFList, ss.VNFList);
     sl.temp_vars.z = ...
-        reshape(z_npf(nid,pid+pid_offset,vid),sl.num_vars-sl.NumberPaths, 1);
+        reshape(z_npf(nid,pid+pid_offset,vid),sl.NumberVariables-sl.NumberPaths, 1);
     pid_offset = pid_offset + sl.NumberPaths;
     assert(sl.checkFeasible([sl.temp_vars.x; sl.temp_vars.z], ...
         struct('ConstraintTolerance', fmincon_opt.ConstraintTolerance)), 'error: infeasible solution.');

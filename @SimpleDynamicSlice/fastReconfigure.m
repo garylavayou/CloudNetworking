@@ -36,8 +36,8 @@ Np = this.NumberPaths;
 %%% Formulate input for convex optimization (fmincon).
 % The problem has multiple inequalities, and the lowerbounds for variables.
 %%
-% List of constaints:
-%   (1) flow processing requirement: Np*Nvnf (this.num_lcon_res);
+% List of constaints:num_lcon_res
+%   (1) flow processing requirement: Np*Nvnf (this.NumberLinearConstraints);
 %   (2) VNF instance capacity constraint: NV*Ndc (this.num_varv);
 %   (3) Link capacity constraint: NL;
 %   (4) link reconfiguration cost constraint: 2*NP;
@@ -45,7 +45,7 @@ Np = this.NumberPaths;
 As_res = this.As_res;        % update As_res
 nnz_As = nnz(As_res) + nnz(this.Hdiag) + nnz(this.I_edge_path) + ...
     + 4*Np + 4*this.num_varz; % 2 I_x, 2 I_tx, 2 I_z, 2 I_tz
-num_lcon = this.num_lcon_res + Ndc*Nvnf + Nl + 2*Np + 2*this.num_varz;
+num_lcon = this.NumberLinearConstraints + Ndc*Nvnf + Nl + 2*Np + 2*this.num_varz;
 if this.options.bReserve
     if ~options.bEnforceReserve
         if strcmpi(action, 'add')
@@ -88,25 +88,25 @@ if this.options.bReserve
 end
 
 t1 = tic;
-num_vars = 2*this.num_vars;     % including axuilary variables.
+num_vars = 2*this.NumberVariables;     % including axuilary variables.
 As = spalloc(num_lcon, num_vars, nnz_As);
-As(1:this.num_lcon_res,1:this.num_vars) = As_res;
-row_offset = this.num_lcon_res;
+As(1:this.NumberLinearConstraints,1:this.NumberVariables) = As_res;
+row_offset = this.NumberLinearConstraints;
 As(row_offset+(1:Ndc*Nvnf), (1:this.num_varz)+Np) = this.Hdiag;
 row_offset = row_offset + Ndc*Nvnf;
 As(row_offset+(1:Nl), 1:Np) = this.I_edge_path;
 row_offset = row_offset + Nl;
 As(row_offset+(1:Np), 1:Np) = speye(Np);
-As(row_offset+(1:Np), this.num_vars+(1:Np)) = -speye(Np);
+As(row_offset+(1:Np), this.NumberVariables+(1:Np)) = -speye(Np);
 row_offset = row_offset + Np;
 As(row_offset+(1:Np), 1:Np) = -speye(Np);
-As(row_offset+(1:Np), this.num_vars+(1:Np)) = -speye(Np);
+As(row_offset+(1:Np), this.NumberVariables+(1:Np)) = -speye(Np);
 row_offset = row_offset + Np;
-As(row_offset+(1:this.num_varz), (Np+1):this.num_vars) = speye(this.num_varz);
-As(row_offset+(1:this.num_varz), (this.num_vars+Np+1):end) = -speye(this.num_varz);
+As(row_offset+(1:this.num_varz), (Np+1):this.NumberVariables) = speye(this.num_varz);
+As(row_offset+(1:this.num_varz), (this.NumberVariables+Np+1):end) = -speye(this.num_varz);
 row_offset = row_offset + this.num_varz;
-As(row_offset+(1:this.num_varz), (Np+1):this.num_vars) = -speye(this.num_varz);
-As(row_offset+(1:this.num_varz), (this.num_vars+Np+1):end) = -speye(this.num_varz);
+As(row_offset+(1:this.num_varz), (Np+1):this.NumberVariables) = -speye(this.num_varz);
+As(row_offset+(1:this.num_varz), (this.NumberVariables+Np+1):end) = -speye(this.num_varz);
 row_offset = row_offset + this.num_varz;
 idx_empty = [];
 if this.options.bReserve
@@ -155,7 +155,7 @@ end
 
 cv = this.VNFCapacity(:);              % VNFCapacity not change under 'fastconfig'
 cl = this.Links.Capacity;
-bs0 = [sparse(this.num_lcon_res,1);
+bs0 = [sparse(this.NumberLinearConstraints,1);
     theta0*cv;
     theta0*cl;
     this.topts.old_variables_x;       % which have been pre-processed, so it can be
@@ -184,12 +184,12 @@ if this.options.bReserve
         bs = [bs; theta*sum(cv); theta*sum(cl)];
         Nvn = length(cv);
         if this.options.bReserve == 2  % individual link/node
-            bs(this.num_lcon_res+(1:Nvn)) = theta0*cv;     % VNF instance capacity
-            bs(this.num_lcon_res+Nvn+(1:Nl)) = theta1*cl;  % link capacity
+            bs(this.NumberLinearConstraints+(1:Nvn)) = theta0*cv;     % VNF instance capacity
+            bs(this.NumberLinearConstraints+Nvn+(1:Nl)) = theta1*cl;  % link capacity
             bs = [bs; theta1*sum(reshape(cv, Ndc, Nvnf),2)];
         elseif this.options.bReserve == 3 % % individual link/VNF instance
             % update constraints, no new ones.
-            bs(this.num_lcon_res+(1:(Nvn+Nl))) = theta1*[cv;cl];
+            bs(this.NumberLinearConstraints+(1:(Nvn+Nl))) = theta1*[cv;cl];
         end
     end
 else
@@ -199,7 +199,7 @@ var0 = [this.topts.old_variables_x;
     this.topts.old_variables_z;
     this.topts.old_variables_x;
     this.topts.old_variables_z
-    %     sparse(this.num_vars,1)
+    %     sparse(this.NumberVariables,1)
     ];
 if ~this.checkFeasible(var0)
     warning('infeasible initial point.');
@@ -228,7 +228,7 @@ else
         tx_filter = true(numel(this.topts.x_reconfig_cost),1);
         tz_filter = z_filter;
         this.I_active_variables = [true(Np,1);  z_filter; tx_filter; tz_filter];
-        row_offset = this.num_lcon_res + Ndc*Nvnf + Nl;
+        row_offset = this.NumberLinearConstraints + Ndc*Nvnf + Nl;
         active_rows = [true(row_offset,1); tx_filter; tx_filter; tz_filter; tz_filter];
         if this.options.bReserve
             if ~options.bEnforceReserve
@@ -292,7 +292,7 @@ assert(this.checkFeasible(x,options), 'error: infeasible solution.');
 % The post processing like <optimalFlowRate> is not needed, since the
 % objective function will force those variables to be zero.
 this.temp_vars.x = x(1:Np);
-this.temp_vars.z = x((Np+1):this.num_vars);
+this.temp_vars.z = x((Np+1):this.NumberVariables);
 this.flow_rate = this.getFlowRate(this.temp_vars.x);
 this.postProcessing();
 this.FlowTable.Rate = this.getFlowRate;
@@ -390,7 +390,7 @@ end
         I_dc_path = this.I_dc_path;
         topts = this.topts;
         path_owner = this.path_owner;
-        num_lcon_res = this.num_lcon_res;
+        num_lcon_res = this.NumberLinearConstraints;
         num_varz = this.num_varz;
         weight = this.weight;
         if strcmpi(options.Form, 'compact')
@@ -546,7 +546,7 @@ end
                 fprintf('                                              Primal-                  Dual-                   Sub-       Sub- \n');
                 fprintf('Iteration Step-length  Dual-change/Percent    optimality   Tolerance   optimality   Tolerance  Iterations Evaluations\n');
                 cprintf('*text', ...
-                        'â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”\n');
+                        'â€”â?”â?”â?”â?”â?”â?”â?”â?? â€”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?? â€”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?? â€”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?? â€”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?? â€”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?? â€”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?? â€”â?”â?”â?”â?”â?”â?”â?”â?”â?? â€”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”\n');
             end
             fprintf('%8d  %10.2f  %10G %10.4G   %10.4G  %10.4G   %10.4G  %10.4G  %9d   %9d \n',...
                 k, r, fval_change, optimal_gap, re_norm, tol_primal, se_norm, tol_dual, num_iters, num_funccount);
@@ -656,7 +656,7 @@ end
 fprintf('                                              Primal-                  Dual-                   Sub-       Sub- \n');
 fprintf('Iteration Step-length       Dual-change       optimality   Tolerance   optimality   Tolerance  Iterations Evaluations\n');
 cprintf('*text', ...
-        'â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€” â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”â€”\n');
+        'â€”â?”â?”â?”â?”â?”â?”â?”â?? â€”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?? â€”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?? â€”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?? â€”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?? â€”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?? â€”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?? â€”â?”â?”â?”â?”â?”â?”â?”â?”â?? â€”â?”â?”â?”â?”â?”â?”â?”â?”â?”â?”\n');
 fprintf('%8d  %10.2f  %10G %10.8G   %10.8G  %10.8G   %10.8G  %10.8G  %9d   %9d \n',...
     100, 15.67,  12.3456, 0.012, 0.0011, 0.00012, 1.0234, 0.12345, 20, 45);
 %}

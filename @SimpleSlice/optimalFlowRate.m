@@ -35,28 +35,28 @@ NV = this.NumberVNFs;
 NP = this.NumberPaths;
 % Coefficient for process-rate constraints
 nnz_As = nnz(this.As_res) + NV*nnz(this.I_dc_path) + nnz(this.I_edge_path);
-num_lcon = this.num_lcon_res + NC + NL;
-parameters.As = spalloc(num_lcon, this.num_vars, nnz_As);
-parameters.As(1:this.num_lcon_res,:) = this.As_res;
+num_lcon = this.NumberLinearConstraints + NC + NL;
+parameters.As = spalloc(num_lcon, this.NumberVariables, nnz_As);
+parameters.As(1:this.NumberLinearConstraints,:) = this.As_res;
 
 %% Add node and link capacity constraint coefficient
-row_index = this.num_lcon_res + (1:NC);
+row_index = this.NumberLinearConstraints + (1:NC);
 col_index = NP + (1:this.num_varz);
 parameters.As(row_index, col_index) = this.Hrep;
-row_index = (1:NL) + this.num_lcon_res + NC;
+row_index = (1:NL) + this.NumberLinearConstraints + NC;
 parameters.As(row_index, 1:NP) = this.I_edge_path; 
 
 %% Boundary
 % * *Resource Constraints*: processing-rate, the right side is all-zero; capacity
 % constraints, the right side is the capacity of link and node;
-parameters.bs = [sparse(this.num_lcon_res,1); 
+parameters.bs = [sparse(this.NumberLinearConstraints,1); 
     this.ServiceNodes.Capacity;
     this.Links.Capacity];
 %%%
 % * *Upper Bound*: Not necessary, to facilitate the algorithm, we give a relaxed
 % upper-bound.
 % max(this.Parent.readLink('Capacity'))*ones(NP,1);...
-%     max(this.Parent.readDataCenter('Capacity'))*ones(this.num_vars-NP,1)
+%     max(this.Parent.readDataCenter('Capacity'))*ones(this.NumberVariables-NP,1)
 parameters.ub = [];
 %%%
 % * Remove the capacity constraints with infinity capacity;
@@ -67,7 +67,7 @@ parameters.bs(idx) = [];
 %% Feasible test of start point
 % * *Start Point*: in case that the capacity of a virtual link/node is zero, we initialize
 % $z_{min}$ and $x_{min}$ as the nonzero minimum value.
-parameters.x0 = zeros(this.num_vars,1);
+parameters.x0 = zeros(this.NumberVariables,1);
 if options.SlicingMethod == SlicingMethod.SingleFunction
 	max_alpha_f = max(options.Alpha_f);
 else
@@ -107,10 +107,10 @@ if strcmpi(options.Form, 'compact')
     if ~isempty(parameters.ub)
         parameters.ub = parameters.ub(this.I_active_variables);
     end
-    options.num_orig_vars = this.num_vars; 
+    options.num_orig_vars = this.NumberVariables; 
     options.bCompact = true;
 else
-    parameters.lb = sparse(this.num_vars,1);
+    parameters.lb = sparse(this.NumberVariables,1);
 end
 options.fmincon_opt.HessianFcn = ...
     @(x,lambda)SimpleSlice.fcnHessian(x, lambda, this, options);

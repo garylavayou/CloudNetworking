@@ -23,7 +23,7 @@ if isfield(options, 'bCompact') && options.bCompact
     vars = full_vars;
 end
 var_x = vars(1:slice.NumberPaths);
-var_z = vars((slice.NumberPaths+1):slice.num_vars);
+var_z = vars((slice.NumberPaths+1):slice.NumberVariables);
 link_load = slice.getLinkLoad(var_x);    % equal to <getLinkCapacity>
 node_load = slice.getNodeLoad(var_z);
 flow_rate = slice.getFlowRate(var_x);
@@ -71,7 +71,7 @@ if nargout == 2
     % $$ \frac{\partial f}{\partial x(p)} =
     %    -\frac{w}{1+\sum_{p_0\in\mathcal{P}}{q_{i_p,p_0}\cdot x_{p_0}}} +
     %    \sum_{e\in p}{\rho^{'}_e\cdot g_{e,p}},~~ \forall p\in\mathcal{P}$$
-    gd = spalloc(slice.num_vars, 1, ...
+    gd = spalloc(slice.NumberVariables, 1, ...
         slice.NumberPaths+nnz(slice.I_dc_path)*slice.NumberVNFs);
     for p = 1:slice.NumberPaths
         i = slice.path_owner(p);

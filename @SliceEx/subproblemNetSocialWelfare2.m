@@ -10,15 +10,15 @@ function [fval, node_load, link_load] = subproblemNetSocialWelfare2( this, lambd
 % |dg_pf|, |dg_p|, |dg_npf| is the inrement of gradient on lambda.
 global DEBUG;
 %% Set the feasible start point
-x0 = zeros(this.num_vars,1);
+x0 = zeros(this.NumberVariables,1);
 x0(1:this.NumberPaths) = 1;
 alpha_max = max(this.Parent.VNFTable.ProcessEfficiency(this.VNFList));
 x0((this.NumberPaths+1):end) = alpha_max;
 if ~this.checkFeasible(x0)
     error('error: infeasible start point.');
 end
-bs = sparse(this.num_lcon_res,1);
-lbs = sparse(this.num_vars,1);
+bs = sparse(this.NumberLinearConstraints,1);
+lbs = sparse(this.NumberVariables,1);
 % node_capacity = this.Parent.readNode('Capacity', this.VirtualNodes.PhysicalNode);
 % ubs = [inf*ones(this.NumberPaths,1);
 %     repmat(node_capacity, this.NumberPaths*this.NumberVNFs, 1)];

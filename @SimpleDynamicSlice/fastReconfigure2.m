@@ -34,7 +34,7 @@ this.old_variables.v = this.Variables.v;
 this.update_reconfig_costv();              % update reconfigure cost with scaler.
 %%
 % List of constraints:
-%   (1) flow processing requirement: NP*NV (this.num_lcon_res);
+%   (1) flow processing requirement: NP*NV (this.NumberLinearConstraints);
 %   (2) VNF instance capacity constraint: NV*NN (this.num_varv); VNF load
 %       (y_nf) is no more than VNF instance capacity (v_nf);
 %   (3) Node capacity constraint: NN; VNF instance capacity is no more than
@@ -46,18 +46,18 @@ this.update_reconfig_costv();              % update reconfigure cost with scaler
 %   (5) link reconfiguration cost constraint: 2*NP;
 %   (6) node reconfiguration cost constraint: 2*NN*NP*NV (2*this.num_varz);
 %   (5) VNF instance reconfiguration cost constraint: 2*NV*NN;
-num_lcon = this.num_lcon_res + this.num_varv + NN + NL + ...
+num_lcon = this.NumberLinearConstraints + this.num_varv + NN + NL + ...
     2*NP + 2*this.num_varz + 2*this.num_varv;
 nnz_As = nnz(As_res) + (nnz(this.Hdiag)+this.num_varv) + nnz(this.Hrep) + nnz(this.I_edge_path) + ...
     + 4*NP + 4*this.num_varz+ 4*this.num_varv;
-num_vars = 2*this.num_vars + 2*this.num_varv;
+num_vars = 2*this.NumberVariables + 2*this.num_varv;
 As = spalloc(num_lcon, num_vars, nnz_As);
-As(1:this.num_lcon_res,1:this.num_vars) = As_res;
-row_offset = this.num_lcon_res;
+As(1:this.NumberLinearConstraints,1:this.NumberVariables) = As_res;
+row_offset = this.NumberLinearConstraints;
 As(row_offset+(1:this.num_varv), NP+(1:this.num_varz)) = this.Hdiag;
-As(row_offset+(1:this.num_varv), this.num_vars+(1:this.num_varv)) = -eye(this.num_varv);
+As(row_offset+(1:this.num_varv), this.NumberVariables+(1:this.num_varv)) = -eye(this.num_varv);
 row_offset = row_offset + this.num_varv;
-As(row_offset+(1:NN), this.num_vars+(1:this.num_varv)) = repmat(eye(NN),1,NV);
+As(row_offset+(1:NN), this.NumberVariables+(1:this.num_varv)) = repmat(eye(NN),1,NV);
 row_offset = row_offset + NN;
 As(row_offset+(1:NL), 1:NP) = this.I_edge_path;
 row_offset = row_offset + NL;
@@ -67,19 +67,19 @@ row_offset = row_offset + NP;
 As(row_offset+(1:NP), 1:NP) = -eye(NP);
 As(row_offset+(1:NP), num_vars/2+(1:NP)) = -eye(NP);
 row_offset = row_offset + NP;
-As(row_offset+(1:this.num_varz), (NP+1):this.num_vars) = eye(this.num_varz);
+As(row_offset+(1:this.num_varz), (NP+1):this.NumberVariables) = eye(this.num_varz);
 As(row_offset+(1:this.num_varz), (num_vars/2+NP)+(1:this.num_varz)) = -eye(this.num_varz);
 row_offset = row_offset + this.num_varz;
-As(row_offset+(1:this.num_varz), (NP+1):this.num_vars) = -eye(this.num_varz);
+As(row_offset+(1:this.num_varz), (NP+1):this.NumberVariables) = -eye(this.num_varz);
 As(row_offset+(1:this.num_varz), (num_vars/2+NP)+(1:this.num_varz)) = -eye(this.num_varz);
 row_offset = row_offset + this.num_varz;
-As(row_offset+(1:this.num_varv), (this.num_vars+1):num_vars/2) = eye(this.num_varv);
-As(row_offset+(1:this.num_varv), (num_vars/2+this.num_vars+1):end) = -eye(this.num_varv);
+As(row_offset+(1:this.num_varv), (this.NumberVariables+1):num_vars/2) = eye(this.num_varv);
+As(row_offset+(1:this.num_varv), (num_vars/2+this.NumberVariables+1):end) = -eye(this.num_varv);
 row_offset = row_offset + this.num_varv;
-As(row_offset+(1:this.num_varv), (this.num_vars+1):num_vars/2) = -eye(this.num_varv);
-As(row_offset+(1:this.num_varv), (num_vars/2+this.num_vars+1):end) = -eye(this.num_varv);
+As(row_offset+(1:this.num_varv), (this.NumberVariables+1):num_vars/2) = -eye(this.num_varv);
+As(row_offset+(1:this.num_varv), (num_vars/2+this.NumberVariables+1):end) = -eye(this.num_varv);
 
-bs = [sparse(this.num_lcon_res+this.num_varv,1);
+bs = [sparse(this.NumberLinearConstraints+this.num_varv,1);
     this.ServiceNodes.Capacity; % The field will only change in slice dimensionging.
     this.Links.Capacity;
     this.topts.old_variables_x;       % which have been pre-processed, so it can be
@@ -95,7 +95,7 @@ var0 = [this.topts.old_variables_x;
     %     this.topts.old_variables_x;
     %     this.topts.old_variables_z;
     %     this.old_variables.v
-    zeros(this.num_vars+this.num_varv,1)
+    zeros(this.NumberVariables+this.num_varv,1)
     ];
 assert(this.checkFeasible(var0), 'error: infeasible start point.');
 
@@ -113,7 +113,7 @@ if strcmpi(options.Form, 'compact')
         NV,1));
     this.I_active_variables = [true(NP,1);  z_filter;  true(this.num_varv,1);...
         true(NP,1); z_filter; true(this.num_varv,1)];
-    row_offset = this.num_lcon_res + this.num_varv + NN + NL + 2*NP;
+    row_offset = this.NumberLinearConstraints + this.num_varv + NN + NL + 2*NP;
     active_rows = [(1:row_offset)'; row_offset+find(z_filter); ...
         row_offset+this.num_varz+find(z_filter); ...
         ((num_lcon-2*this.num_varv+1):num_lcon)'];

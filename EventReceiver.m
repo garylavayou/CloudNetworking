@@ -4,10 +4,10 @@ classdef (Abstract, HandleCompatible) EventReceiver
         event = struct('Count', 0);     %statistics of events
     end
     
-    methods(Static, Abstract)
+    methods(Abstract)
         eventhandler(this, source, eventData);
-    end
-    
+		end
+		
     methods(Sealed)
         function tf = eq(b, a)
             tf = eq@handle(b,a);
