@@ -1,0 +1,3 @@
+classdef SimpleDynamicSliceOptimizer < SimpleSliceOptimizer
+	
+end

@@ -1,140 +1,47 @@
 %%  Network Slice
 % Support network resource allocation scheme.
 %%
-classdef SimpleSlice < Slice & EventReceiver
-	properties (Dependent)
-		NumberPaths;					% Number of paths in the slice
-	end
-	% Specify the properties that can only be modified by Physcial Network directly
-	properties
-		temp_vars = struct; % [x,z]: temporary variables that will not be rounded.
-		Variables;          % [x,z]: final results from |temp_vars|, with rounding.
-		weight;             % weight for the slice user's utility.
-		As_res;             % coefficient matrix of the processing constraints
-		prices;
-	end
-	
+classdef SimpleSlice < Slice
 	properties (Access = protected)
-		% coefficient used to compute node resource consumption.
-		% is a function of node-path incident matrix (I_dc_path).
-		Hrep;
-		% coefficient used to compute VNF intance capacity
-		% is a function of node-path incident matrix (I_dc_path).
-		Hdiag;
-		x0;                 % start point
-		link_load;          % temporary results of link load.
-		node_load;          % temporary results of node load.
-		flow_rate;          % temporary results of flow rate.
-		I_active_variables logical;  % indicator of active variables
+    % 		link_load;          % temporary results of link load.
+    % 		node_load;          % temporary results of node load.
 	end
 	properties(Dependent, GetAccess={?CloudNetwork})
-		num_vars;           % number of optimization variables in the problem
-		num_varz;           % number of variables in vector z_npf
-		num_lcon_res;       % number of linear constraints
 		% local_path_id;
 	end
 	
 	methods
 		function this = SimpleSlice(slice_data)
-			if nargin == 0
-				return;
-			end
+      if nargin == 0
+        return;
+      end
 			this@Slice(slice_data);
-			%%%
-			% Link price
-			if isfield(slice_data, 'LinkPrice')
-				this.Links.Price = slice_data.LinkPrice;
-			else
-				this.Links.Price  = zeros(this.NumberLinks,1);
-			end
-			%%%
-			% Data center node price
-			if isfield(slice_data, 'NodePrice')
-				this.ServiceNodes.Price = slice_data.NodePrice;
-			else
-				this.ServiceNodes.Price = zeros(this.NumberSeviceNodes,1);
-			end
-			
-			if isfield(slice_data,'Weight')
-				this.weight = slice_data.Weight;
-			end
+      this.op = SimpleSliceOptimizer(this);     			
 			
 			this.options = structmerge(this.options, ...
 				getstructfields(slice_data, 'SlicingMethod', 'default', SlicingMethod.AdjustPricing),...
 				getstructfields(slice_data, 'PricingPolicy', 'ignore'));
-			
-			this.getAs_res;
-			this.getHrep;
-			this.getHdiag;
-		end
+    end
 		
-		%%
-		% see also <Finalize>, <isFinal>.
-		function initialize(this, prices)
-			if nargin >= 2
-				this.Links.Price = prices.Link;
-				this.ServiceNodes.Price = prices.Node;
-			end
-			this.ServiceNodes{:,'Load'} = 0;
-			this.Links{:,'Load'} = 0;
-			this.ServiceNodes{:,'Capacity'} = 0;
-			this.Links{:,'Capacity'} = 0;
-		end
 		
-		function finalize(this, prices)
-			if this.NumberFlows == 0
-				this.temp_vars.x = [];
-				this.temp_vars.z = [];
-				this.Variables.x = [];
-				this.Variables.z = [];
-				this.ServiceNodes{:,'Load'} = 0;
-				this.Links{:,'Load'} = 0;
-				this.ServiceNodes{:,'Capacity'} = 0;
-				this.Links{:,'Capacity'} = 0;
-			else
-				% subclass inctance may have different implementation of _postProcessing_, it
-				% is recommended, that the subclass maintains the default behavior of this
-				% function.
-				this.postProcessing();
-				this.ServiceNodes.Load = this.getNodeLoad();
-				this.Links.Load = this.getLinkLoad();
-				this.ServiceNodes.Capacity = this.ServiceNodes.Load;
-				this.Links.Capacity = this.Links.Load;
-				%this.setPathBandwidth;
-				this.FlowTable.Rate = this.getFlowRate;
-			end
-			if nargin >= 2 && ~isempty(prices.Node)
-				this.ServiceNodes.Price = node_price(this.getDCPI);
-			end
-			if nargin >= 3 && ~isempty(prices.Link)
-				this.Links.Price = link_price(this.Links.PhysicalLink);
-			end
-		end
-		
-		function tf = isFinal(this)
-			if this.Links.Price==0 % true if all elements is zero
-				% At the beginning of optimization, the price vector is set to 0.
-				% See also <CloudNetwork.optimizeResourcePriceNew>.
-				tf = false;
-			elseif this.ServiceNodes.Price == 0
-				tf = false;
-			else
-				% If the slice is not redimensioned, the price vector is nonzero.
-				tf = true;
-			end
-			
-		end
-		
-	end
-	
-	methods
-		function p = get.NumberPaths(this)
-			p = 0;
-			for i=1:this.NumberFlows
-				p = p + this.FlowTable.Paths(i).Width;
-			end
-		end
-	end
+    function tf = isFinal(this)
+      if this.Links.Price==0 % true if all elements is zero
+        % At the beginning of optimization, the price vector is set to 0.
+        % See also <CloudNetwork.optimizeResourcePriceNew>.
+        tf = false;
+      elseif this.ServiceNodes.Price == 0
+        tf = false;
+      else
+        % If the slice is not redimensioned, the price vector is nonzero.
+        tf = true;
+      end
+      
+    end
+    
+    function eventhandler(this, source, eventData) %#ok<INUSD>
+    end
+
+  end
 	
 	methods
 
@@ -193,18 +100,7 @@ classdef SimpleSlice < Slice & EventReceiver
 			this.Hdiag = Hs;
 		end
 		
-		function n = get.num_vars(this)
-			n = (this.NumberVNFs*this.NumberServiceNodes+1)*this.NumberPaths;
-		end
-		
-		function n = get.num_varz(this)
-			n = this.NumberVNFs*this.NumberServiceNodes*this.NumberPaths;
-		end
-		
-		function n = get.num_lcon_res(this)
-			n = size(this.As_res,1);
-		end
-		
+
 		function setPathBandwidth(this, x)
 			if nargin == 1
 				x = this.Variables.x;
@@ -308,7 +204,7 @@ classdef SimpleSlice < Slice & EventReceiver
 			if nargin <= 1 || isempty(vars)
 				vars = [this.Variables.x; this.Variables.z];
 			else
-				vars = vars(1:this.num_vars);
+				vars = vars(1:this.NumberVariables);
 			end
 			if nargin >=3 && isfield(opt_opts, 'ConstraintTolerance')
 				b = isempty(find(this.As_res*vars>opt_opts.ConstraintTolerance,1));
@@ -316,12 +212,7 @@ classdef SimpleSlice < Slice & EventReceiver
 				b = isempty(find(this.As_res*vars>1e-10,1));
 			end
 		end
-		
-
-		
-		function eventhandler(~, ~, ~)
-		end
-		
+				
 		function tf = isDynamicFlow(~)
 			tf = false;
 		end
@@ -527,7 +418,7 @@ classdef SimpleSlice < Slice & EventReceiver
 			NV = this.NumberVNFs;       % For 'single-function', NV=1.
 			nnz_As = NV*(NP+nnz(this.I_dc_path));
 			num_lcon = NP*NV;
-			As = spalloc(num_lcon, this.num_vars, nnz_As);
+			As = spalloc(num_lcon, this.NumberVariables, nnz_As);
 			row_index = 1:NP;
 			for f = 1:NV
 				if nargin >= 3   % used when treat all VNFs as one function.

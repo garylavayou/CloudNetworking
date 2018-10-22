@@ -1,6 +1,7 @@
-classdef Slice < VirtualNetwork	
+classdef Slice < VirtualNetwork
 	properties
 		Type;           % Type from slice template
+		weight;         % weight for the slice user's utility.
 		
 		FlowTable;      % flow information in the slice
 		VNFList;        % List of virtual network functions in the slice
@@ -13,15 +14,17 @@ classdef Slice < VirtualNetwork
 		% the associated flow of path, to provide a fast inquiry method for associated
 		% flow than using |I_flow_path|.
 		path_owner;
+    op;
 	end
 	
 	properties (Dependent)
 		NumberFlows;					% Number of flows in the slice
+		NumberPaths;					% Number of paths in the slice
 		NumberVNFs;						% Number of virtual network functions in the slice
+    Optimizer;
 	end
 	
 	methods (Abstract)
-		
 	end
 	
 	methods
@@ -30,9 +33,26 @@ classdef Slice < VirtualNetwork
 				return;
 			end
 			this@VirtualNetwork(slice_data);
-
+			
 			if isfield(slice_data, 'Type')
 				this.Type = slice_data.Type;
+			end
+			if isfield(slice_data,'Weight')
+				this.weight = slice_data.Weight;
+			end
+			%%%
+			% Link price
+			if isfield(slice_data, 'LinkPrice')
+				this.Links.Price = slice_data.LinkPrice;
+			else
+				this.Links.Price  = zeros(this.NumberLinks,1);
+			end
+			%%%
+			% Data center node price
+			if isfield(slice_data, 'NodePrice')
+				this.ServiceNodes.Price = slice_data.NodePrice;
+			else
+				this.ServiceNodes.Price = zeros(this.NumberSeviceNodes,1);
 			end
 			
 			% Flow Table
@@ -58,9 +78,41 @@ classdef Slice < VirtualNetwork
 			for f = 1:this.NumberFlows
 				delete(this.FlowTable{f,'Paths'});
 			end
-		end
+    end
 		
-	end
+    % function eventhandler(this, source, eventData) [Abstract]
+    
+    %% Reset the resource allocation state of a slice
+    % see also <Finalize>, <isFinal>.
+    function initialize(this, prices)
+      if nargin >= 2
+        this.Links.Price = prices.Link;
+        this.ServiceNodes.Price = prices.Node;
+      end
+      this.ServiceNodes{:,'Load'} = 0;
+      this.Links{:,'Load'} = 0;
+      this.ServiceNodes{:,'Capacity'} = 0;
+      this.Links{:,'Capacity'} = 0;
+    end
+    
+    function finalize(this, prices)
+      % subclass inctance may have different implementation of _postProcessing_, it
+      % is recommended, that the subclass maintains the default behavior of this
+      % function.
+      this.postProcessing();
+      this.ServiceNodes.Load = this.getNodeLoad();
+      this.Links.Load = this.getLinkLoad();
+      this.ServiceNodes.Capacity = this.ServiceNodes.Load;
+      this.Links.Capacity = this.Links.Load;
+      %this.setPathBandwidth;
+      this.FlowTable.Rate = this.getFlowRate;
+      
+      if nargin >= 2
+        this.ServiceNodes.Price = prices.Node(this.getDCPI);
+        this.Links.Price = prices.Link(this.Links.PhysicalLink);
+      end
+    end
+  end
 	
 	methods (Access = protected)
 		function newobj = copyElement(this)
@@ -71,18 +123,28 @@ classdef Slice < VirtualNetwork
 				% 'Paths' is a handle object, is should be copyed to the new table.
 				newobj.FlowTable{f,'Paths'} = this.FlowTable{f,'Paths'}.copy;
 			end
-		end
-		
+        end
 	end
 	
-	methods 
+	methods
 		function f = get.NumberFlows(this)
 			f = height(this.FlowTable);
-		end
-		
+    end
+    
+		function p = get.NumberPaths(this)
+			p = 0;
+			for i=1:this.NumberFlows
+				p = p + this.FlowTable.Paths(i).Width;
+			end
+    end	
+    
 		function n = get.NumberVNFs(this)
 			n = length(this.VNFList);
-		end
+    end
+    
+    function op = get.Optimizer(this)
+      op = this.op;
+    end
 	end
 	
 	methods

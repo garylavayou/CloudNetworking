@@ -1,0 +1,3 @@
+classdef NormalSliceOptimizer < SliceOptimizer
+	
+end
