@@ -162,6 +162,6 @@ if nargout >= 1    % final results
     this.ServiceNodes.Load = this.getNodeLoad;
 end
 if nargout >= 2
-    cost = this.getSliceCost(options.PricingPolicy);   % method is overrided by subclasses.
+    cost = this.getCost(options.PricingPolicy);   % method is overrided by subclasses.
 end
 end

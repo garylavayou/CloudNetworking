@@ -31,7 +31,7 @@ As_res = this.As_res;        % update As_res
 % 'FastReconfig2' reconfigure VNF instance. After the slice is created, |VNFCapacity| is recorded.
 % After each optimization, the |VNFCapacity| is updated.
 this.old_variables.v = this.Variables.v;  
-this.update_reconfig_costv();              % update reconfigure cost with scaler.
+this.update_reconfig_costvinfo();              % update reconfigure cost with scaler.
 %%
 % List of constraints:
 %   (1) flow processing requirement: NP*NV (this.NumberLinearConstraints);
@@ -164,7 +164,7 @@ this.FlowTable.Rate = this.getFlowRate;
 this.Links.Load = this.getLinkLoad;
 this.ServiceNodes.Load = this.getNodeLoad;
 if nargout >= 1
-    cost = this.getSliceCost(options.PricingPolicy, 'const');
+    cost = this.getCost(options.PricingPolicy, 'const');
     rc_linear = this.get_reconfig_cost('linear', true);
     profit = -fval - cost + rc_linear;
 end

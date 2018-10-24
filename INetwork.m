@@ -1,6 +1,6 @@
 %% Virtual Network
 % Define resource information in a network.
-classdef (Abstract) INetwork < matlab.mixin.Copyable & matlab.mixin.Heterogeneous & EventReceiver
+classdef (Abstract) INetwork < BaseCopyable & matlab.mixin.Heterogeneous
 	properties
 		Identifier uint64;
 		

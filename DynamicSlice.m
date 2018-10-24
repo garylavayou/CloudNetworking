@@ -1,4 +1,4 @@
-classdef (Abstract) DynamicSlice < EventSender & Slice
+classdef (Abstract) DynamicSlice < EventSender & EventReceiver & Slice
   %DynamicSlice Event-driven to dynamic configure slice.
   properties
     FlowArrivalRate;
@@ -12,7 +12,9 @@ classdef (Abstract) DynamicSlice < EventSender & Slice
     b_adhoc_flows = zeros(1000,1);  % only record a window of flows.
     num_total_arrive = 0;
     net_changes = struct();
+		old_state;
     old_net_state;
+		reject_index;
   end
   
   events
@@ -22,6 +24,21 @@ classdef (Abstract) DynamicSlice < EventSender & Slice
     RemoveFlowFailed;       % NOT used.
     RequestDimensioning;    % request slice dimensioning at once
     DeferDimensioning;      % defer slice dimensioning until the network makes dicision.
+  end
+  
+  methods (Abstract)
+    fidx = OnAddingFlow(this, flows);
+    
+    ef = OnRemovingFlow(this, fid);
+    
+    ds = diffstate(this, isfinal);
+    stat = get_reconfig_stat(this, stat_names);
+		release_resource_description(this);
+  end
+  
+  methods (Abstract, Access=protected)
+    s = save_state(this);
+    restore_state(this);
   end
   
   methods
@@ -46,6 +63,8 @@ classdef (Abstract) DynamicSlice < EventSender & Slice
     end
     
     function finalize(this, prices)
+      finalize@Slice(this, prices);
+
       if this.NumberFlows == 0
         this.op.clear();
         this.ServiceNodes{:,'Load'} = 0;
@@ -53,16 +72,33 @@ classdef (Abstract) DynamicSlice < EventSender & Slice
         this.ServiceNodes{:,'Capacity'} = 0;
         this.Links{:,'Capacity'} = 0;
       else
-        finalize@Slice(this, prices);
+        %% Reconfiguration Cost
+        % intra-slice reconfiguration: the flow reassignment cost and the VNF
+        % instance reconfiguration cost is denpendent on the resource
+        % consummption in the slice;
+        % inter-slice reoncfiguration: the VNF node resource allocation cost is
+        % dependent on the total load of the substrat network.
+        % if strcmp(this.options.PricingPolicy, 'quadratic-price')
+        [~, this.Links.ReconfigCost] = this.op.fcnLinkPricing(...
+          this.Links.Price, this.Links.Capacity);
+        eta = this.op.GLOBAL_OPTIONS.get('eta');
+        this.Links.ReconfigCost = ...
+          (eta/this.time.ConfigureInterval) * this.Links.ReconfigCost;
+        % here the |node_price| is the price of all data centers.
+        [~, this.ServiceNodes.ReconfigCost] = this.op.fcnNodePricing(...
+          this.ServiceNodes.Price, this.ServiceNodes.Capacity);
+        this.ServiceNodes.ReconfigCost = ...
+          (eta/this.time.ConfigureInterval) * this.ServiceNodes.ReconfigCost;
       end
+      % end
+      this.op.init_reconfig_info();
     end
+    
   end
   
   methods
     function eventhandler(this, source, eventData) %#ok<INUSL>
       global DEBUG; %#ok<NUSED>
-      %             target = eventData.targets;
-      % where target should be the owner of arriving flows
       sl = eventData.slice;
       if sl ~= this  % filter message
         return;
@@ -129,14 +165,14 @@ classdef (Abstract) DynamicSlice < EventSender & Slice
     end
     
     %%%
-    % * *getSliceCost*
-    % Get the cost of creating a slice, overriding <Slice.getSliceCost>. The cost
+    % * *getCost*
+    % Get the cost of creating a slice, overriding <Slice.getCost>. The cost
     % including resource consumption cost and reconfiguration cost.
-    %   cost = getSliceCost(this, pricing_policy, reconfig_cost_model)
+    %   cost = getCost(this, pricing_policy, reconfig_cost_model)
     % |reconfig_cost_model|: reconfigure cost model, including: |'const'|,
     % |'linear'|, and |'none'|. If |'none'| is adopted, then the reconfiguration cost
     % is not counted.
-    function cost = getSliceCost(this, pricing_policy, reconfig_cost_model)
+    function cost = getCost(this, pricing_policy, reconfig_cost_model)
       if nargin<=1 || isempty(pricing_policy)
         pricing_policy = 'quadratic-price';
       end
@@ -163,21 +199,6 @@ classdef (Abstract) DynamicSlice < EventSender & Slice
       end
     end
     
-  end
-  
-  methods (Abstract)
-    fidx = OnAddingFlow(this, flows);
-    
-    ef = OnRemovingFlow(this, fid);
-    
-    ds = diffstate(this, isfinal);
-    stat = get_reconfig_stat(this, stat_names);
-    s = get_state(this);
-    set_state(this);
-    [profit, cost] = handle_zero_flow(this, new_opts);
-    identify_change(this, changed_path_index);
-    update_reconfig_cost(this, action, bDim);
-    [exitflag,fidx] = executeMethod(this, action);
   end
   
 end

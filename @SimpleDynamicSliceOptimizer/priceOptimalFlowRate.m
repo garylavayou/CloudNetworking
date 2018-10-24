@@ -73,7 +73,7 @@ else
     error('%s: invalid value ''Reserve=%.2f''for resource reservation.', calledby, options.Reserve);
 end
 if ~this.b_derive_vnf % this.invoke_method ~= 1
-    this.update_reconfig_cost(this.sh_options.action, true);
+    this.update_reconfig_costinfo(this.sh_options.action, true);
 end
 num_base_vars = this.NumberVariables + this.num_varv;
 num_vars = num_base_vars;

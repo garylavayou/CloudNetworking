@@ -44,8 +44,8 @@ profit = -sum(weight.*fcnUtility(flow_rate)) + slice.getResourceCost(node_load, 
 if isfield(options, 'bFinal') && options.bFinal
     profit = -profit;
 else
-    link_price = slice.link_unit_cost;
-    node_price = slice.node_unit_cost;
+    link_price = slice.LinkCost;
+    node_price = slice.NodeCost;
     gd = spalloc(length(vars),1, slice.NumberPaths+nnz(slice.I_dc_path)*slice.NumberVNFs);
     for p = 1:slice.NumberPaths
         i = slice.path_owner(p);

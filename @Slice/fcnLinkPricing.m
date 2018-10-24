@@ -23,8 +23,8 @@ a = (theta-1)*b.*aggr_link_usage(link_id)./this.Parent.readLink('Capacity', link
 
 %%%
 % When computing hession matrix, the first two output arguments are not needed.
-% [payment, grad] = fcnLinkPricing(��) is called in <fcnProfit>,
-% [~, ~, hess] = fcnLinkPricing(��) is called in <fcnHession>.
+% [payment, grad] = fcnLinkPricing(ρ) is called in <fcnProfit>,
+% [~, ~, hess] = fcnLinkPricing(ρ) is called in <fcnHession>.
 % See also <fcnNodePricing>
 if nargout == 3  
     pseudo_hess = a;

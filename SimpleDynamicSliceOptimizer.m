@@ -1,3 +1,0 @@
-classdef SimpleDynamicSliceOptimizer < SimpleSliceOptimizer
-	
-end

@@ -22,7 +22,8 @@ classdef (Abstract, HandleCompatible) IDynamicSliceOptimizer
     b_derive_vnf = true;
     b_dim = true;      % reset each time before reconfigurtion.
 		vnf_reconfig_cost;
-
+    old_state;
+		changed_index;
   end
   
 	properties (Access = protected)
@@ -47,20 +48,31 @@ classdef (Abstract, HandleCompatible) IDynamicSliceOptimizer
 			'index', 0, 'reserve_dev', 0);
 		invoke_method = 0;
 		old_variables;      % last one configuration, last time's VNF instance capcity is the |v| field;
-		old_state;
-		changed_index;
-		diff_state;         % reset each time before reconfiguration.
 		lower_bounds = struct([]);
 		upper_bounds = struct([]);
 		topts;              % used in optimization, avoid passing extra arguments.
-		reject_index;
 		max_flow_rate;
 		init_gamma_k;
 		init_q_k;
+		diff_state;         % reset each time before reconfiguration.
 
     raw_beta;
 		raw_cost;
 		raw_costv;
+  end
+
+  methods (Abstract)
+    [exitflag,fidx] = executeMethod(this, action);
+    s = save_state(this);
+    restore_state(this);
+  end
+  
+  methods (Abstract, Access = protected)
+    b = getbeta(this);
+    [profit, cost] = handle_zero_flow(this, new_opts);
+    identify_change(this, ~)
+    [total_cost, reconfig_cost] = get_reconfig_cost(this, model, isfinal);
+		update_reconfig_costinfo(this, action, bDim);
   end
   
   methods
@@ -135,39 +147,10 @@ classdef (Abstract, HandleCompatible) IDynamicSliceOptimizer
       end
     end
   
-    function b = getbeta(this)
-      field_names = {'x','z','v'};
-      if strcmpi(this.GET_BETA_METHOD, 'LeastSquare')
-        for i=1:2
-          b.(field_names{i}) = sum([this.raw_cost.const.(field_names{i})].*[this.raw_cost.linear.(field_names{i})])./ ...
-            sum([this.raw_cost.linear.(field_names{i})].^2);
-        end
-        b.v = sum(this.raw_costv.const.*this.raw_costv.linear)./ ...
-          sum(this.raw_costv.linear.^2);
-      else
-        if strcmpi(this.GET_BETA_METHOD, 'ExponentiaLMovingAverage')
-          a0 = 0.25;
-          for i=1:2
-            %                 b.(field_names{i}) = mean(this.raw_beta.(field_names{i}));
-            n = length(this.raw_beta.(field_names{i}));
-            alpha = zeros(n,1);
-            alpha(2:n) = a0 * (1-a0).^(n-2:-1:0);
-            alpha(1) = (1-a0)^(n-1);
-            b.(field_names{i}) = dot(alpha, this.raw_beta.(field_names{i}));
-          end
-        else
-          for i=1:2
-            b.(field_names{i}) = mean(this.raw_beta.(field_names{i}));
-          end
-        end
-        % v_nf >= sum_{p}{z_npf}
-        n_path = nnz(this.I_dc_path)/this.NumberServiceNodes;
-        b.v = b.z/n_path;
-      end
-    end
   end
   
   methods
     [profit,cost] = fastReconfigure(this, action, options);
+    [profit,cost, exitflag, fidx] = DimensioningReconfigure( this, action, new_opts );
   end
 end

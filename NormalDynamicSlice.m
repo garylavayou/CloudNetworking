@@ -85,7 +85,7 @@ classdef NormalDynamicSlice < NormalSlice & IDynamicSlice
 			end
 		end
 		
-		function s = get_state(this)
+		function s = save_state(this)
 			%% TODO
 		end
 		

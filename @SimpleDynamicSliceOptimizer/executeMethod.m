@@ -30,8 +30,8 @@ switch this.options.ReconfigMethod
         % cost.
         options.CostModel = 'fixcost';
         options.SlicingMethod = SlicingMethod.AdjustPricing;
-        this.prices.Link = this.VirtualLinks.Price;
-        this.prices.Node = this.VirtualDataCenters.Price;
+        this.prices.Link = this.hs.Links.Price;
+        this.prices.Node = this.hs.ServiceNodes.Price;
         profit = this.optimalFlowRate(options);
     case {ReconfigMethod.Fastconfig,ReconfigMethod.FastconfigReserve}
         profit = this.fastReconfigure(action);
@@ -59,7 +59,7 @@ mean_link_util = mean(link_util);
 %}
 
 % stat.Solution = this.Variables;
-stat = this.get_reconfig_stat();
+stat = this.hs.get_reconfig_stat();
 stat.Profit = profit;
 if ~isempty(DEBUG) && DEBUG 
     disp(stat);
@@ -75,15 +75,15 @@ switch this.options.ReconfigMethod
         stat.ReconfigType = ReconfigType.Dimensioning;
         if ~this.b_dim
             stat.ReconfigType = ReconfigType.FastReconfigure;
-        elseif this.options.Adhoc
+        elseif this.hs.options.Adhoc
             % If the slice do not support Adhoc flows, then we do not release resource
             % decriptors for the slice.
-            this.release_resource_description();
+            this.hs.release_resource_description();
         end
     case ReconfigMethod.DimBaseline
         if this.b_dim
-            if this.options.Adhoc'
-                this.release_resource_description();
+            if this.hs.options.Adhoc
+                this.hs.release_resource_description();
             end
             stat.ReconfigType = ReconfigType.Dimensioning;
         else
@@ -106,7 +106,7 @@ this.prices.Link = [];
 this.prices.Node = [];
 this.topts = struct();
 this.changed_index = struct();
-this.net_changes = struct();
+this.hs.net_changes = struct();
 this.b_dim = false;
 exitflag = 0;
 end

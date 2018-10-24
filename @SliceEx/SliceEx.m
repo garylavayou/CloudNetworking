@@ -35,8 +35,8 @@ classdef SliceEx < SimpleSlice
         %             end
         %         end
         function pc = getPathCost(this, lambda_e, lambda_n) 
-            link_uc = this.link_unit_cost;
-            node_uc = this.node_unit_cost;
+            link_uc = this.LinkCost;
+            node_uc = this.NodeCost;
             pc = cell(this.NumberFlows, 1);
             p = 1;
             for i = 1:this.NumberFlows
@@ -53,8 +53,7 @@ classdef SliceEx < SimpleSlice
         end
         
         %%%
-        % getSliceCost  When compute the static cost, the Capacity of all physical nodes
-        % and links is included.
+        % When compute the static cost, the Capacity of all physical nodes and links is included.
         % |epsilon/pn.NumberSlices| is a constant. To keep consistence with other methods,
         % this part should not be ignored. See also getNetworkCost and getStaticCost.
         % The calculation is not absolutely precise, since it cannot be decide that the
@@ -62,7 +61,7 @@ classdef SliceEx < SimpleSlice
         %
         % When calculate network cost as a single slice, this method equals to
         % _getNetworkCost_ .
-        function sc = getSliceCost(this, node_load, link_load, model)
+        function sc = getCost(this, node_load, link_load, model)
             if nargin <= 1 || isempty(node_load)
                 node_load = this.VirtualDataCenters.Load;
             end

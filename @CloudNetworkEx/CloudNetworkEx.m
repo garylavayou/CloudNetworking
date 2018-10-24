@@ -99,13 +99,13 @@ classdef CloudNetworkEx < CloudNetwork
             sl = AddSlice@CloudNetwork(this, slice_opt, varargin{:});
         end
         
-        function theta = utilizationRatio(this, node_load, link_load)
+        function theta = utilizationRatio(this, load)
             if nargin == 1
-                node_load = this.readDataCenter('Load');
-                link_load = this.readLink('Load');
+                load.Node = this.readDataCenter('Load');
+                load.Link = this.readLink('Load');
             end
-            theta_v = sum(node_load)/this.totalNodeCapacity;
-            theta_l = sum(link_load)/this.totalLinkCapacity;
+            theta_v = sum(load.Node)/this.totalNodeCapacity;
+            theta_l = sum(load.Link)/this.totalLinkCapacity;
             theta = this.delta*theta_v + (1-this.delta)*theta_l;
         end  
         

@@ -32,7 +32,8 @@ Nl = this.NumberLinks;
 Ndc = this.NumberServiceNodes;
 Nvnf = this.NumberVNFs;
 Np = this.NumberPaths;
-
+this.max_flow_rate = this.FlowTable.Rate;
+this.max_flow_rate(this.max_flow_rate==0) = inf;
 %%% Formulate input for convex optimization (fmincon).
 % The problem has multiple inequalities, and the lowerbounds for variables.
 %%
@@ -296,6 +297,8 @@ this.temp_vars.z = x((Np+1):this.NumberVariables);
 this.flow_rate = this.getFlowRate(this.temp_vars.x);
 this.postProcessing();
 this.FlowTable.Rate = this.getFlowRate;
+this.max_flow_rate(this.max_flow_rate==inf) = 0;
+this.max_flow_rate = max(this.FlowTable.Rate, this.max_flow_rate);
 %     if strcmpi(action, 'add') && this.options.bReserve && b_duo_opt
 %         fidx = find(this.FlowTable.Rate<=0.1*median(this.FlowTable.Rate), 1);
 %         if ~isempty(fidx)
@@ -313,7 +316,7 @@ this.setPathBandwidth;
 this.Links.Load = this.getLinkLoad;
 this.ServiceNodes.Load = this.getNodeLoad;
 if nargout >= 1
-    cost = this.getSliceCost(options.PricingPolicy, 'const');
+    cost = this.getCost(options.PricingPolicy, 'const');
     rc_linear = this.get_reconfig_cost('linear', true);
     profit = -fval - cost + rc_linear;
 end
