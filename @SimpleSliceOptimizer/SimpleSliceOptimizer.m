@@ -76,6 +76,14 @@ classdef SimpleSliceOptimizer < SliceOptimizer
       end
     end
     
+    function initializeProblem(this)
+      
+    end
+    
+    function setProblem(this)
+    
+    end
+    
     [utility, load] = priceOptimalFlowRate(this, x0, options);
     
     %% priceOptimalFlowRateCompact
