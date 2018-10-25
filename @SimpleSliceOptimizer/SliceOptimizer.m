@@ -1,7 +1,8 @@
-classdef SliceOptimizer
+classdef SliceOptimizer < handle
 	properties
     Variables;  % Variables after post processing.
-		prices;
+    prices;
+    capacities;
   end
   
   properties (Access = protected)
@@ -36,6 +37,7 @@ classdef SliceOptimizer
     % temp_vars = get_temp_variables(this);
     [x, fval] = optimize(this, params, options);
     [tf, vars] = postProcessing(this);
+    
   end
   
   %% Constructor
@@ -60,7 +62,23 @@ classdef SliceOptimizer
   
   %% Public Methods
   methods
-    function interpretExitflag(exitflag, foutput)
+  
+    function saveResults(this, result)
+      this.temp_vars = result.temp_vars;
+      this.flow_rate = result.flow_rate;
+      this.prices.Link = [];
+      this.prices.Node = [];
+      this.x0 = result.x0;
+    end
+
+    function setProblem(this, capacities, array, problem, indices)
+      if nargin >= 2
+        this.capacities.Link = capacities.Link(this.hs.Links.PhysicalLink);
+        this.capacities.Node = capacities.Node(this.hs.getDCPI);
+      end
+    end
+      
+     function interpretExitflag(exitflag, foutput)
       global DEBUG INFO;
       if nargin <= 1
         message = '';

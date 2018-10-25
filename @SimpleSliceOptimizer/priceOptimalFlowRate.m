@@ -11,8 +11,8 @@
 function [net_profit, node_load, link_load] = priceOptimalFlowRate(this, x0, options)
 global DEBUG INFO;
 options = structmerge(...
-    getstructfields(options, 'PricingPolicy', 'default', 'quadratic'),...
-    getstructfields(this.Parent.options, 'Form', 'default', 'normal'));
+    getstructfields(options, 'PricingPolicy', 'default', {'quadratic'}),...
+    getstructfields(this.Parent.options, 'Form', 'default', {'normal'}));
 
 NP = this.NumberPaths;
 NV = this.NumberVNFs;
