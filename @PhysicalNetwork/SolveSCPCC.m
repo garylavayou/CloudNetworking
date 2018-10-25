@@ -45,7 +45,7 @@ sp_profit = this.getSliceProviderProfit(prices, ...
   getstructfields(options, {'Slices','PricingPolicy'}, 'error'));
 if nargout >= 2
   if ~options.CapacityConstrained
-    violates = sum(loads,2) > options.Capacities;
+    violates = sum(loads,2) > [options.ResidualCapacity.Link; options.ResidualCapacity.Node];
     b_violate = ~isempty(find(violates,1));
   else
     violates = [];

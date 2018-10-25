@@ -1,6 +1,6 @@
 %% Subroutine: SCP
 % Solve the SCP with Dual-ADMM.
-function results = SolveSCP(this, slices, node_price, link_price, options)
+function results = SolveSCP0(this, slices, prices, options)
 %% Global Declaration
 global ITER_LIMIT; 
 if isempty(ITER_LIMIT)
@@ -78,7 +78,7 @@ while true
 		q = q_k(:,sj);
 		q = q(idx);
 		[gamma_k(:,sj), fval_gamma_k(sj), output_k{sj}] = ...
-			sl.priceOptimalFlowRate([], lambda, q, options);
+			sl.priceOptimalFlowRate0([], lambda, q, options);
 	end
 	if opt_order ~= 1
 		lambda_kminus = lambda_k;
@@ -138,9 +138,7 @@ fprintf('Dual-ADMM: elapsed time: %d\n', t2);
 loads = zeros(num_duals, num_process);
 for si = 1:num_process
 	sl = slices{si};
-	sl.saveResults(output_k{si});
-	sl.prices.Link = [];
-	sl.prices.Node = [];
+	sl.op.saveTempResults(output_k{si});
 	loads(:,si) = output_k{si}.loads;
 end
 this.init_gamma_k = mean(gamma_k, 2);
