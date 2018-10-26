@@ -1,4 +1,4 @@
-function results = SolveSCPDD(this, slices, node_price, link_price, options)		% Dual Decomposition
+function results = SolveSCPDD(this, slices, prices, options)		% Dual Decomposition
 M = getParallelInfo();
 %% Initialization parameters
 step_length = 0.001;
@@ -75,9 +75,7 @@ fprintf('Dual-Decomposition: elapsed time: %d\n', t2);
 
 for si = 1:Ns
 	sl = slices{si};
-	sl.saveResults(output_k{si});
-	sl.prices.Link = [];
-	sl.prices.Node = [];
+	sl.op.saveTempResults(output_k{si});
 end
 results.LinkPrice = lambda_k(1:this.NumberLinks) + link_price;
 results.NodePrice = lambda_k(this.NumberLinks+(1:this.NumberDataCenters)) + node_price;

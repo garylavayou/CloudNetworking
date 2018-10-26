@@ -45,7 +45,7 @@ for s = 1:length(options.Slices)
     %
     % The price is calculated accoding to optimization procedure.
 end
-argout.Welfare = argout.Welfare - this.getNetworkCost;
+argout.Welfare = argout.Welfare - this.totalCost;
 % calculate the profit of substrate network
 profit_table(end) = argout.Welfare - sum(profit_table(1:(end-1)));
 argout.Profit = profit_table;

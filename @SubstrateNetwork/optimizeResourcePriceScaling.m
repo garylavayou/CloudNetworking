@@ -182,10 +182,7 @@ end
 		end
 		for si = 1:Ns
 			sl = slices{si};
-			sl.saveResults(output_k{si});
-			sl.prices.Link = [];
-			sl.prices.Node = [];
-			sl.capacities = [];
+			sl.op.saveTempResults(output_k{si});
 		end
 		
 		%% Output

@@ -139,7 +139,7 @@ end
 load = this.getNetworkLoad;
 this.writeDataCenter('Load', load.Node);
 this.writeLink('Load', load.Link);
-prim_fval = prim_fval - this.getNetworkCost;
+prim_fval = prim_fval - this.totalCost;
 if ~isempty(DEBUG) && DEBUG
     fprintf('\tOptimal solution: fx = %G, g(��) = %G.\n', prim_fval, dual_fval);
     fprintf('\tIteration number: %d, Evaluation Number: %G.\n', iter_num, eval_num);

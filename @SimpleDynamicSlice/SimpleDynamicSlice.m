@@ -187,7 +187,7 @@ classdef SimpleDynamicSlice < DynamicSlice
 				end
 				if contains(stat_names{i},{'All', 'ResourceCost'},'IgnoreCase',true)
 					options = structmerge(options, ...
-						getstructfields(this.options, 'PricingPolicy', 'default', 'quadratic'));
+						getstructfields(this.options, 'PricingPolicy', 'default', {'quadratic'}));
 					stat.ResourceCost = this.getCost(options.PricingPolicy);
 				end
 				if contains(stat_names{i},{'All', 'FairIndex'},'IgnoreCase',true)

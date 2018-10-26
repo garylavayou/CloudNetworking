@@ -16,12 +16,12 @@ else
 	for i = 1:length(slices)
 		sl = slices{i};
 		node_capacity(sl.getDCPI) = node_capacity(sl.getDCPI) + ...
-			sl.VirtualDataCenters.Capacity;
-		link_capacity(sl.VirtualLinks.PhysicalLink) = ...
-			link_capacity(sl.VirtualLinks.PhysicalLink) + sl.VirtualLinks.Capacity;
+			sl.ServiceNodes.Capacity;
+		link_capacity(sl.Links.PhysicalLink) = ...
+			link_capacity(sl.Links.PhysicalLink) + sl.Links.Capacity;
 	end	
 end
-options.capacities = [link_capacity; node_capacity];
+options.Capacities = [link_capacity; node_capacity];
 Ns = length(slices);
 Ne = this.NumberLinks;
 Ndc = this.NumberDataCenters;
@@ -80,15 +80,15 @@ for j = 1:Ns
 end
 
 %% Trail Prices
-% Find the price 'αp' that possibly maximize the profit of SP.
+% Find the price '��' that possibly maximize the profit of SP.
 b_violate = true(3,1);
 k = 0;
 while true
-	trial_price_node = node_uc * 2^t;
-	trial_price_link = link_uc * 2^t;
+	trial_price.Node = node_uc * 2^t;
+	trial_price.Link = link_uc * 2^t;
 	b_violate(1:2) = b_violate(2:3);
 	sp_profit(1:2) = sp_profit(2:3);
-	[sp_profit(3), b_violate(3)] = this.SolveSCPCC(slices, trial_price_node, trial_price_link, options);
+	[sp_profit(3), b_violate(3)] = this.SolveSCPCC(slices, trial_price, options);
 	k = k + 1;
 	if sp_profit(3) <= sp_profit(2)
 		break;
@@ -104,9 +104,9 @@ b_violate_N = zeros(2,1);
 while abs(beta_L-beta_R)/beta_L > epsilon
 	beta_N = [beta_L*2+beta_R; beta_L+beta_R*2]/3;
 	for i = 1:2
-		trial_price_node = node_uc * beta_N(i);
-		trial_price_link = link_uc * beta_N(i);
-		[sp_profit_N(i), b_violate_N(i)]= this.SolveSCPCC(slices, trial_price_node, trial_price_link, options);
+		trial_price.Node = node_uc * beta_N(i);
+		trial_price.Link = link_uc * beta_N(i);
+		[sp_profit_N(i), b_violate_N(i)]= this.SolveSCPCC(slices, trial_price, capacities, options);
 		k = k + 2;
 	end
 	if sp_profit_N(1)<=sp_profit_N(2)
@@ -128,32 +128,30 @@ if ~b_violate_N(1)
 else
 	%%	Serach the final price
 	output.beta = (beta_L+beta_R)/2;
-	trial_price_node = node_uc * output.beta;
-	trial_price_link = link_uc * output.beta;
+	trial_price.Node = node_uc * output.beta;
+	trial_price.Link = link_uc * output.beta;
 	for j = 1:Ns
 		slices{j}.setProblem([], [], [], link_capacity/Ns, node_capacity/Ns);
 	end
 	switch iter_method
 		case 'PartialInverse'
-			tmp_output = this.SolveSCPPP(slices, trial_price_node, trial_price_link, options);
+			tmp_output = this.SolveSCPPP(slices, trial_price, options);
 		case 'DualDecomposition'
-			tmp_output = this.SolveSCPDD(slices, trial_price_node, trial_price_link, options);
+			tmp_output = this.SolveSCPDD(slices, trial_price, options);
 		case 'DualADMM'
-			tmp_output = this.SolveSCP(slices, trial_price_node, trial_price_link, options);			% return results
+			tmp_output = this.SolveSCP0(slices, trial_price, options);			% return results
 		otherwise
 			error('error: un-recognized method.');
 	end
 	k = k + tmp_output.numiters;
 	options.CapacityConstrained = true;
-	options.capacities = tmp_output.capacities;
-	[output.sp_profit, b] = this.SolveSCPCC(slices, tmp_output.NodePrice, ...
-		tmp_output.LinkPrice, options);
+  options.Capacities = tmp_output.capacities;
+  output.Prices = struct('Link', tmp_output.LinkPrice, 'Node',  tmp_output.NodePrice);
+	[output.sp_profit, b] = this.SolveSCPCC(slices, output.Prices, options);
 	k = k + 1;
 	if b
 		warning('%s: Capacity violation.', calledby);
 	end
-	output.LinkPrice = tmp_output.LinkPrice;
-	output.NodePrice = tmp_output.NodePrice;
 	output.procedure = 'dual-iter';
 end
 output.numiters = k;

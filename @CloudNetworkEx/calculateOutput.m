@@ -150,8 +150,8 @@ for s = 1:this.NumberSlices
     % *NOTE*: fcnProfit evalute the profit using offered price.
 end
 % if ~isempty(this.eta)
-%     embed_profit_approx = this.eta*this.getNetworkCost;
-%     embed_profit_accurate = this.getNetworkCost([], [], options.Model);
+%     embed_profit_approx = this.eta*this.totalCost;
+%     embed_profit_accurate = this.totalCost([], [], options.Model);
 % else
 %     embed_profit_approx = 0;
 %     embed_profit_accurate = 0;

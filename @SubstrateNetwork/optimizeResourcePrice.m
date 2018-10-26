@@ -25,9 +25,9 @@ else
 	for i = 1:NS
 		sl = slices{i};
 		node_capacity(sl.getDCPI) = node_capacity(sl.getDCPI) + ...
-			sl.VirtualDataCenters.Capacity;
-		link_capacity(sl.VirtualLinks.PhysicalLink) = ...
-			link_capacity(sl.VirtualLinks.PhysicalLink) + sl.VirtualLinks.Capacity;
+			sl.ServiceNodes.Capacity;
+		link_capacity(sl.Links.PhysicalLink) = ...
+			link_capacity(sl.Links.PhysicalLink) + sl.Links.Capacity;
 	end
 end
 st = rng;

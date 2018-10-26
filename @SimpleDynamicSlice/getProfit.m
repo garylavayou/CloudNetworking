@@ -30,7 +30,7 @@ if this.invoke_method == 0
 end
 
 options = structmerge(rmstructfields(options, 'bCompact'),...
-    getstructfields(options, 'PricingPolicy', 'default', 'quadratic'));
+    getstructfields(options, 'PricingPolicy', 'default', {'quadratic'}));
 bFinal = this.isFinal();
 
 options.bFinal = true;      % 'bFinal' is set to output the real profit (min -f => max f).

@@ -30,7 +30,7 @@ flow_rate = slice.getFlowRate(var_x);
 % Called by _optimalFlowRate_ as objective function;
 %%%
 %     profit = -sum(weight.*fcnUtility(flow_rate)) + ...
-%         S.Parent.getNetworkCost(node_load, link_load);
+%         S.Parent.totalCost(load);
 if isempty(slice.weight)        % for network as a single slice.    TODO: remove this block
     weight = slice.FlowTable.Weight;
 else                        % for network as multiple slice.

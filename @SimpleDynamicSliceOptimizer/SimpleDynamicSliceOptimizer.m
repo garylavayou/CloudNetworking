@@ -40,7 +40,12 @@ classdef SimpleDynamicSliceOptimizer < SimpleSliceOptimizer & IDynamicSliceOptim
 		% <initializeState>.
 		%         function As = getAs_res(this)
 		%         end
-        
+ 
+    function update_options(this, options)
+      update_options@IDynamicSliceOptimizer(this, options);
+      update_options@SimpleSliceOpitmizer(this, options);
+    end
+    
     function s = save_state(this)
       this.old_state.vnf_capacity = this.VNFCapacity;
       this.old_state.I_dc_path = this.I_dc_path;
@@ -120,7 +125,7 @@ classdef SimpleDynamicSliceOptimizer < SimpleSliceOptimizer & IDynamicSliceOptim
         end
         
         stat = this.hs.get_reconfig_stat();
-        options = getstructfields(this.options, 'PricingPolicy', 'default', 'quadratic');
+        options = getstructfields(this.options, 'PricingPolicy', 'default', {'quadratic'});
         options.bFinal = true;
         stat.Profit = this.hs.getProfit(options);
         stat.ReconfigType = ReconfigType.Dimensioning;

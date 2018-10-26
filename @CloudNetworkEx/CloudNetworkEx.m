@@ -140,25 +140,23 @@ classdef CloudNetworkEx < CloudNetwork
         %
         % When the network only include a single slice, this method equals to
         % _getSliceCost_ .
-        %         function c = getNetworkCost(this, node_load, link_load, model)
-        function c = getNetworkCost(this, node_load, link_load, model)
-            if nargin <=1 || isempty(node_load)
-                node_load = this.readDataCenter('Load');
-            end
-            if nargin <= 2 || isempty(link_load)
-                link_load = this.readLink('Load');
+        %         function c = totalCost(this, node_load, link_load, model)
+        function c = totalCost(this, load, model)
+            if nargin <=1 || isempty(load)
+                load.Node = this.readDataCenter('Load');
+                load.Link = this.readLink('Load');
             end
             if nargin <= 3
                 warning('model is set as Approximate.');
                 model = 'Approximate';
             end
             
-            c = getNetworkCost@CloudNetwork(this, node_load, link_load);
+            c = totalCost@PhysicalNetwork(this, load);
             if strcmp(model, 'Approximate')
-                c = c + this.getStaticCost(node_load, link_load);
+                c = c + this.totalStaticCost(load);
             elseif strcmp(model, 'Accurate')
                 if this.static_factor ~= 0
-                    b_deployed = node_load > 0;
+                    b_deployed = load.Node > 0;
                     c = c + sum(this.readDataCenter('StaticCost', b_deployed));
                 end
             else
@@ -278,9 +276,9 @@ classdef CloudNetworkEx < CloudNetwork
             end
             % if ~isempty(this.eta)
             %     embed_profit_approx = this.eta * ...
-            %         this.getNetworkCost(ss.VirtualNodes.Load, ss.VirtualLinks.Load, 'Approximiate');
+            %         this.totalCost(ss.VirtualNodes.Load, ss.VirtualLinks.Load, 'Approximiate');
             %     embed_profit_accurate = this.eta * ...
-            %         this.getNetworkCost(ss.VirtualNodes.Load, ss.VirtualLinks.Load, 'Accurate');
+            %         this.totalCost(ss.VirtualNodes.Load, ss.VirtualLinks.Load, 'Accurate');
             % else
             %     embed_profit_approx = 0;
             %     embed_profit_accurate = 0;

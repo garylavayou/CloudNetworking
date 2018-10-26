@@ -29,7 +29,7 @@ tb{1, 'Utilization'} = PN.utilizationRatio;
 tb{1, 'NodeUtilization'} = [r1, r2, r3, r4];
 [r1, r2, r3, r4] = PN.linkUtilization;
 tb{1, 'LinkUtilization'} = [r1, r2, r3, r4];
-tb{1, 'Cost'} = PN.getNetworkCost;
+tb{1, 'Cost'} = PN.totalCost;
 tb{1, 'Profit'} = output.profit.ApproximatePrice(end);
 
 stbs = table;

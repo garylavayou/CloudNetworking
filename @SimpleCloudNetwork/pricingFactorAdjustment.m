@@ -6,7 +6,7 @@ if nargin < 2
     new_opts = struct;
 end
 options = structmerge(getstructfields(this.options, {'PricingFactor'}), ...
-    getstructfields(new_opts, {'PricingPolicy'}, 'default', 'linear'));
+    getstructfields(new_opts, {'PricingPolicy'}, 'default', {'linear'}));
 options.SlicingMethod = this.options.SlicingMethod;
 
 if nargout == 3

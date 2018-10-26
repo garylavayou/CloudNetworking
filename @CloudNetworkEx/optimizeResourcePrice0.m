@@ -116,7 +116,7 @@ while true
         sl = this.slices{s};
         new_net_welfare = new_net_welfare + sl.weight*sum(fcnUtility(sl.flow_rate));
     end
-    new_net_welfare = new_net_welfare - this.getNetworkCost(load);
+    new_net_welfare = new_net_welfare - this.totalCost(load);
     % The stop condition
     %    (norm(new_link_price-prices.Link)/this.NumberLinks;
     stop_cond11 = norm(new_link_price-prices.Link)/norm(prices.Link);

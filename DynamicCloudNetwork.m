@@ -78,13 +78,15 @@ classdef DynamicCloudNetwork < PhysicalNetwork & DynamicNetwork
             this.optimizeResourcePriceNew();
         end
         
-        function [output, runtime] = optimizeResourcePriceNew(this, init_price, slices)
-            if nargin <= 2
+        function [output, runtime] = optimizeResourcePriceNew(this, slices, options)
+            if nargin <= 2 || isempty(slices)
                 slices = this.slices;       % all slices are involved in slice dimensioning
             end
-            if nargout == 2
-                runtime.Serial = 0;
-                runtime.Parallel = 0;
+            if nargin <= 3
+                options = struct;
+            end
+            if nargout >= 2
+                runtime = 0;
             end
             output = struct([]);
             
@@ -129,14 +131,15 @@ classdef DynamicCloudNetwork < PhysicalNetwork & DynamicNetwork
                     end
                     init_price.Node = (1/2)*init_price.Node;
                 end
+
                 if nargout >= 2
                     [output, runtime] = optimizeResourcePriceNew@CloudNetwork...
-                        (this, init_price, normal_slices);
+                        (this, normal_slices, options);
                 elseif nargout == 1
                     output = optimizeResourcePriceNew@CloudNetwork...
-                        (this, init_price, normal_slices);
+                        (this, normal_slices, options);
                 else
-                    optimizeResourcePriceNew@CloudNetwork(this, init_price, normal_slices);
+                    optimizeResourcePriceNew@CloudNetwork(this, normal_slices, options);
                 end
                 %% Reconfiguration Cost Model (optional)
                 % profit of Slice Customer: utility - resource consumption payment - reconfiguration cost;
@@ -216,14 +219,12 @@ classdef DynamicCloudNetwork < PhysicalNetwork & DynamicNetwork
         % such an argument.) 
         %
         % See also <CloudNetwork.getNetworkCost>.
-        function c = getNetworkCost(this, node_load, link_load, reconfig_slices)
+        function c = totalCost(this, load, reconfig_slices)
             switch nargin
                 case 1
-                    c = getNetworkCost@CloudNetwork(this);
-                case 2
-                    c = getNetworkCost@CloudNetwork(this, node_load);
-                case {3,4,5}
-                    c = getNetworkCost@CloudNetwork(this, node_load, link_load);
+                    c = totalCost@CloudNetwork(this);
+                case {2,3}
+                    c = totalCost@CloudNetwork(this, load);
                 otherwise
                     error('%s: unexpected number of input arguments.', calledby);
             end
@@ -316,7 +317,7 @@ classdef DynamicCloudNetwork < PhysicalNetwork & DynamicNetwork
             % counted.
             % Therefore, the revenue should be added with reconfiguration cost, while the
             % profit is not changed.
-            new_opts = getstructfields(new_opts, {'Slices'}, 'default-ignore', this.slices);
+            new_opts = getstructfields(new_opts, {'Slices'}, 'default-ignore', {this.slices});
             reconfig_cost = this.getReconfigurationCost(new_opts.Slices);
             revenue = revenue + reconfig_cost;
         end
@@ -332,7 +333,7 @@ classdef DynamicCloudNetwork < PhysicalNetwork & DynamicNetwork
             
             %%
             % the base method does not count the reconfiguration cost;
-            options = getstructfields(options, 'Slices', 'default', this.slices);
+            options = getstructfields(options, 'Slices', 'default', {this.slices});
             rc = this.getReconfigurationCost(options.Slices);
             argout.Welfare = argout.Welfare - rc;
             argout.Profit(end) = argout.Profit(end) - rc;

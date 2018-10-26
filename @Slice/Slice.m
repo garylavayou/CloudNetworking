@@ -146,11 +146,14 @@ classdef Slice < VirtualNetwork
       if nargin >= 2
         this.Links.Price = prices.Link;
         this.ServiceNodes.Price = prices.Node;
+      else
+        this.ServiceNodes{:,{'Price'}} = 0;
+        this.Links{:,{'Price'}} = 0;
       end
-      this.ServiceNodes{:,'Load'} = 0;
-      this.Links{:,'Load'} = 0;
-      this.ServiceNodes{:,'Capacity'} = 0;
-      this.Links{:,'Capacity'} = 0;
+      this.ServiceNodes{:,{'Load', 'Capacity'}} = 0;
+      this.Links{:,{'Load', 'Capacity'}} = 0;
+      this.FlowTable.Rate = 0;
+      this.op.clear();
       this.b_final = false;
     end
     
@@ -232,7 +235,7 @@ classdef Slice < VirtualNetwork
     % depends on the portion of used resources at the network. 
     %
     % When calculate network cost as a single slice, this method equals to
-    % <getNetworkCost>.
+    % <PhysicalNetwork.totalCost>.
     function rc = getResourceCost(this, load)
       if nargin <= 1 
         load.Node = this.ServiceNodes.Capacity;

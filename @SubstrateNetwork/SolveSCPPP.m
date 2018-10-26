@@ -1,6 +1,6 @@
 %% Proximal point method
 % [Spingarn]
-function results = SolveSCPPP(this, slices, node_price, link_price, options)
+function results = SolveSCPPP(this, slices, prices, options)
 %% Global Declaration
 global ITER_LIMIT; 
 if isempty(ITER_LIMIT)
@@ -108,9 +108,7 @@ fprintf('Partial-Inverse: elapsed time: %d\n', t2);
 
 for si = 1:Ns
 	sl = slices{si};
-	sl.saveResults(output_k{si});
-	sl.prices.Link = [];
-	sl.prices.Node = [];
+	sl.op.saveTempResults(output_k{si});
 end
 results.LinkPrice = lambda_k(1:num_links) + link_price;
 results.NodePrice = lambda_k(num_links+(1:this.NumberDataCenters)) + node_price;
@@ -121,8 +119,8 @@ results.numiters = k;
 %% Capacity Distribution
 % (a) Distribute the capacity according to the value of 'q';
 % (b) Distribute the capacity accroding to the load;
-if isfield(options, 'capacities')
-	capacities = options.capacities/Ns;
+if isfield(options, 'Capacities')
+	capacities = options.Capacities/Ns;
 	delta_capacity = zeros(size(q_k));
 	for i = 1:num_duals
 		delta_capacity(i,:) = min(q_k(i,:), capacities(i));
@@ -133,7 +131,7 @@ if isfield(options, 'capacities')
 				(-sum(delta_capacity(i,~b_transfer))/sum(delta_capacity(i,b_transfer)));
 		end
 	end
-	results.capacities = capacities - delta_capacity;
+	results.Capacities = capacities - delta_capacity;
 end
 
 end

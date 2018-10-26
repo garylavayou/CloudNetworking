@@ -266,7 +266,7 @@ for i = 1:NS
     utility = utility + this.slices{i}.weight*sum(fcnUtility(this.slices{i}.FlowTable.Rate));
 end
 load = this.getNetworkLoad;
-primal_fval = utility - this.getNetworkCost(load);
+primal_fval = utility - this.totalCost(load);
 fprintf('\tOptimal solution: dual objective: %G, primal objective %G.\n', ...
     dual_fval, primal_fval);
 end

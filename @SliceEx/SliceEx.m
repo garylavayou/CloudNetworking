@@ -55,7 +55,7 @@ classdef SliceEx < SimpleSlice
         %%%
         % When compute the static cost, the Capacity of all physical nodes and links is included.
         % |epsilon/pn.NumberSlices| is a constant. To keep consistence with other methods,
-        % this part should not be ignored. See also getNetworkCost and getStaticCost.
+        % this part should not be ignored. See also <totalCost> and <getStaticCost>.
         % The calculation is not absolutely precise, since it cannot be decide that the
         % static cost should be arributed to which slices.
         %

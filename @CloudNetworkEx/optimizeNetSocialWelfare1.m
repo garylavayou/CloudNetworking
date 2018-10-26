@@ -205,15 +205,15 @@ for s = 1:NS
         + sl.weight*sum(fcnUtility(sl.FlowTable.Rate));
 end
 if ~isempty(this.eta)
-    embed_profit_approx = this.eta*this.getNetworkCost;
-    embed_profit_accurate = this.getNetworkCost([], [], options.Model);
+    embed_profit_approx = this.eta*this.totalCost;
+    embed_profit_accurate = this.totalCost([], [], options.Model);
 else
     embed_profit_approx = 0;
     embed_profit_accurate = 0;   
 end
 output.welfare_approx = output.welfare_approx + embed_profit_approx;
 output.welfare_accurate = output.welfare_accurate ...
-    - this.getNetworkCost([],[], options.Model) + embed_profit_accurate;
+    - this.totalCost([], options.Model) + embed_profit_accurate;
 
 f = (1-options.PercentFactor)/options.PercentFactor;
 % dual_cost = dot(lambda.n, node_load) + dot(lambda.e, link_load);
