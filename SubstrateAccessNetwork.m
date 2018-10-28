@@ -30,7 +30,7 @@ classdef SubstrateAccessNetwork < CloudAccessNetwork & SubstrateNetwork
 			end
 		end
 		
-		function [output, runtime] = optimizeResourcePriceNew(this, slices, options)
+		function [output, runtime] = optimizeResourcePrice(this, slices, options)
 			switch nargin 
 				case 1
 					arg_list = {this};
@@ -40,9 +40,9 @@ classdef SubstrateAccessNetwork < CloudAccessNetwork & SubstrateNetwork
 					arg_list = {this, slices, options};
 			end
 			if nargout <= 1
-				output = optimizeResourcePriceNew@SubstrateNetwork(arg_list{:});
+				output = optimizeResourcePrice@SubstrateNetwork(arg_list{:});
 			else
-				[output, runtime] = optimizeResourcePriceNew@SubstrateNetwork(arg_list{:});
+				[output, runtime] = optimizeResourcePrice@SubstrateNetwork(arg_list{:});
 			end
 		end
 		

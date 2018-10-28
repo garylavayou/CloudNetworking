@@ -90,7 +90,7 @@ if isempty(fieldnames(this.hs.net_changes))
         end
         if this.hs.NumberFlows == 0
             % the dimension method will handle the idl slice, see also
-            % <DynamicCloudNetwork.optimizeResourcePriceNew>
+            % <DynamicCloudNetwork.optimizeResourcePrice>
             this.b_dim = true;
         end
     end

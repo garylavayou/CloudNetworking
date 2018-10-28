@@ -1,5 +1,5 @@
 % Optimize resource price
-% * See also the <optimizeResourcePriceNew>, for more details in refining the price
+% * See also the <optimizeResourcePrice>, for more details in refining the price
 % adjustment algorithm.
 % * *TODO* Resource Cost Model: linear, convex (quatratic)
 function [output, runtime] = optimizeResourcePrice1(this, init_price)

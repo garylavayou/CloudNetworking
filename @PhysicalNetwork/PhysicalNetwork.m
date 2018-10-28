@@ -536,7 +536,7 @@ classdef PhysicalNetwork < INetwork
     % |options|: |PricingPolicy| must be specified.
     %
     % Reconfiguration cost does not influence the profit of Slice Provider,
-    % see also <optimizeResourcePriceNew>.
+    % see also <optimizeResourcePrice>.
     function [profit, revenue] = getSliceProviderProfit(this, slices, prices, options)
       defaultopts = struct(...
         'PricingPolicy', 'quadratic');  % {linear|quadratic}
@@ -606,7 +606,7 @@ classdef PhysicalNetwork < INetwork
         % NOTE: prices in the substrate network is updated, while the
         % links/nodes that are not involved in the update procedure, do not
         % change their prices.
-        % See also <DynamicCloudNetwork>.<optimizeResourcePriceNew>.
+        % See also <DynamicCloudNetwork>.<optimizeResourcePrice>.
         pre_link_idx = prices.Link==0;
         prices.Link(pre_link_idx) = this.readLink('Price', pre_link_idx);
         this.writeLink('Price', prices.Link);

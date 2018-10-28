@@ -1,7 +1,7 @@
 % Optimize resource price
 % * Resource Cost Model: linear, convex (quatratic)
 % DATE: 2017-04-23
-function [output, runtime] = optimizeResourcePriceNew(this, slices, options)
+function [output, runtime] = optimizeResourcePrice(this, slices, options)
 global DEBUG;
 
 %% Initialization

@@ -17,7 +17,7 @@ classdef DynamicCloudNetwork < PhysicalNetwork & DynamicNetwork
                     sl = source;
                     this.pending_slices.Add(sl);
                     output = ...
-                        this.optimizeResourcePriceNew([], this.pending_slices{:});
+                        this.optimizeResourcePrice([], this.pending_slices{:});
                     for i = 1:this.pending_slices.Length
                         source.Results.Profit = output.Profit(i);
                         source.Results.Value = 0;   % TODO: if there are other return values.
@@ -29,7 +29,7 @@ classdef DynamicCloudNetwork < PhysicalNetwork & DynamicNetwork
                     %% TODO
                     % decide when to perform dimensioning
                     if this.pending_slices.Length >= 3
-                        output = this.optimizeResourcePriceNew([], this.pending_slices{:});
+                        output = this.optimizeResourcePrice([], this.pending_slices{:});
                         for i = 1:this.pending_slices.Length
                             sl = this.pending_slices(i);
                             sl.Results.Value = 0;
@@ -75,10 +75,10 @@ classdef DynamicCloudNetwork < PhysicalNetwork & DynamicNetwork
         
         function sl = RemoveSlice(this, arg1)
             sl = RemoveSlice@CloudNetwork(this, arg1);
-            this.optimizeResourcePriceNew();
+            this.optimizeResourcePrice();
         end
         
-        function [output, runtime] = optimizeResourcePriceNew(this, slices, options)
+        function [output, runtime] = optimizeResourcePrice(this, slices, options)
             if nargin <= 2 || isempty(slices)
                 slices = this.slices;       % all slices are involved in slice dimensioning
             end
@@ -133,13 +133,13 @@ classdef DynamicCloudNetwork < PhysicalNetwork & DynamicNetwork
                 end
 
                 if nargout >= 2
-                    [output, runtime] = optimizeResourcePriceNew@CloudNetwork...
+                    [output, runtime] = optimizeResourcePrice@CloudNetwork...
                         (this, normal_slices, options);
                 elseif nargout == 1
-                    output = optimizeResourcePriceNew@CloudNetwork...
+                    output = optimizeResourcePrice@CloudNetwork...
                         (this, normal_slices, options);
                 else
-                    optimizeResourcePriceNew@CloudNetwork(this, normal_slices, options);
+                    optimizeResourcePrice@CloudNetwork(this, normal_slices, options);
                 end
                 %% Reconfiguration Cost Model (optional)
                 % profit of Slice Customer: utility - resource consumption payment - reconfiguration cost;
@@ -150,7 +150,7 @@ classdef DynamicCloudNetwork < PhysicalNetwork & DynamicNetwork
                 %
                 % NOTE: the model should be refined to dexcribe the reconfiguration cost.
                 %
-                % In <CloudNetwork.optimizeResourcePriceNew> we did not calculate the
+                % In <CloudNetwork.optimizeResourcePrice> we did not calculate the
                 % reconfiguration cost for slices and the net social welfare
                 % (see <CloudNetwork.calculateOutput> and <Slice.getProfit>). So we need
                 % to append this part of cost.
@@ -286,7 +286,7 @@ classdef DynamicCloudNetwork < PhysicalNetwork & DynamicNetwork
                 return;
             end
 
-            this.optimizeResourcePriceNew([], this.pending_slices{:});
+            this.optimizeResourcePrice([], this.pending_slices{:});
             this.pending_slices.Clear();
             % At the beginning, the slice is added, without consideration of
             % reconfiguration cost.

@@ -243,7 +243,7 @@ for i = 1:num_events
     %% Price Adjusting
     if b_price_adjust
         PN.setOptions('SlicingMethod', SlicingMethod.AdjustPricing);
-        [output_price, rt] = PN.optimizeResourcePriceNew();
+        [output_price, rt] = PN.optimizeResourcePrice();
         [tb, stbs] = PN.saveStatTable(output_price, rt, type.Index, 'dynamic-price');
         stat_price(i, tb.Properties.VariableNames) = tb;
         for j = 1:num_type

@@ -70,7 +70,7 @@ fprintf('\t\t(Node utilization: %.2G)\n', sum(PN.readDataCenter('Load')/sum(node
 fprintf('\t\t(Link utilization: %.2G)\n\n', sum(PN.readLink('Load')/sum(link_capacity)));
 
 %%
-% output_price = PN.optimizeResourcePriceNew();    
+% output_price = PN.optimizeResourcePrice();    
 % fprintf('\tNet social welfare is %.4e.\n', output_price.Welfare);
 % % fprintf('\tnet profit of each slice:\n');
 % % fprintf('\t\t%f\n',output_optimal.Profit(1:(end-1),:));

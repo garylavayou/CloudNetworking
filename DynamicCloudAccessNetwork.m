@@ -21,7 +21,7 @@ classdef DynamicCloudAccessNetwork < CloudAccessNetwork & DynamicNetwork
         
         function sl = RemoveSlice(this, arg1)
             sl = RemoveSlice@CloudNetwork(this, arg1);
-            this.optimizeResourcePriceNew();
+            this.optimizeResourcePrice();
         end
         
     end
@@ -41,7 +41,7 @@ classdef DynamicCloudAccessNetwork < CloudAccessNetwork & DynamicNetwork
         function sl = onAddingSlice(this, sl)          
             %             output2 = this.singleSliceOptimization(this.options);
             %             vnf2 = sl.VNFCapacity;
-            output = this.optimizeResourcePriceNew();
+            output = this.optimizeResourcePrice();
             %             vnf1 = sl.VNFCapacity;
             if isempty(sl)
                 this.RemoveSlice(sl);
