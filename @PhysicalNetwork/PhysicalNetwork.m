@@ -170,7 +170,7 @@ classdef PhysicalNetwork < INetwork
   
   %% Public Methods
   methods
-		[output, runtime] = optimizeResourcePrice(this, init_price);
+		[output, runtime] = optimizeResourcePrice1(this, init_price);
 
 		
     %% CountSlices

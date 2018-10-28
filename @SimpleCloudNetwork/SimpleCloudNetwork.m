@@ -56,7 +56,7 @@ classdef SimpleCloudNetwork < PhysicalNetwork
   end
 	
 	methods
-		[output, runtime] = optimizeResourcePrice(this, init_price);
+		[output, runtime] = optimizeResourcePrice1(this, init_price);
 		[output, runtime] = optimizeResourcePriceNew(this, init_price, sub_slices);
 		function [output, runtime] = singleSliceOptimization(this, new_opts)
 			if nargin <= 1

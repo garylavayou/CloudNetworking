@@ -241,7 +241,7 @@ for exp_id = 1:num_config
         if b_price_adjust1
             fprintf('(%s)Pricing-1.\n', datestr(now));
             PN.setOptions('SlicingMethod', SlicingMethod.AdjustPricing);
-            [output_price, rt] = PN.optimizeResourcePrice();
+            [output_price, rt] = PN.optimizeResourcePrice1();
             [tb, stbs] = saveStatTable(PN, output_price, rt, ...
 							slice_config.Type, 'dynamic-price');
             stat_price1(point_id, tb.Properties.VariableNames) = tb;

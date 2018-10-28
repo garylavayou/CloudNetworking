@@ -2,7 +2,7 @@
 % * See also the <optimizeResourcePriceNew>, for more details in refining the price
 % adjustment algorithm.
 % * *TODO* Resource Cost Model: linear, convex (quatratic)
-function [output, runtime] = optimizeResourcePrice(this, init_price)
+function [output, runtime] = optimizeResourcePrice1(this, init_price)
 global DEBUG;
 options.Threshold = this.options.Threshold;
 options.PricingPolicy = 'quadratic';

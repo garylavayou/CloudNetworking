@@ -1,4 +1,4 @@
-function [output, runtime] = optimizeResourcePrice(this, slices)
+function [output, runtime] = optimizeResourcePrice1(this, slices)
 global DEBUG; %#ok<NUSED>
 %% Initialization
 if nargin == 1

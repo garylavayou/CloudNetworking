@@ -17,16 +17,16 @@ classdef SubstrateAccessNetwork < CloudAccessNetwork & SubstrateNetwork
 			plot@SubstrateNetwork(this, b_undirect);
 		end
 		
-		function [output, runtime] = optimizeResourcePrice(this, slices)
+		function [output, runtime] = optimizeResourcePrice1(this, slices)
 			if nargin == 1
 				arg_list = {this};
 			else 
 				arg_list = {this, slices};
 			end
 			if nargout <= 1
-				output = optimizeResourcePrice@SubstrateNetwork(arg_list{:});
+				output = optimizeResourcePrice1@SubstrateNetwork(arg_list{:});
 			else
-				[output, runtime] = optimizeResourcePrice@SubstrateNetwork(arg_list{:});
+				[output, runtime] = optimizeResourcePrice1@SubstrateNetwork(arg_list{:});
 			end
 		end
 		

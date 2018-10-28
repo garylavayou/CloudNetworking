@@ -40,7 +40,7 @@ classdef (Abstract) SubstrateNetwork < handle
 	% 	NumberDataCenters
 	
 	methods
-		[output, runtime] = optimizeResourcePrice(this, slices);
+		[output, runtime] = optimizeResourcePrice1(this, slices);
 		[output, runtime] = optimizeResourcePrice2(this, slices, options);
 		[output, runtime] = optimizeResourcePriceScaling(this, slices, options);
 	end
