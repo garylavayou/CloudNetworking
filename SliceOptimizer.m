@@ -62,16 +62,22 @@ classdef SliceOptimizer < handle
   
   %% Public Methods
   methods
-  
-    function saveResults(this, result)
+    function update_options(this, options) %#ok<INUSD>
+
+    end
+    %%
+    % save the results from parfor, the original results in the slice cannot be
+    % retrived.
+    function saveTempResults(this, result) 
       this.temp_vars = result.temp_vars;
       this.flow_rate = result.flow_rate;
       this.prices.Link = [];
       this.prices.Node = [];
+      this.capacities = [];
       this.x0 = result.x0;
     end
 
-    function setProblem(this, capacities, array, problem, indices)
+    function setProblem(this, capacities, array, problem, indices) %#ok<INUSD>
       if nargin >= 2
         this.capacities.Link = capacities.Link(this.hs.Links.PhysicalLink);
         this.capacities.Node = capacities.Node(this.hs.getDCPI);

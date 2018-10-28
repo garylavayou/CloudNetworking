@@ -25,9 +25,12 @@ classdef (Abstract, HandleCompatible) IDynamicSliceOptimizer
     old_state;
 		changed_index;
   end
+
+  properties (Abstract)
+    options;        % Options on performing optimizarion.
+  end
   
 	properties (Access = protected)
-    options;        % Options on performing optimizarion.
 		a = 0.8;        % a for the history, should have a larger weight (EMA)
 		%% options for slice dimensioning schedule algorithm
 		% 'omega_upper':
@@ -150,6 +153,12 @@ classdef (Abstract, HandleCompatible) IDynamicSliceOptimizer
   end
   
   methods
+    function update_options(this, options)
+      if isfield(options, 'ResidualCapacity')
+        this.options.ResidualCapacity = options.ResidualCapacity;
+      end
+    end
+
     [profit,cost] = fastReconfigure(this, action, options);
     [profit,cost, exitflag, fidx] = DimensioningReconfigure( this, action, new_opts );
   end

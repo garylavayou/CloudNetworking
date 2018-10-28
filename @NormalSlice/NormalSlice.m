@@ -10,36 +10,9 @@ classdef NormalSlice < Slice
 		% We need to segment each flow into multiple segements
 		%% TODO: remove this variable, no specific usage.
 		flow_section_table;
-		
-		%% Incidence Matrices
-		I_node_path logical;
-		% Excluding the edges/nodes that are not on the candidate paths
-		% (Virtual) Edge-Flow Incidence Matrix
-		I_flow_edge logical;
-		% (Augmented Virtual) Edge-Flow Incidence Matrix
-		I_flow_edge_ex logical;
-		% (Virtual) Node-Flow Incidence Matrix: the nodes include
-		% farwarding nodes and DataCenters
-		I_flow_node logical;
-		% (Augmented Virtual) Node-Flow Incidence Matrix
-		I_flow_node_ex logical;
-		% mask of the original flow-edge variables;
-		I_active_edge_vars logical;
-		% 
-		I_active_rows logical;
-		I_active_rows_eq logical;
-		%% Problem coefficients
-		As_flow double;		% coefficient for flow reservation constraints
-		Ids double;
-		As_proc double;			% processing resource requirements
-		As_procz double;
-		As_load double;
-		problem = struct('Aeq', [], 'A', [], 'beq', [], 'b', []);
 	end
 	
-	properties (SetAccess = {?FlowEdgeSlice,?SubstrateNetwork})
-		capacities;
-	end
+
 	
 	properties (Dependent)
 		NumberAugmentedNodes;
@@ -450,32 +423,6 @@ classdef NormalSlice < Slice
 				end
 			end
 		end
-	
-		function setProblem(this, array, problem, indices, link_capacity, node_capacity)
-			if nargin >= 2 && ~isempty(array)
-				this.As_flow = array.As_flow;
-				this.As_proc = array.As_proc;
-				this.As_procz = array.As_procz;
-				this.As_load = array.As_load;
-				this.Ids = array.Ids;
-			end
-			if nargin >= 3 && ~isempty(problem)
-				this.problem = problem;
-			end
-			if nargin >= 4 && ~isempty(indices)
-				this.I_active_variables = indices.I_active_variables;
-				this.I_active_edge_vars = indices.I_active_edge_vars;
-				this.I_active_rows = indices.I_active_rows;
-				this.I_active_rows_eq = indices.I_active_rows_eq;
-			end
-			if nargin >= 5 && ~isempty(link_capacity)
-				this.capacities.Link = link_capacity(this.VirtualLinks.PhysicalLink);
-			end
-			if nargin >= 6
-				dc_id = this.getDCPI;
-				this.capacities.Node = node_capacity(dc_id);
-			end
-		end
 
 		%%
 		% Override <Slice.priceOptimalFlowRate>.
@@ -484,7 +431,7 @@ classdef NormalSlice < Slice
 		% variables.
 		%
 		% Before solving the problem, call <initializeProblem>.
-		function [gamma, fval, output] = priceOptimalFlowRate(this, x0, lambda, q, options)
+		function [gamma, fval, output] = priceOptimalFlowRate0(this, x0, lambda, q, options)
 			global DEBUG INFO; %#ok<NUSED>
 			options = structmerge(options, ...
 				getstructfields(this.Parent.options, {'Form', 'OptimizationTool'}, ...
@@ -628,12 +575,6 @@ classdef NormalSlice < Slice
 			else
 				output.funcCount = foutput.funcCount;
 			end
-		end
-		
-		function saveResults(this, result)
-			this.temp_vars = result.temp_vars;
-			this.flow_rate = result.flow_rate;
-			this.x0 = result.x0;
 		end
 
 		function [loads, fval, output] = priceOptimalFlowRateDD(this, x0, lambda, options)
@@ -853,9 +794,10 @@ classdef NormalSlice < Slice
 			end
 		end
 		
-		function [output, loads, fval] = priceOptimalFlowRateCC(this, x0, options)
+		function [output, loads, fval] = priceOptimalFlowRate(this, x0, options)
 			global DEBUG INFO; %#ok<NUSED>
-			options = structmerge(options, ...
+			options = structmerge(...
+				getstructfields(options, 'PricingPolicy', 'default', {'quadratic'}),...
 				getstructfields(this.Parent.options, {'Form', 'OptimizationTool'}, ...
 				'default-ignore', {'normal', 'matlab'})); % OptimizationTool = {'matlab', 'cvx'}
 			if strcmpi(options.Form, 'compact')
@@ -929,7 +871,7 @@ classdef NormalSlice < Slice
 			num_varxz = length(xs) - Nf;
 			
 			if nargout >= 2
-				loads = zeros(this.Parent.NumberLinks+this.Parent.NumberDataCenters, 1);
+				loads = zeros(this.hs.Parent.NumberLinks+this.hs.Parent.NumberDataCenters, 1);
 				idx = [this.VirtualLinks.PhysicalLink; this.Parent.NumberLinks+this.getDCPI];
 				loads(idx) = [this.As_load(1:Nve,:) * xs(1:num_varxz);
 					this.As_load(Nve+(1:Nd),:) * xs(1:num_varxz)];
