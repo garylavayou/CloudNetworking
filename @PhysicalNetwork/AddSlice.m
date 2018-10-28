@@ -27,49 +27,11 @@ function sl = AddSlice(this, slice_opt, varargin)
 %     slice_opt.VNFList = unique_randi(this.NumberVNFs, 3);
 %     slice_opt.DelayConstraint = inf;
 % end
-if ~isfield(slice_opt,'FlowPattern') || isempty(slice_opt.FlowPattern)
-    error('error: invalid flow pattern.'); %     slice_opt.FlowPattern = FlowPattern.RandomSingleFlow;
-end
-if ~isfield(slice_opt,'NumberPaths') || isempty(slice_opt.NumberPaths ) || ...
-        slice_opt.NumberPaths == 0
-    error('error: invalid number of paths.'); %     slice_opt.NumberPaths = 3;
-end
-if slice_opt.FlowPattern ~= FlowPattern.RandomSingleFlow && ...
-        ~isfield(slice_opt, 'NumberFlows')
-    error('FlowPattern.RandomSingleFlow must be specified with NumberFlows.');
-end
-if isfield(slice_opt, 'RandomSeed') && ~isempty(slice_opt.RandomSeed)
-    rng(slice_opt.RandomSeed);
-else
-    warning('random number seed is not specified (set as %d).', floor(now));
-    rng(floor(now));        % this value should be the same on the same day.
-end
-if ~isfield(slice_opt, 'VNFList') || isempty(slice_opt.VNFList)
-    if ~isfield(slice_opt, 'NumberVNFs') || isempty(slice_opt.NumberVNFs) ||...
-            slice_opt.NumberVNFs > this.NumberVNFs
-        error('error: invalid VNF list options.'); % slice_opt.VNFList = unique_randi(this.NumberVNFs, randi([1 4]));
-    else
-        slice_opt.VNFList = unique_randi(this.NumberVNFs, slice_opt.NumberVNFs);
-    end
-else
-    if max(slice_opt.VNFList) > this.NumberVNFs
-        error('error: invalid VNF list options.');
-    end
-    % TODO check VNF list
-    if isfield(slice_opt, 'NumberVNFs') && ~isempty(slice_opt.NumberVNFs)
-        slice_opt.VNFList = slice_opt.VNFList(1:slice_opt.NumberVNFs);
-        %     else
-        %         slice_opt.VNFList = slice_opt.VNFList;
-    end
-end
-if ~isfield(slice_opt,'DelayConstraint') || isempty(slice_opt.DelayConstraint) || ...
-        slice_opt.DelayConstraint == 0
-    slice_opt.DelayConstraint = inf;
-end
+slice_opt = this.preAddingSlice(slice_opt);
 
 %% create flow table
 graph = this.residualgraph(slice_opt);
-[slice_opt.FlowTable, phy_adjacent, flag] = this.generateFlowTable(graph, slice_opt);
+[slice_opt.FlowTable, phy_adjacent, flag, slice_opt] = this.generateFlowTable(graph, slice_opt);
 sl = [];
 if flag == false
     return;
@@ -114,8 +76,8 @@ sl.FlowTable.Identifier = this.flow_identifier_generator.next(sl.NumberFlows);
 this.allocatepathid(sl);
 
 %% resource usage
-link_id = sl.VirtualLinks.PhysicalLink;
+link_id = sl.Links.PhysicalLink;
 this.AggregateLinkUsage(link_id) = this.AggregateLinkUsage(link_id) + 1;
-node_id = sl.VirtualNodes.PhysicalNode;
+node_id = sl.Nodes.PhysicalNode;
 this.AggregateNodeUsage(node_id) = this.AggregateNodeUsage(node_id) + 1;
 end
