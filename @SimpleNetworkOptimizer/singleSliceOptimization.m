@@ -66,8 +66,7 @@ for s = 1:NS
         % path_list is handle object, is should be copyed to the new table.
         path_list = PathList(sl.FlowTable{f,'Paths'});
         for p = 1:path_list.Width
-            path = path_list.paths{p};
-            path.node_list = sl.VirtualNodes{path.node_list,{'PhysicalNode'}};
+            path_list{p}.node_list = sl.VirtualNodes{path.node_list,{'PhysicalNode'}};
         end
         new_table{f,'Paths'} = path_list;
     end

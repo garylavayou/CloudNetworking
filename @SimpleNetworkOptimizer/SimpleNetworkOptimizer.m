@@ -2,10 +2,6 @@ classdef SimpleNetworkOptimizer < NetworkOptimizer
 	%UNTITLED5 Summary of this class goes here
 	%   Detailed explanation goes here
 	
-	properties
-    runtime;
-	end
-	
 	%% Constructor
 	methods
 		function this = SimpleNetworkOptimizer(net)
@@ -15,7 +11,7 @@ classdef SimpleNetworkOptimizer < NetworkOptimizer
   end
   
   methods
-
+		[output, runtime] = singleSliceOptimization(this, new_opts);
   end
 
   methods (Access = protected)
@@ -37,7 +33,7 @@ classdef SimpleNetworkOptimizer < NetworkOptimizer
     end
   end
   
-  methods (Access = {?PhysicalNetwork})
+  methods (Access = {?NetworkOptimizer, ?PhysicalNetwork})
     function slice_data = updateSliceData(this, slice_data, options)
       defaultopts = struct('SlicingMethod', SlicingMethod.SingleNormal);
       if nargin <= 2
@@ -71,14 +67,14 @@ classdef SimpleNetworkOptimizer < NetworkOptimizer
           link_usage(slices{i}.Links.PhysicalLink) = true;
           node_usage(slices{i}.getDCPI) = true;
         end
-        if find([InitPrice.Link(link_usage)==0;InitPrice.Node(node_usage)==0],1)
+        if find([options.InitPrice.Link(link_usage)==0;options.InitPrice.Node(node_usage)==0],1)
           prices.Link = t1* unitcost.Link;
           prices.Node = t1* unitcost.Node;
           %         init_price.Link = prices.Link
           %         init_price.Node = prices.Node;
         else
-          prices.Link = InitPrice.Link;
-          prices.Node = InitPrice.Node;
+          prices.Link = options.InitPrice.Link;
+          prices.Node = options.InitPrice.Node;
         end
       else
         prices.Link = t1* unitcost.Link;
