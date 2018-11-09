@@ -25,24 +25,25 @@ if nargin == 1
     options = struct;
 end
 if this.invoke_method == 0
-    profit = getProfit@SimpleSlice(this, options);
+    profit = getProfit@SimpleSliceOptimizer(this, options);
     return;
 end
 
 options = structmerge(rmstructfields(options, 'bCompact'),...
-    getstructfields(options, 'PricingPolicy', 'default', {'quadratic'}));
-bFinal = this.isFinal();
+	getstructfields(options, 'PricingPolicy', 'default', {'quadratic'}));
+slice = this.hs;
+bFinal = slice.isFinal();
 
 options.bFinal = true;      % 'bFinal' is set to output the real profit (min -f => max f).
 options.num_varx = length(this.temp_vars.x);
 options.num_varz = length(this.temp_vars.z);
 options.num_varv = length(this.temp_vars.v);
 if bFinal
-    this.prices.Link = this.Links.Price;
-    this.prices.Node = this.ServiceNodes.Price;
+    this.prices.Link = slice.Links.Price;
+    this.prices.Node = slice.ServiceNodes.Price;
     vars = [this.Variables.x; this.Variables.z; this.Variables.v;...
-        this.Links.Capacity];
-    profit = DynamicSlice.fcnProfitReserveSlicing(vars, this, options);
+        slice.Links.Capacity];
+    profit = SimpleDynamicSliceOptimizer.fcnProfitReserveSlicing(vars, this, options);
     if this.invoke_method >= 2 && this.b_dim   
         % only slices going through redimensioning have reconfiguration cost.
         profit = profit - this.get_reconfig_cost('const');
@@ -59,12 +60,12 @@ else
     if this.invoke_method == 1
         vars = [this.temp_vars.x; this.temp_vars.z; this.temp_vars.v;...
             this.temp_vars.c];
-        profit = DynamicSlice.fcnProfitReserveSlicing(vars, this, options);
+        profit = SimpleDynamicSliceOptimizer.fcnProfitReserveSlicing(vars, this, options);
     else
         vars = [this.temp_vars.x; this.temp_vars.z; this.temp_vars.v;...
             this.temp_vars.tx; this.temp_vars.tz; this.temp_vars.tv;...
             this.temp_vars.c];
-        profit = DynamicSlice.fcnProfitReconfigureSlicing(vars, this, options);
+        profit = SimpleDynamicSliceOptimizer.fcnProfitReconfigureSlicing(vars, this, options);
     end
 end
 

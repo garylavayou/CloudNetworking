@@ -28,8 +28,8 @@ VNF_opt.RandomSeed = [20161101 0];
 
 net_opt.PricingFactor = 1;  % 0.125|0.25|0.5|1|2|4
 net_opt.AdmitPolicy = 'reject-flow';
-net_opt.Form = 'compact';
 net_opt.Threshold = 'min';
+opopt.Form = 'compact';
 
 %% Construct Network
 % Initialize substrate network
@@ -41,8 +41,9 @@ type.FixedCount = [3; 13; 27];      % Number of persistent slices: {1|2|3...}
 
 %% 
 net_opt.SlicingMethod = SlicingMethod.SingleNormal;
-PN = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
+PN = SimpleCloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
 PN.slice_template = Slice.loadSliceTemplate(type.Index);
+PN.getOptimizer(opopt);
 link_capacity = PN.readLink('Capacity');
 node_capacity = PN.readDataCenter('Capacity');
 seed_dynamic = floor(now);
@@ -56,7 +57,7 @@ for t = 1:num_fix_type
         PN.AddSlice(slice_opt);
     end
 end
-output_optimal = PN.singleSliceOptimization(struct('bCompact', false));
+output_optimal = PN.singleSliceOptimization();
     
 fprintf('\tOptimal net social welfare (without pricing) is %.4e.\n', ...
     output_optimal.WelfareOptimal);

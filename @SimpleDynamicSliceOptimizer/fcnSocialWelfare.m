@@ -10,15 +10,16 @@
 %   # bCompact: 'true' for compact mode, which reduce the problem scale (not consider
 %     those in-active variables corresponding to $b_np=0$).
 %   # bFinal: set to 'true' return the real profit (max f => min -f).
-function [profit, gd] = fcnSocialWelfare(vars, slice, options)
+function [profit, gd] = fcnSocialWelfare(vars, this, options)
 if strcmp(options.CostModel, 'fixcost')
+	slice = this.hs;
     if isfield(options, 'bCompact') && options.bCompact
         full_vars = zeros(options.num_orig_vars,1);
-        full_vars(slice.I_active_variables) = vars;
+        full_vars(this.I_active_variables) = vars;
         vars = full_vars;
     end
     var_path = vars(1:slice.NumberPaths);
-    flow_rate = slice.getFlowRate(var_path);
+    flow_rate = this.getFlowRate(var_path);
     profit = -sum(slice.weight*fcnUtility(flow_rate));
 
     if isfield(options, 'bFinal') && options.bFinal
@@ -28,17 +29,17 @@ if strcmp(options.CostModel, 'fixcost')
         for p = 1:slice.NumberPaths
             i = slice.path_owner(p);  % find the the owner (flow) of the path.
                                   % f = S.I_flow_path(:,p)~=0;  
-            gd(p) = -slice.weight/(1+slice.I_flow_path(i,:)*var_path); %#ok<SPRIX>
+            gd(p) = -slice.weight/(1+this.I_flow_path(i,:)*var_path); %#ok<SPRIX>
         end
         if isfield(options, 'bCompact') && options.bCompact
-            gd = gd(slice.I_active_variables);
+            gd = gd(this.I_active_variables);
         end
     end
 else
     if nargout <= 1
-        profit = fcnSocialWelfare@SimpleSlice(vars, slice, options);
+        profit = fcnSocialWelfare@SimpleSliceOptimizer(vars, this, options);
     else
-        [profit, gd] = fcnSocialWelfare@SimpleSlice(vars, slice, options);
+        [profit, gd] = fcnSocialWelfare@SimpleSliceOptimizer(vars, this, options);
     end
 end
 end

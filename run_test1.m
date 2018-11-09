@@ -10,13 +10,15 @@
 % In addition, adjust the |CapacityFactor|, so that the resource utilization of node and
 % link is close.
 clear variables;
+global DEBUG;
+DEBUG = true;
 link_opt.DelayModel = LinkDelayOption.Random;
 link_opt.CostModel = LinkCostOption.CapacityInverse;
 link_opt.CostUnit = 150;     % 150
 link_opt.CapacityFactor = 30;
 link_opt.RandomSeed = 20171012;
-% net_opt.Delta = 0.7;
-
+% net_opt.Delta = 0.7;   
+ 
 node_opt.Model = NetworkModel.Sample1;
 node_opt.CapacityModel = NodeCapacityOption.BandwidthProportion;
 node_opt.CostModel = NodeCostOption.CapacityInverse;
@@ -31,9 +33,9 @@ VNF_opt.Number = 4;            % number of VNF type
 VNF_opt.Model = VNFIntegrateModel.AllInOne;
 VNF_opt.RandomSeed = [20161101 20161031];
 
-net_opt.PricingFactor = 2;  % {1, when |CostUnit=(150,500)|}
-net_opt.AdmitPolicy = 'reject-flow';
-net_opt.Form = 'compact';
+netopt.PricingFactor = 2;  % {1, when |CostUnit=(150,500)|}
+netopt.AdmitPolicy = 'reject-flow';
+opopt.Form = 'compact';
 
 %% Construct Network
 % Initialize substrate network
@@ -48,8 +50,8 @@ b_repeat = true;
 
 %% 
 if b_optimal
-    net_opt.SlicingMethod = SlicingMethod.SingleNormal;
-    PN = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
+    netopt.SlicingMethod = SlicingMethod.SingleNormal;
+    PN = SimpleCloudNetwork(node_opt, link_opt, VNF_opt, netopt);
     PN.slice_template = Slice.loadSliceTemplate(slice_type);
     link_capacity = PN.readLink('Capacity');
     node_capacity = PN.readDataCenter('Capacity');
@@ -62,12 +64,12 @@ if b_optimal
     fprintf('\t\t(Ratio of unit node cost to unit link cost: %.2G.)\n\n',...
         mean(PN.readDataCenter('UnitCost'))/mean(PN.readLink('UnitCost')));
     N = 5;
+		PN.getOptimizer(opopt);
     while true && N > 0
         slice_opt.RandomSeed = seed;
         seed = seed + 1;
         PN.AddSlice(slice_opt);
-        %     output = PN.singleSliceOptimization();
-        output = PN.singleSliceOptimization(struct('bCompact', false));
+				output = PN.singleSliceOptimization();
     
         fprintf('\tNumber of slices: %d.\n', PN.NumberSlices);
         fprintf('\tOptimal net social welfare (without pricing) is %.4e.\n', ...
@@ -80,32 +82,36 @@ if b_optimal
         fprintf('\tNetwork utilization ratio %f.\n',PN.utilizationRatio);
         fprintf('\t\t(Node utilization: %.2G)\n', sum(PN.readDataCenter('Load')/sum(node_capacity)));
         fprintf('\t\t(Link utilization: %.2G)\n\n', sum(PN.readLink('Load')/sum(link_capacity)));
-        if ~b_repeat
-            break;
-        else
-            N = N - 1;
-        end
+				if ~b_repeat
+					break;
+				else
+					N = N - 1;
+				end
+				for i = 1:PN.NumberSlices
+					PN.slices{i}.initialize;
+				end
     end
 end
 %%
 if b_static
-    net_opt.SlicingMethod = SlicingMethod.StaticPricing;
-    PN_static = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
+    netopt.SlicingMethod = SlicingMethod.StaticPricing;
+    PN_static = SimpleCloudNetwork(node_opt, link_opt, VNF_opt, netopt);
     PN_static.slice_template = Slice.loadSliceTemplate(slice_type);
     link_capacity = PN_static.readLink('Capacity');
     node_capacity = PN_static.readDataCenter('Capacity');
-    link_price = PN_static.getLinkCost * (1 + net_opt.PricingFactor);
-    node_price = PN_static.getNodeCost * (1 + net_opt.PricingFactor);
+    link_price = PN_static.getLinkCost * (1 + netopt.PricingFactor);
+    node_price = PN_static.getNodeCost * (1 + netopt.PricingFactor);
     PN_static.writeLink('Price', link_price);
     PN_static.writeDataCenter('Price', node_price);
     slice_opt = PN_static.slice_template(1);
-    if b_repeat
-        slice_opt.AdmitPolicy = 'reject-slice';
-        fprintf('\nStatic Slicing Repeat:\n');
-    else
-        fprintf('\nStatic Slicing:\n');
-    end
+		if b_repeat
+			slice_opt.AdmitPolicy = 'reject-slice';
+			fprintf('\nStatic Slicing Repeat:\n');
+		else
+			fprintf('\nStatic Slicing:\n');
+		end
     seed = floor(now);
+		PN_static.getOptimizer(opopt);
     while true
         slice_opt.RandomSeed = seed;
         seed = seed + 1;

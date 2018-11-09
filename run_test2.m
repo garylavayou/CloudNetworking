@@ -32,7 +32,7 @@ VNF_opt.RandomSeed = [20161101 0];
 
 net_opt.PricingFactor = 1;
 net_opt.AdmitPolicy = 'reject-flow';
-net_opt.Form = 'compact';
+opopt.Form = 'compact';
 
 %% Construct Network
 % Initialize substrate network
@@ -48,7 +48,7 @@ b_repeat = true;
 %% 
 if b_optimal
     net_opt.SlicingMethod = SlicingMethod.SingleNormal;
-    PN = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
+    PN = SimpleCloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
     PN.slice_template = Slice.loadSliceTemplate(slice_type);
     link_capacity = PN.readLink('Capacity');
     node_capacity = PN.readDataCenter('Capacity');
@@ -60,6 +60,7 @@ if b_optimal
         mean(PN.readDataCenter('UnitCost')));
     fprintf('\t\t(Ratio of unit node cost to unit link cost: %.2G.)\n\n',...
         mean(PN.readDataCenter('UnitCost'))/mean(PN.readLink('UnitCost')));
+		PN.getOptimizer(opopt);
     N = 5;
     while true && N > 0
         slice_opt.RandomSeed = seed;
@@ -79,17 +80,20 @@ if b_optimal
         fprintf('\tNetwork utilization ratio %f.\n',PN.utilizationRatio);
         fprintf('\t\t(Node utilization: %.2G)\n', sum(PN.readDataCenter('Load')/sum(node_capacity)));
         fprintf('\t\t(Link utilization: %.2G)\n\n', sum(PN.readLink('Load')/sum(link_capacity)));
-        if ~b_repeat
-            break;
-        else
-            N = N - 1;
-        end
+				if ~b_repeat
+					break;
+				else
+					N = N - 1;
+				end
+				for i = 1:PN.NumberSlices
+					PN.slices{i}.initialize;
+				end
     end
 end
 %%
 if b_static
     net_opt.SlicingMethod = SlicingMethod.StaticPricing;
-    PN_static = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
+    PN_static = SimpleCloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
     PN_static.slice_template = Slice.loadSliceTemplate(slice_type);
     link_capacity = PN_static.readLink('Capacity');
     node_capacity = PN_static.readDataCenter('Capacity');
@@ -103,7 +107,8 @@ if b_static
         fprintf('\nStatic Slicing Repeat:\n');
     else
         fprintf('\nStatic Slicing:\n');
-    end
+		end
+		PN_static.getOptimizer(opopt);
     seed = floor(now);
     while true
         slice_opt.RandomSeed = seed;

@@ -4,7 +4,7 @@
 classdef PhysicalNetwork < INetwork
 	properties
 		DataCenters;         % the forwarding node mapping of data center.
-		% data_center(dc_id) returns the physical node id;
+		% Inclduing fields: _Capacity_, _StaticCost_, _Load_, _Price_.
 		VNFTable = table;    % Meta data of virtual network function
 		%%%
 		% * *VNFTable*: including following fields.
@@ -12,14 +12,6 @@ classdef PhysicalNetwork < INetwork
 		% _ProcessEfficiency_: The coefficient for converting service rate to processing resource
 		%  requirement, i.e. $ProcessLoad = ServiceRate \times ProcessEfficiency$;
 		slices;              % a list of <Slice> objects
-		%%%
-		% * *topo*: including a NodeTable |Nodes| and an EdgeTable |Edges|.
-		%
-		% |Nodes|: the fields in node table include _Name_, _Location_, _Capacity_,
-		% _StaticCost_, _Load_, _Price_.
-		%
-		% |Edges|: the fields in the edge table include _EndNodes_, _Weight_, _Capacity_,
-		% _Index_, _Load_, _Price_.
 		AggregateLinkUsage;
 		AggregateNodeUsage;
 		slice_template;
@@ -56,20 +48,19 @@ classdef PhysicalNetwork < INetwork
       if nargin >= 2
         node_opt = varargin{1};
         link_opt = varargin{2};
-        netdata.topo = PhysicalNetwork.loadNetworkData(node_opt, link_opt);
+        netdata = PhysicalNetwork.loadNetworkData(node_opt, link_opt);
         args = {netdata};
       else
-        % args = cell(0);
-        return;
+        args = cell(0);
       end
       this@INetwork(args{:});
-      % 					if isempty(varargin)
-      % 						return;
-      % 					end
+			if isempty(varargin)
+				return;
+			end
       
       VNF_opt = varargin{3};
-      this.Nodes = netdata.topo.Nodes;
-      this.Links = netdata.topo.Links;
+      this.Nodes = netdata.Nodes;
+      this.Links = netdata.Edges;
       dc_node_index = find(this.Nodes.Capacity>0);
       this.DataCenters = table(dc_node_index, 'VariableName', {'Node'});
       c = 1;
@@ -97,18 +88,16 @@ classdef PhysicalNetwork < INetwork
       this.AggregateLinkUsage = zeros(this.NumberLinks,1);
       this.AggregateNodeUsage = zeros(this.NumberNodes,1);
       
-      if nargin >= 4
-        new_opts = varargin{4};
-      else
-        new_opts = struct;
-      end
-      this.options = structmerge(...
-        getstructfields(new_opts, ...
-        {'SlicingMethod', 'Form', 'ConstraintTolerance', ...
-        'NonzeroTolerance', 'Threshold', 'PostProcessing'}, ...
-        'default',...
-        {SlicingMethod.AdjustPricing, 'compact', 10^-3, 10^-3, 'min', 'round'}),...
-        getstructfields(new_opts, 'PricingPolicy', 'ignore'));
+			this.options = structmerge(this.options, ...
+				struct(...
+				'SlicingMethod', SlicingMethod.AdjustPricing,...
+				'PricingPolicy', 'linear'));
+			if nargin >= 4
+				new_opts = varargin{4};
+				this.options = structupdate(this.options, new_opts);
+			else
+				new_opts = struct;
+			end
       
       if this.options.SlicingMethod.IsFactorPricing
         % specified for _pricingFactorAjustment_ and .....
@@ -133,11 +122,11 @@ classdef PhysicalNetwork < INetwork
   %% Property Access Methods
   methods
     function opt = get.LinkOptions(this)
-      opt = this.topo.Edges.Properties.UserData{1};
+      opt = this.Links.Properties.UserData;
     end
     
     function opt = get.NodeOptions(this)
-      opt = this.topo.Nodes.Properties.UserData{1};
+      opt = this.Nodes.Properties.UserData;
     end
     
     function n = get.NumberSlices(this)
@@ -170,8 +159,8 @@ classdef PhysicalNetwork < INetwork
   
   %% Public Methods
   methods
-		[output, runtime] = optimizeResourcePrice1(this, init_price);
-
+		[output, runtime] = optimizeResourcePrice(this, init_price, sub_slices);
+    argout = calculateOutput(this, argin, new_opts);
 		
     %% CountSlices
     % statistics of slices.
@@ -241,12 +230,9 @@ classdef PhysicalNetwork < INetwork
       end
       switch name
         case 'ResidualCapacity'
-          value = this.Links{:,{'Capacity'}} - this.Links{:,{'Load'}};
+          value = this.Links{link_id,{'Capacity'}} - this.Links{link_id,{'Load'}};
         otherwise
           value = readLink@INetwork(this, name, link_id);
-      end
-      if nargin >= 3
-        value = value(link_id);
       end
     end
     
@@ -292,7 +278,7 @@ classdef PhysicalNetwork < INetwork
         value = zeros(this.NumberNodes, 1);
         value(this.DataCenters.Node) = this.readDataCenter(name);
         value = value(node_id);
-        warning('[%s] read information from data center nodes.', calledby);
+        cprintf('SystemCommands', '[%s] read information from data center nodes.\n', calledby);
       else
         error('error:[%s] ''%s'' does not exist.', calledby, name);
       end
@@ -348,10 +334,10 @@ classdef PhysicalNetwork < INetwork
         %                     % Update the load of the substrate network.
         %                     % for calculate the residual capacity.
         %                     node_load = zeros(this.NumberNodes, 1);
-        %                     node_load(sl.VirtualNodes.PhysicalNode) = sl.VirtualNodes.Load;
+        %                     node_load(sl.Nodes.PhysicalNode) = sl.Nodes.Load;
         %                     this.writeDataCenter('Load', node_load - node_load);
         %                     link_load = zeros(this.NumberLinks, 1);
-        %                     link_load(sl.VirtualLinks.PhysicalLink) = sl.VirtualLinks.Load;
+        %                     link_load(sl.Links.PhysicalLink) = sl.Links.Load;
         %                     this.writeLink('Load', link_load - link_load);
         %                 end
         this.slices(sid) = [];
@@ -615,9 +601,7 @@ classdef PhysicalNetwork < INetwork
         this.writeDataCenter('Price', prices.Link);
       end
     end
-    
-    argout = calculateOutput(this, argin, new_opts);
-    
+        
     %% statistics of the output
     % type_index is a scalar.
     % Profit, Rate
@@ -648,8 +632,62 @@ classdef PhysicalNetwork < INetwork
       end
     end
 
-  end
+	end
   
+	%% Friend Methods
+	methods (Access ={?PhysicalNetwork, ?NetworkOptimizer})
+		    %% getNetworkLoad
+    % Network load equals to the sums of occupied capacity from all slices. See also
+    % <Slice.getLinkCapacity>, <Slice.getNodeCapacity> and
+    % <DynamicSlice.getLinkCapacity>, <DynamicSlice.getNodeCapacity>.
+    %
+    % |slices|: If the argument is provided, calculate load from the
+    %						set of |slices|, otherwise, calculate from all slices.
+    % |options|
+    %			_Stage_
+    %					'final': directly copy from 'Capacity' field of each slice.
+    %					'temp': use the temporary variables of each slice, to
+    %							calculate temporary capacity of each slice. Makesure
+    %							the temporary variables is up-to-date, when calling
+    %							this method.
+    function load = getNetworkLoad(this, slices, options)
+			defaultopts = struct('Stage', 'final');
+			if nargin <= 2
+				options = defaultopts;
+			else
+				options = structupdate(defaultopts, options);
+			end
+			
+			if nargin <= 1 || isempty(slices)
+				slices = this.slices;
+			elseif ~iscell(slices)
+				slices = {slices};
+			end
+			
+			load.Node = zeros(this.NumberDataCenters, 1);
+			load.Link = zeros(this.NumberLinks, 1);
+			for i = 1:length(slices)
+				sl = slices{i};
+				link_id = sl.Links.PhysicalLink;
+				dc_id = sl.getDCPI;
+				if sl.isFinal() || strcmpi(options.Stage, 'final')
+					load.Node(dc_id) = load.Node(dc_id) + sl.getNodeCapacity;
+					load.Link(link_id) = load.Link(link_id) + sl.getLinkCapacity;
+				elseif strcmpi(options.Stage, 'temp')
+					load.Node(dc_id) = load.Node(dc_id) + sl.getNodeCapacity(false);
+					load.Link(link_id) = load.Link(link_id)+ sl.getLinkCapacity(false);
+				else
+					error('error:[%s] Invalid value for options ''Stage''=''%s''.', options.Stage);
+				end
+			end
+		end
+	end
+	
+	methods (Access={?PhysicalNetwork, ?NetworkOptimizer})
+    %% Price Adjustment Methods
+    [prices, runtime] = pricingFactorAdjustment(this, new_opts);
+	end
+	
   %% Protected Methods
 	methods (Access = protected)
 		function newobj = copyElement(this)
@@ -676,53 +714,7 @@ classdef PhysicalNetwork < INetwork
       cap.link = this.readLink('Capacity');
       load.node = this.readDataCenter('Load');
       load.link = this.readLink('Load');
-    end
-    
-    %% getNetworkLoad
-    % Network load equals to the sums of occupied capacity from all slices. See also
-    % <Slice.getLinkCapacity>, <Slice.getNodeCapacity> and
-    % <DynamicSlice.getLinkCapacity>, <DynamicSlice.getNodeCapacity>.
-    %
-    % |slices|: If the argument is provided, calculate load from the
-    %						set of |slices|, otherwise, calculate from all slices.
-    % |options|
-    %			_Stage_
-    %					'final': directly copy from 'Capacity' field of each slice.
-    %					'temp': use the temporary variables of each slice, to
-    %							calculate temporary capacity of each slice. Makesure
-    %							the temporary variables is up-to-date, when calling
-    %							this method.
-    function load = getNetworkLoad(this, slices, options)
-      defaultopts = struct('Stage', 'final');
-      if nargin <= 2
-        options = defaultopts;
-      else
-        options = structupdate(defaultopts, options);
-      end
-      
-      if nargin <= 1 || isempty(slices)
-        slices = this.slices;
-      elseif ~iscell(slices)
-        slices = {slices};
-      end
-      
-      load.Node = zeros(this.NumberDataCenters, 1);
-      load.Link = zeros(this.NumberLinks, 1);
-      for i = 1:length(slices)
-        sl = slices{i};
-        link_id = sl.VirtualLinks.PhysicalLink;
-        dc_id = sl.getDCPI;
-        if sl.isFinal() || strcmpi(options.State, 'final')
-          load.Node(dc_id) = load.Node(dc_id) + sl.getNodeCapacity;
-          load.Link(link_id) = load.Link(link_id) + sl.getLinkCapacity;
-        elseif strcmpi(options.State, 'temp')
-          load.Node(dc_id) = load.Node(dc_id) + sl.getNodeCapacity(false);
-          load.Link(link_id) = load.Link(link_id)+ sl.getLinkCapacity(false);
-        else
-          error('error:[%s] Invalid value for options ''Stage''=''%s''.', options.Stage);
-        end
-      end
-    end
+		end
     
     %%% compute the total link cost.
     function c = totalLinkCost(this, link_load)
@@ -795,48 +787,16 @@ classdef PhysicalNetwork < INetwork
         end
       end
       
-      %% Demand Information
-      slice_opt = structmerge(slice_opt, ...
-        getstructfields(slice_opt, {'FlowPattern', 'DuplicateFlow'}, 'default', {FlowPattern.RandomMultiFlow, false}));
-      if slice_opt.FlowPattern ~= FlowPattern.RandomSingleFlow && ...
-          ~isfield(slice_opt, 'NumberFlows')
-        error('[%s] error: <%s> must be specified with <NumberFlows>.', calledby(0), FlowPattern.RandomSingleFlow.char);
-      end
-      switch slice_opt.FlowPattern
-        case FlowPattern.RandomSingleFlow
-          slice_opt.NumberFlows = 1;
-        case FlowPattern.RandomMultiFlow
-          if ~slice_opt.DuplicateFlow
-            slice_opt.NumberFlows = min(slice_opt.NumberFlows, this.NumberNodes*(this.NumberNodes-1));
-          end
-        case FlowPattern.RandomInterDataCenter
-          if ~slice_opt.DuplicateFlow
-            slice_opt.NumberFlows = min(slice_opt.NumberFlows, this.NumberDataCenters*(this.NumberDataCenters-1));
-          end
-        otherwise
-          slice_opt.NumberFlows = [];
-          slice_opt.NodeSet = [];
-          slice_opt.NumberNodes = [];
-          return;
-      end
-      switch slice_opt.FlowPattern
-        case {FlowPattern.RandomSingleFlow, FlowPattern.RandomMultiFlow}
-          if ~isfield(slice_opt, 'NodeSet')
-            slice_opt.NodeSet = 1:this.NumberNodes;
-          end
-        case FlowPattern.RandomInterDataCenter
-          if ~isfield(slice_opt, 'NodeSet')
-            slice_opt.NodeSet = this.DataCenters.Node;
-          end
-      end
-      slice_opt.NumberNodes = length(slice_opt.NodeSet);
+			defaultopts = struct(...
+				'FlowPattern', FlowPattern.RandomMultiFlow, ...
+				'DuplicateFlow',false, ...
+				'DelayConstraint', inf, ...
+				'NumberPaths', 1,...
+				'SlicingMethod', this.options.SlicingMethod, ...
+				'PricingPolicy', this.options.PricingPolicy);
+      slice_opt = setdefault(slice_opt, defaultopts);
       
       %% Path Constraints
-      slice_opt = structmerge(slice_opt, ...
-        getstructfields(slice_opt, {'DelayConstraint', 'NumberPaths'}, 'default', {inf, 1}));
-      if isempty(slice_opt.DelayConstraint)
-        slice_opt.DelayConstraint = inf;
-      end
       slice_opt.DelayModel = this.LinkOptions.DelayModel;
       if this.NumberDataCenters < this.NumberNodes
         % if only part of the forwarding nodes is VNF-capable, we should make sure that the
@@ -848,23 +808,47 @@ classdef PhysicalNetwork < INetwork
       
       %% Slicing Method
       % override the slice's specification.
-      % By default, the options including 'SlicingMethod' and 'AdmitPolicy' is inherited from
-      % the network. But slice can use its own options in the configuration file.
-      slice_opt = structmerge(slice_opt,...
-        getstructfields(slice_opt, 'SlicingMethod', 'error'));
-      if this.options.SlicingMethod.IsStatic
-				if ~isfield(slice_opt, 'AdmitPolicy') || isempty(slice_opt.AdmitPolicy)
-					slice_opt = structmerge(slice_opt, this.options.AdmitPolicy);
-				end
-      end
-      
+      % By default, the options including 'SlicingMethod' and 'AdmitPolicy' is inherited
+      % from the network. But slice can use its own options in the configuration file.
       %% Pricing policy
 			% each slice can specify their own pricing, but the network determines whether
-			% to adopt this polocy or use the network specified pricing policy.
+			% to adopt this policy or use the network specified pricing policy.
 			% (currently, we assume that network's setting override the slice setting.)
-			slice_opt = structmerge(slice_opt,...
-				getstructfields(this.options, 'PricingPolicy', 'error'));
-    end
+			if this.options.SlicingMethod.IsStatic
+				slice_opt.AdmitPolicy = this.options.AdmitPolicy;
+			end
+		
+			%% Demand Information
+			if slice_opt.FlowPattern ~= FlowPattern.RandomSingleFlow && ...
+					~isfield(slice_opt, 'NumberFlows')
+				error('[%s] error: <%s> must be specified with <NumberFlows>.', calledby(0), FlowPattern.RandomSingleFlow.char);
+			end
+			switch slice_opt.FlowPattern
+				case FlowPattern.RandomSingleFlow
+					slice_opt.NumberFlows = 1;
+				case FlowPattern.RandomMultiFlow
+					if ~slice_opt.DuplicateFlow
+						slice_opt.NumberFlows = min(slice_opt.NumberFlows, this.NumberNodes*(this.NumberNodes-1));
+					end
+				case FlowPattern.RandomInterDataCenter
+					if ~slice_opt.DuplicateFlow
+						slice_opt.NumberFlows = min(slice_opt.NumberFlows, this.NumberDataCenters*(this.NumberDataCenters-1));
+					end
+				otherwise
+			end
+			switch slice_opt.FlowPattern
+				case {FlowPattern.RandomSingleFlow, FlowPattern.RandomMultiFlow}
+					if ~isfield(slice_opt, 'NodeSet')
+						slice_opt.NodeSet = 1:this.NumberNodes;
+					end
+					slice_opt.NumberNodes = length(slice_opt.NodeSet);
+				case FlowPattern.RandomInterDataCenter
+					if ~isfield(slice_opt, 'NodeSet')
+						slice_opt.NodeSet = this.DataCenters.Node;
+					end
+					slice_opt.NumberNodes = length(slice_opt.NodeSet);
+			end
+		end
 		
 		%%%
 		% Called by _AddSlice_, return value is used by _generateFlowTable_;
@@ -885,12 +869,12 @@ classdef PhysicalNetwork < INetwork
             continue;
           end
           h = this.graph.Head(i);
-          dc_h = this.Topology.Nodes.DataCenter(h);
+          dc_h = this.Nodes.DataCenter(h);
           if dc_h && node_capacity(dc_h) <= 0
             continue;
           end
           t = this.graph.Tail(i);
-          dc_t = this.Topology.Nodes.DataCenter(t);
+          dc_t = this.Nodes.DataCenter(t);
           if dc_t && node_capacity(dc_t) <= 0
             continue;
           end
@@ -910,7 +894,7 @@ classdef PhysicalNetwork < INetwork
     %%%
     % Called by <generateFlowTable>
     function end_points = generateEndPoints(this, slice_opt) %#ok<INUSL>
-      end_points = slice_opt.NodeSet(unique_randi(info.NumberNodes, 2, 'stable'));
+      end_points = slice_opt.NodeSet(unique_randi(slice_opt.NumberNodes, 2, 'stable'));
     end
 	
     %%%
@@ -933,7 +917,7 @@ classdef PhysicalNetwork < INetwork
         % Prices announced to each slice.
         options.bFinal = sl.isFinal();
         if ~options.bFinal
-          sl.prices.Link = prices.Link(sl.VirtualLinks.PhysicalLink);
+          sl.prices.Link = prices.Link(sl.Links.PhysicalLink);
           sl.prices.Node = prices.Node(sl.getDCPI);
         end
         slice_profit_ratio(s) = sl.getProfit(options)/revenue;
@@ -976,11 +960,7 @@ classdef PhysicalNetwork < INetwork
     end
     
     %% ISSUE: VNFlist is not conmmonly shared.
-    
-    
-    %% Price Adjustment Methods
-    [prices, runtime] = pricingFactorAdjustment(this, new_opts);
-		
+    		
     function runtime = priceIteration(this, prices, options)
       if nargout == 1
         slice_runtime = 0;
@@ -988,10 +968,7 @@ classdef PhysicalNetwork < INetwork
       end
       for s = 1:this.NumberSlices
         sl = this.slices{s};
-        link_id = sl.Links.PhysicalLink;
-        dc_id = sl.getDCPI;
-        sl.prices.Link = prices.Link(link_id);
-        sl.prices.Node = prices.Link(dc_id);
+        sl.Optimizer.setProblem('Price', prices);
         %%%
         % optimize each slice with price and resource constraints.
         if nargout == 1
@@ -1003,8 +980,7 @@ classdef PhysicalNetwork < INetwork
           slice_runtime = max(slice_runtime, t);
           runtime.Serial = runtime.Serial + t;
         end
-        sl.prices.Link = [];
-        sl.prices.Node = [];
+        sl.Optimizer.setProblem('Price', [])
       end
       if nargout == 1
         runtime.Parallel = slice_runtime;
@@ -1053,7 +1029,7 @@ classdef PhysicalNetwork < INetwork
 				DEBUG = false;
 			end
 			
-			if isempty(path_list)
+			if path_list.Width == 0
 				if slice_opt.SlicingMethod.IsStatic
 					% two choice: reject the slice or reject the flow.
 					if isfield(slice_opt, 'AdmitPolicy') && ...
@@ -1068,9 +1044,9 @@ classdef PhysicalNetwork < INetwork
 						flag = 1;
 					end
 					if DEBUG
-						warning(message);
+						warning(['[', calledby, ']', message]);
 					else
-						cprintf('SystemCommands', 'Warning: %s\n', message);
+						cprintf('SystemCommands', 'Warning: [%s] %s\n', calledby, message);
 					end
 				else
 					flag = -1;
@@ -1139,31 +1115,31 @@ classdef PhysicalNetwork < INetwork
 		% * *AllocatePathId* : Allocate path identifier
 		%
 		%      AllocatePathId(phy_network)
-		%         function AllocatePathId(this, start_slice)
-		%             if nargin <= 1
-		%                 slice_id = 1;
-		%             else
-		%                 if isa(start_slice, 'Slice')
-		%                     slice_id = this.findSlice(start_slice);
-		%                 else
-		%                     slice_id = start_slice;
-		%                 end
-		%             end
-		%             if isempty(slice_id) || slice_id == 1
-		%                 path_id = uint64(0);
-		%             else
-		%                 path_list = this.slices{slice_id-1}.FlowTable.Paths(end);
-		%                 path_id = path_list.paths{end}.id;
-		%             end
-		%             for s = slice_id:this.NumberSlices
-		%                 for j = 1:height(this.slices{s}.FlowTable)
-		%                     path_list = this.slices{s}.FlowTable.Paths(j).paths;
-		%                     for k = 1:length(path_list)
-		%                         path_id = path_id + 1;
-		%                         path_list{k}.id = path_id;
-		%                     end
-		%                 end
-		%             end
-		%         end
+		function AllocatePathId(this, start_slice)
+			if nargin <= 1
+				slice_id = 1;
+			else
+				if isa(start_slice, 'Slice')
+					slice_id = this.findSlice(start_slice);
+				else
+					slice_id = start_slice;
+				end
+			end
+			if isempty(slice_id) || slice_id == 1
+				path_id = uint64(0);
+			else
+				path_list = this.slices{slice_id-1}.FlowTable{end, 'Paths'};
+				path_id = path_list{path_list.Width}.id;		% end cannot be used for {}
+			end
+			for s = slice_id:this.NumberSlices
+				for j = 1:this.slices{s}.NumberFlows
+					path_list = this.slices{s}.FlowTable{j, 'Paths'};
+					for k = 1:path_list.Width
+						path_id = path_id + 1;
+						path_list{k}.id = path_id;
+					end
+				end
+			end
+		end
 	end
 end

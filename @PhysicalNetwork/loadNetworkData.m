@@ -201,12 +201,12 @@ node_opt.Cost = node_opt.CostUnit * node_opt.Cost;
 graph_data.Edges.Capacity = link_capacity;
 graph_data.Edges.UnitCost = link_opt.Cost;
 graph_data.Edges.Properties.VariableUnits(2:3)={'ms','Gbps'};
-graph_data.Edges.Properties.UserData = {link_opt};
+graph_data.Edges.Properties.UserData = link_opt;
 % Fields of Node Table: Name, Location, Capacity, StaticCost, UnitCost
 if exist('location','var')
     graph_data.Nodes.Location = location;
 end
 graph_data.Nodes.Capacity = node_capacity;
 graph_data.Nodes.UnitCost = node_opt.Cost;
-graph_data.Nodes.Properties.UserData = {node_opt};
+graph_data.Nodes.Properties.UserData = node_opt;
 end

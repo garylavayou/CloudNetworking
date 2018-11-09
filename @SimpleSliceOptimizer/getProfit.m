@@ -11,36 +11,34 @@
 % * |options|:
 %       *PricingPolicy*:
 %       *bFinal*:
-function profit = getProfit(slice, options)
+function profit = getProfit(this, options)
+defaultopts = getstructfields(this.hs.options, {'PricingPolicy'});
+options = structmerge(defaultopts, options);
+
 % determine varriables.
 if nargin >= 2 && isfield(options, 'bFinal') && options.bFinal
-    vars = [slice.Variables.x; slice.Variables.z];
+    vars = [this.Variables.x; this.Variables.z];
 else
-    vars = [slice.temp_vars.x; slice.temp_vars.z];
+    vars = [this.temp_vars.x; this.temp_vars.z];
 end
 if nargin >= 2
     if isfield(options, 'LinkPrice')
-        slice.prices.Link = options.LinkPrice;
+        this.prices.Link = options.LinkPrice;
     elseif isfield(options, 'bFinal') && options.bFinal 
-        slice.prices.Link = slice.Links.Price;
+        this.prices.Link = this.hs.Links.Price;
     end
     if isfield(options, 'NodePrice')
-        slice.prices.Node = options.NodePrice;
+        this.prices.Node = options.NodePrice;
     elseif isfield(options, 'bFinal') && options.bFinal
-        slice.prices.Node= slice.ServiceNodes.Price;
+        this.prices.Node= this.hs.ServiceNodes.Price;
     end
-end
-if nargin < 2 || ~isfield(options, 'PricingPolicy')
-    options.PricingPolicy = 'linear';
-    warning('%s: <PricingPolicy> not specifed, set to [%s].', ...
-        calledby, options.PricingPolicy);
 end
 %%
 % Here, the invoked method must be <Slice.fcnProfit>.
 % Use class name to avoid dynamic loading of class.
 % Subclasses may override this method to define different ways to calculate profits.
 options.bFinal = true;
-profit = SimpleSlice.fcnProfit(vars, slice, options); 
-slice.prices.Node = [];
-slice.prices.Link = [];
+profit = SimpleSliceOptimizer.fcnProfit(vars, this, options); 
+this.prices.Node = [];
+this.prices.Link = [];
 end

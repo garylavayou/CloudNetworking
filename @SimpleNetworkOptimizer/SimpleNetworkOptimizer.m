@@ -4,14 +4,21 @@ classdef SimpleNetworkOptimizer < NetworkOptimizer
 	
 	%% Constructor
 	methods
-		function this = SimpleNetworkOptimizer(net)
-      this@NetworkOptimizer(net)
+		function this = SimpleNetworkOptimizer(net, options)
+			if nargin == 0
+				args = {};
+			elseif nargin == 1
+				args = {net};
+			else
+				args = {net, options};
+			end
+      this@NetworkOptimizer(args{:});
 		end
 
   end
   
   methods
-		[output, runtime] = singleSliceOptimization(this, new_opts);
+		[output, prices, runtime] = singleSliceOptimization(this, new_opts);
   end
 
   methods (Access = protected)
@@ -22,10 +29,10 @@ classdef SimpleNetworkOptimizer < NetworkOptimizer
         DEBUG = false;
       end
       
-      load = this.getNetworkLoad(ss, struct('Stage', 'temp'));
+      load = this.hn.getNetworkLoad(ss, struct('Stage', 'temp'));
       output.WelfareOptimal = sum(...
-        ss.FlowTable.Weight.*fcnUtility(ss.getFlowRate(ss.temp_vars.x))) ...
-        - this.totalCost(load);
+        ss.FlowTable.Weight.*fcnUtility(ss.Optimizer.getFlowRate(ss.Optimizer.temp_vars))) ...
+        - this.hn.totalCost(load);
       if DEBUG
         cprintf('Comments','Info: [%s] The optimal net social welfare of the network: %G.\n', ...
           calledby, output.WelfareOptimal);
@@ -35,7 +42,9 @@ classdef SimpleNetworkOptimizer < NetworkOptimizer
   
   methods (Access = {?NetworkOptimizer, ?PhysicalNetwork})
     function slice_data = updateSliceData(this, slice_data, options)
-      defaultopts = struct('SlicingMethod', SlicingMethod.SingleNormal);
+      defaultopts = struct(...
+				'SlicingMethod', SlicingMethod.SingleNormal,...
+				'Form', 'normal');
       if nargin <= 2
         options = defaultopts;
       else
@@ -43,17 +52,20 @@ classdef SimpleNetworkOptimizer < NetworkOptimizer
       end
       % options.Stage = 'temp';
       if options.SlicingMethod == SlicingMethod.SingleNormal
-        if options.bCompact
-          b_vnf = false(this.hn.NumberVNFs, 1);
-          for s = 1:this.hn.NumberSlices
-            b_vnf(this.hn.slices{s}.VNFList) = true;
-            if isempty(find(b_vnf==false,1))
-              break;
-            end
-          end
-          slice_data.VNFList = find(b_vnf);
-        else
-          slice_data.VNFList = 1:this.hn.NumberVNFs;
+        switch options.Form
+					case 'compact'
+						b_vnf = false(this.hn.NumberVNFs, 1);
+						for s = 1:this.hn.NumberSlices
+							b_vnf(this.hn.slices{s}.VNFList) = true;
+							if isempty(find(b_vnf==false,1))
+								break;
+							end
+						end
+						slice_data.VNFList = find(b_vnf);
+					case 'normal'
+						slice_data.VNFList = 1:this.hn.NumberVNFs;
+					otherwise
+						error('error: un-recognized value for ''Form''.');
         end
       end
     end
@@ -81,9 +93,7 @@ classdef SimpleNetworkOptimizer < NetworkOptimizer
         prices.Node = t1* unitcost.Node;
       end
 		end
-
     
-		[output, runtime] = singleSliceOptimization( this, new_opts );
   end
 end
 

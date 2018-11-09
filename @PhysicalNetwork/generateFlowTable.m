@@ -1,4 +1,4 @@
-function [flow_table, phy_adjacent, flag, slice_opt] = generateFlowTable( this, graph, slice_opt )
+function [flow_table, phy_adjacent, flag] = generateFlowTable( this, graph, slice_opt )
 % generateFlowTable Generate random flows with random selected node pairs.
 % called by _AddSlice_ and _creatflow_.
 flow_table = table;
@@ -20,7 +20,7 @@ while k < slice_opt.NumberFlows
   end
   k = k+1;
   path_list = graph.CandidatePaths(slice_opt.NumberPaths, ...
-    end_points(1), end_points(2), options);
+    end_points(1), end_points(2), slice_opt);
   % assert path list
   switch this.assert_path_list(end_points, path_list, slice_opt)
     case -1  % failed with error;
@@ -40,7 +40,7 @@ while k < slice_opt.NumberFlows
     {end_points(1),end_points(2),0,path_list.Latency,path_list}; %#ok<AGROW>
   if nargout >= 2
     for p = 1:path_list.Width
-      path = path_list.paths{p};
+      path = path_list{p};
       for l = 1:(path.Length-1)
         phy_adjacent(path.Node(l), path.Node(l+1)) = ...
           graph.Adjacent(path.Node(l), path.Node(l+1));  %#ok<SPRIX>

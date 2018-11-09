@@ -8,7 +8,7 @@ link_opt.RandomSeed = 20170421;
 
 node_opt.Model = NetworkModel.Sample2;
 node_opt.CostModel = NodeCostOption.CapacityInverse;
-case_num = 2;
+case_num = 1;
 switch case_num
     case 1 % All nodes are VNF-capacble, Number of VNF-Nodes 15.
         node_opt.CapacityModel = NodeCapacityOption.BandwidthProportion;
@@ -43,7 +43,7 @@ VNF_opt.Model = VNFIntegrateModel.AllInOne;
 VNF_opt.RandomSeed = [20161101 0];    
 net_opt.AdmitPolicy = 'reject-flow';
 net_opt.PricingFactor = 1;      % used for static_slicing and single slice optimization
-net_opt.Form = 'compact';       % 'compact'|'normal'
+opopt.Form = 'compact';       % 'compact'|'normal'
 
 %% Construct Network
 % Initialize substrate network
@@ -59,8 +59,9 @@ b_repeat = true;
 %% 
 if b_optimal
     net_opt.SlicingMethod = SlicingMethod.SingleNormal;
-    PN = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
+    PN = SimpleCloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
     PN.slice_template = Slice.loadSliceTemplate(slice_type);
+		PN.getOptimizer(opopt);
     link_capacity = PN.readLink('Capacity');
     node_capacity = PN.readDataCenter('Capacity');
     seed = floor(now);
@@ -94,14 +95,18 @@ if b_optimal
             break;
         else
             N = N - 1;
-        end
+				end
+				for i = 1:PN.NumberSlices
+					PN.slices{i}.initialize;
+				end
     end
 end
 %%
 if b_static
     net_opt.SlicingMethod = SlicingMethod.StaticPricing;
-    PN_static = CloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
+    PN_static = SimpleCloudNetwork(node_opt, link_opt, VNF_opt, net_opt);
     PN_static.slice_template = Slice.loadSliceTemplate(slice_type);
+		PN_static.getOptimizer(opopt);
     link_capacity = PN_static.readLink('Capacity');
     node_capacity = PN_static.readDataCenter('Capacity');
     link_price = PN_static.getLinkCost * (1 + net_opt.PricingFactor);

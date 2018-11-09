@@ -14,14 +14,15 @@ end
 if nargin < 3
     options = struct;
 end
-options = getstructfields(options, {'Slices', 'PricingPolicy'}, 'default', ...
-    {this.slices,'quadratic'});
+options = structmerge(...
+	getstructfields(options, 'Slices', 'default', {this.slices}),...
+	getstructfields(options, 'PricingPolicy', 'error'));
 options.bFinal = true;
 
 argout.LinkPrice = this.readLink('Price');
-argout.NodePrice = this.readNode('Price');            
+argout.NodePrice = this.readDataCenter('Price');            
 argout.LinkLoad = this.readLink('Load');
-argout.NodeLoad = this.readNode('Load');       
+argout.NodeLoad = this.readDataCenter('Load');       
 argout.FlowRate = [];
 argout.Welfare = 0;
 
@@ -35,7 +36,7 @@ for s = 1:length(options.Slices)
     argout.Welfare = argout.Welfare + sl.weight*sum(fcnUtility(sl.FlowTable.Rate));
     
     % Calculate the profit of slices
-    profit_table(s) = sl.getProfit(options);
+    profit_table(s) = sl.Optimizer.getProfit(options);
     %%%
     % * *Net profit with offered price*
     %

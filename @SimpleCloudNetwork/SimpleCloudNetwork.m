@@ -21,12 +21,19 @@ classdef SimpleCloudNetwork < PhysicalNetwork
 		% those method-specific options to the correspongding method.
 		function this = SimpleCloudNetwork(varargin)
 			this@PhysicalNetwork(varargin{:});
-      this.op = SimpleNetworkOptimizer(this);
 		end
 	end
 	
 	%% Public Methods
 	methods
+		function op = getOptimizer(this, options)
+			if nargin == 1
+				this.op = SimpleNetworkOptimizer(this);
+			else
+				this.op = SimpleNetworkOptimizer(this, options);
+			end
+			op = this.op;
+		end
     %     function update_options(this, opt_name, opt_value)
     %       rmidx = false(length(opt_name,1),1);
     %       for i = 1:length(opt_name)
@@ -41,10 +48,11 @@ classdef SimpleCloudNetwork < PhysicalNetwork
     %     end
 	end
 	
-	methods (Access=protected)	
+	methods (Access=protected)			
 		function sl = createslice(this, slice_opt, varargin)
 			this.slices{end+1} = SimpleSlice(slice_opt);
 			sl = this.slices{end};
+			sl.getOptimizer(slice_opt);
     end
 		
 		% Now the same as <PhysicalNetwork>, subclasses might override it.
@@ -56,19 +64,24 @@ classdef SimpleCloudNetwork < PhysicalNetwork
   end
 	
 	methods
-		[output, runtime] = optimizeResourcePrice1(this, init_price);
 		[output, runtime] = optimizeResourcePrice(this, init_price, sub_slices);
+		[output, runtime] = optimizeResourcePrice1(this, init_price);
 		function [output, runtime] = singleSliceOptimization(this, new_opts)
 			if nargin <= 1
-				argins = {this};
+				argins = {};
 			else
-				argins = {this, new_opts};
+				argins = {new_opts};
 			end
 			if nargout <= 1
-				output = this.op.singleSliceOptimization(argins{:});
+				[output, prices] = this.op.singleSliceOptimization(argins{:});
 			else
-				[output, runtime] = this.op.singleSliceOptimization(argins{:});
+				[output, prices, runtime] = this.op.singleSliceOptimization(argins{:});
 			end
+			% Finalize substrate network
+			this.finalize(prices);
+			options = output.options;
+			options.Slices = this.slices;
+			output = this.calculateOutput(output, options);
 		end
 		output = StaticSlicing(this, slice);
 		[tb, stbs] = saveStatTable(PN, output, rt, slice_types, method);

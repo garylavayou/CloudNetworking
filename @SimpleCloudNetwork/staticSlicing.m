@@ -19,15 +19,15 @@ end
 if nargin>=2 && ~isempty(slice)
     %% Allocate Resource to the new arrival slice
     % The residual capacity of the substrate network is available to the slice.
-    slice.VirtualLinks.Price = this.readLink('Price',slice.VirtualLinks.PhysicalLink);
-    slice.VirtualDataCenters.Price = this.readDataCenter('Price',slice.getDCPI);
+    slice.Links.Price = this.readLink('Price',slice.Links.PhysicalLink);
+    slice.ServiceNodes.Price = this.readDataCenter('Price',slice.getDCPI);
     % ss = slice.copy;
-    slice.VirtualDataCenters.Capacity = this.readDataCenter('ResidualCapacity', slice.getDCPI);
-    slice.VirtualLinks.Capacity = ...
-        this.readLink('ResidualCapacity', slice.VirtualLinks.PhysicalLink);
-    slice.prices.Link = slice.VirtualLinks.Price;
-    slice.prices.Node = slice.VirtualDataCenters.Price;
-    [~] = slice.optimalFlowRate(options);
+    slice.ServiceNodes.Capacity = this.readDataCenter('ResidualCapacity', slice.getDCPI);
+		slice.Links.Capacity = ...
+			this.readLink('ResidualCapacity', slice.Links.PhysicalLink);
+		slice.Optimizer.setProblem('LinkPrice', slice.Links.Price,...
+			'NodePrice', slice.ServiceNodes.Price);
+    [~] = slice.Optimizer.optimalFlowRate(options);
     %% Finalize the new slice and the substrate network
     % # After the optimization, the resource allocation variables, flow rate, virtual
     % node/link load of the last slice have been recorded.
@@ -35,10 +35,9 @@ if nargin>=2 && ~isempty(slice)
     % the static slicing method, so the price has been calculated in advance.
     % # Record the substrate network's node/link load, price. When a slice arrive or
     % depart, the network load changes.
-    slice.VirtualLinks.Capacity = slice.VirtualLinks.Load;
-    slice.VirtualDataCenters.Capacity = slice.VirtualDataCenters.Load;
-    slice.prices.Link = [];
-    slice.prices.Node = [];
+    slice.Links.Capacity = slice.Links.Load;
+    slice.ServiceNodes.Capacity = slice.ServiceNodes.Load;
+    slice.Optimizer.setProblem('Price', []);
 end
 
 load = this.getNetworkLoad;

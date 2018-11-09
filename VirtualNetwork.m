@@ -16,8 +16,7 @@ classdef VirtualNetwork < INetwork
 	methods
 		function this = VirtualNetwork(vnet_data)
 			if nargin == 0
-				% args = cell(0);
-				return;
+				args = cell(0);
 			else
 				args = {vnet_data};
 			end
@@ -26,7 +25,7 @@ classdef VirtualNetwork < INetwork
 				return;
 			end
 			
-			this.Parent = vnet_data.Parent;		% 'Parent' is mandatory			
+			this.Parent = vnet_data.Parent;		% 'Parent' fields is mandatory.
 			% Virtual Links
 			this.Links = array2table(vnet_data.LinkMapS2P, 'VariableNames', {'PhysicalLink'});
 			this.Links.Capacity = zeros(height(this.Links),1);	% Link capacity
@@ -35,8 +34,12 @@ classdef VirtualNetwork < INetwork
 			this.Nodes = array2table(vnet_data.NodeMapS2P, 'VariableNames', {'PhysicalNode'});
 			% Virtual Data Center Nodes
 			% Select the data center nodes from all the virtual nodes of this slice.
-			dc_vn_index = ...
-				find(this.Parent.readNode('Capacity', this.Nodes.PhysicalNode) > 0);
+			%
+			%		intersect(this.Parent.DataCenters.Node, this.Nodes.PhysicalNode)
+
+			dc_vn_index = find(this.Parent.Nodes{this.Nodes.PhysicalNode, 'DataCenter'});
+			% 			dc_vn_index = ...
+			% 				find(this.Parent.readNode('Capacity', this.Nodes.PhysicalNode) > 0);
 			this.ServiceNodes = array2table(dc_vn_index, 'VariableNames', {'VirtualNode'});
 			this.Nodes.ServiceNode = zeros(this.NumberNodes,1);
 			this.Nodes{dc_vn_index, 'ServiceNode'} = (1:height(this.ServiceNodes))';
@@ -97,7 +100,7 @@ classdef VirtualNetwork < INetwork
 			else
 				sn_id = this.getSNPI(sn_index);
 			end
-			dc_index = this.Parent.readNode('ServiceNode', sn_id);
+			dc_index = this.Parent.readNode('DataCenter', sn_id);
 		end
 		
 	end

@@ -9,16 +9,30 @@ classdef (Abstract) INetwork < BaseCopyable & matlab.mixin.Heterogeneous
 		Nodes;					% <table> information of nodes
 		options;
 	end
+	%%%
+	% |Nodes|: the fields in node table include _Name_, _Location_.
+	%
+	% |Edges|: the fields in the edge table include _EndNodes_, _Weight_, _Capacity_,
+	% _Index_, _Load_, _Price_.
 	
 	properties (Dependent)
+    Optimizer;
 		NumberNodes;					% Number of nodes in the network
 		NumberLinks;					% Number of edges in the network
+	end
+	
+	properties (Access = protected)
+    op;
+	end
+		
+	methods (Abstract)
+		op = getOptimizer(this, options);
 	end
 	
 	methods
 		%
 		% netdata: <struct>
-		function this = Network(netdata)
+		function this = INetwork(netdata)
 			if nargin == 0	% default constructor
 				return;
 			end
@@ -26,9 +40,9 @@ classdef (Abstract) INetwork < BaseCopyable & matlab.mixin.Heterogeneous
 			if nargin >= 1
 				this.graph = DirectedGraph(netdata);
 			end
-			if isfied(netdata, 'Identifier')
+			if isfield(netdata, 'Identifier')
 				this.Identifier = netdata.Identifier;
-			end
+			end			
 		end
 		
 	end
@@ -49,6 +63,7 @@ classdef (Abstract) INetwork < BaseCopyable & matlab.mixin.Heterogeneous
 		end
 	end
 	
+	%% Property Get Methods
 	methods
 		function n = get.NumberNodes(this)
 			n = height(this.Nodes);% n = this.graph.NumberNodes;
@@ -57,10 +72,14 @@ classdef (Abstract) INetwork < BaseCopyable & matlab.mixin.Heterogeneous
 		function m = get.NumberLinks(this)
 			m = height(this.Links); % m = this.graph.NumberEdges;
 		end
+		
+		function op = get.Optimizer(this)
+      op = this.op;
+    end	
 	end
 	
-	methods
-
+	%% Public Methods
+	methods		
 		function value = readNode(this, name, node_id)
 			value = this.Nodes{node_id, {name}};
 		end

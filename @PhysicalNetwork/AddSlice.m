@@ -31,7 +31,7 @@ slice_opt = this.preAddingSlice(slice_opt);
 
 %% create flow table
 graph = this.residualgraph(slice_opt);
-[slice_opt.FlowTable, phy_adjacent, flag, slice_opt] = this.generateFlowTable(graph, slice_opt);
+[slice_opt.FlowTable, phy_adjacent, flag] = this.generateFlowTable(graph, slice_opt);
 sl = [];
 if flag == false
     return;
@@ -73,7 +73,7 @@ sl = this.createslice(slice_opt, varargin{:});
 % Assign identifier to flow/path of the slice.
 global DEBUG; %#ok<NUSED>
 sl.FlowTable.Identifier = this.flow_identifier_generator.next(sl.NumberFlows);
-this.allocatepathid(sl);
+this.AllocatePathId(sl);
 
 %% resource usage
 link_id = sl.Links.PhysicalLink;

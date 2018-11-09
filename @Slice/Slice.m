@@ -5,13 +5,7 @@ classdef Slice < VirtualNetwork
 		
 		FlowTable;      % flow information in the slice
 		VNFList;        % List of virtual network functions in the slice
-	end
-	
-	properties (Access = protected)
-    op;
-  end
-  
-  properties
+
     b_final logical = false;
   end
 	
@@ -21,38 +15,32 @@ classdef Slice < VirtualNetwork
 		NumberFlows;					% Number of flows in the slice
 		NumberPaths;					% Number of paths in the slice
 		NumberVNFs;						% Number of virtual network functions in the slice
-    Optimizer;
-  end
+	end
+	
+	properties (SetAccess = {?Slice, ?SliceOptimizer})
+		path_owner; % Associated flow of path, to provide fast inquiry of associated flow than using |I_flow_path|.
+	end
 	
   methods (Abstract)
     profit = getProfit(slice, options);
-  end
-  
-  methods (Abstract, Access=protected)
-    sc = getCost(this, load, model);
-    ye = getLinkLoad(this, ~);
-    v_n = getNodeLoad(this, ~);
-    c = getLinkCapacity(this, isfinal);
-    c = getNodeCapacity(this, isfinal);
-    vc = getVNFCapacity(this, ~);
     r = getRevenue(this);
-    setPathBandwidth(this, ~)
-  end
-  
-	methods (Static, Abstract)
-    [profit, grad] = fcnProfit(vars, slice, options);		% Objective function and gradient
-    [profit, grad] = fcnSocialWelfare(x_vars, S, options);
-    hs = fcnHessian(var_x, ~, slice, options);
-  end
-	
+		vc = getVNFCapacity(this, ~);
+		sc = getCost(this, load, model);
+	end
+    	
   %% Constructor and Destructor
   methods
     function this = Slice(slice_data)
-      if nargin == 0
-        return;
-      end
-      this@VirtualNetwork(slice_data);
-      
+			if nargin == 0
+				args = cell(0);
+			else
+				args = {slice_data};
+			end
+			this@VirtualNetwork(args{:});
+			if nargin == 0
+				return;
+			end
+			
       if isfield(slice_data, 'Type')
         this.Type = slice_data.Type;
       end
@@ -71,7 +59,7 @@ classdef Slice < VirtualNetwork
       if isfield(slice_data, 'NodePrice')
         this.ServiceNodes.Price = slice_data.NodePrice;
       else
-        this.ServiceNodes.Price = zeros(this.NumberSeviceNodes,1);
+        this.ServiceNodes.Price = zeros(this.NumberServiceNodes,1);
       end
       
       % Flow Table
@@ -79,21 +67,21 @@ classdef Slice < VirtualNetwork
       phy_nodes = this.PhysicalNodeMap;
       this.FlowTable = slice_data.FlowTable;
       for k = 1:height(this.FlowTable)
-        path_list = this.FlowTable{k,{'Paths'}};
+        path_list = this.FlowTable{k, 'Paths'};
         for p = 1:path_list.Width
-          path = path_list.paths{p};
-          path.node_list = phy_nodes(path.node_list);
+          path_list{p}.node_list = phy_nodes(path_list{p}.node_list);
         end
       end
       
-      this.VNFList = vnet_data.VNFList;
+      this.VNFList = slice_data.VNFList;
       
       % Flow options
-      this.options = getstructfields(vnet_data, ...
-        {'FlowPattern', 'DelayConstraint', 'NumberPaths'});
-      this.options = structmerge(this.options, ...
-        getstructfields(slice_data, 'SlicingMethod', 'default', SlicingMethod.AdjustPricing),...
-        getstructfields(slice_data, 'PricingPolicy', 'ignore'));
+			this.options = setdefault(this.options, struct(...
+				'SlicingMethod', SlicingMethod.AdjustPricing,...
+				'PricingPolicy', 'linear'...
+				));
+      this.options = structupdate(this.options, slice_data, ...
+				{'SlicingMethod', 'PricingPolicy', 'FlowPattern', 'DelayConstraint', 'NumberPaths'});
     end
     
     function delete(this)
@@ -113,7 +101,7 @@ classdef Slice < VirtualNetwork
 		
 		function c = get.NodeCost(this)
 			% the virtual data center nodes's unit cost
-			c = this.Parent.readNode('UnitCost', this.getSNPI);
+			c = this.Parent.readDataCenter('UnitCost', this.getDCPI());
     end
     
     function f = get.NumberFlows(this)
@@ -123,7 +111,7 @@ classdef Slice < VirtualNetwork
 		function p = get.NumberPaths(this)
 			p = 0;
 			for i=1:this.NumberFlows
-				p = p + this.FlowTable.Paths(i).Width;
+				p = p + this.FlowTable{i, 'Paths'}.Width;
 			end
     end	
     
@@ -131,9 +119,6 @@ classdef Slice < VirtualNetwork
 			n = length(this.VNFList);
     end
     
-    function op = get.Optimizer(this)
-      op = this.op;
-    end
   end
 	
   %% Public Methods
@@ -152,18 +137,19 @@ classdef Slice < VirtualNetwork
       end
       this.ServiceNodes{:,{'Load', 'Capacity'}} = 0;
       this.Links{:,{'Load', 'Capacity'}} = 0;
-      this.FlowTable.Rate = 0;
-      this.op.clear();
+      this.FlowTable{:, 'Rate'} = 0;
+      this.Optimizer.clear();
       this.b_final = false;
     end
     
     %% finalize
     % Called by the resource optimization method in the network.
     function finalize(this, prices)
+			assert(this.b_final==false, 'Slice state has not been initialized (consider re-initialize it after optimization).');
       if this.NumberFlows > 0
         % subclass may override _postProcessing_, it is recommended that
         % the subclass maintains the default behavior of this function.
-        this.postProcessing();
+        this.Optimizer.postProcessing();
         this.ServiceNodes.Load = this.getNodeLoad();
         this.Links.Load = this.getLinkLoad();
         this.ServiceNodes.Capacity = this.ServiceNodes.Load;
@@ -182,9 +168,40 @@ classdef Slice < VirtualNetwork
     
     function tf = isFinal(this)
       tf = this.b_final;
-    end
+		end
     
-    %%
+		function ye = getLinkLoad(this, varargin)
+			ye = this.op.getLinkLoad(varargin{:});
+		end
+		
+		function v_n = getNodeLoad(this, varargin)
+			v_n = this.op.getNodeLoad(varargin{:});
+		end
+		
+    %% Capacity and Load
+    % Public interface for network to inquire the resource occupation of the slices.
+    % In class <Slice>, <getLinkCapacity> and <getNodeCapacity> are equal to the
+    % protected methods <getLinkLoad> and <getNodeLoad> respectively. But in
+    % subclasses of <Slice>, the slice load might be less than its capacity, so that
+    % the two group of methods return different results.
+		function c = getNodeCapacity(this, isfinal)
+			if nargin == 1 
+				isfinal = true;
+			end
+			c = this.op.getNodeLoad(isfinal);
+		end
+
+		function c = getLinkCapacity(this, isfinal)
+			if nargin == 1 
+				isfinal = true;
+			end
+			c = this.op.getLinkLoad(isfinal);
+		end
+		
+		function r = getFlowRate(this, varargin)
+			r = this.op.getFlowRate(varargin{:});
+		end
+		%%
     % 		function pid = getLocalPathId(this, path)
     % 			%%%
     % 			% {need override}
@@ -221,9 +238,12 @@ classdef Slice < VirtualNetwork
 				% 'Paths' is a handle object, is should be copyed to the new table.
 				newobj.FlowTable{f,'Paths'} = this.FlowTable{f,'Paths'}.copy;
 			end
-    end
+		end
     
-    %% Resource Cost of a Slice
+	end
+	
+	methods (Access = {?Slice, ?SliceOptimizer})
+%% Resource Cost of a Slice
     % Both the node and link have cost linear with its load. Subclasses may override this
     % method to provide mode realistic cost model, such as including static cost or
     % non-linear cost model.
@@ -246,9 +266,8 @@ classdef Slice < VirtualNetwork
       link_uc = pn.getLinkCost(this.Links.PhysicalLink);
       node_uc = pn.getNodeCost(this.getDCPI);
       rc = dot(link_uc, load.Link) + dot(node_uc, load.Node);
-    end
-    
-  end
+		end
+	end
 	
   %% Static Methods
 	methods(Static)
@@ -257,48 +276,8 @@ classdef Slice < VirtualNetwork
 	end
 
 	methods
-		function initializeState(this)
-			Nsn = this.NumberServiceNodes;
-			Np = this.NumberPaths;
-			Nve = this.NumberLinks;
-			Nf = this.NumberFlows;
-			
-			this.I_dc_path = sparse(Nsn, Np);
-			this.I_edge_path = sparse(Nve, Np);
-			this.I_flow_path = sparse(Nf, Np);
-			this.path_owner = zeros(Np,1);
-			% this.local_path_id = zeros(this.NumberPaths, 1);
-			pid = 0;
-			for fid=1:Nf
-				path_list = this.FlowTable{fid,{'Paths'}};
-				for j = 1:path_list.Width
-					pid = pid + 1;
-					this.I_flow_path(fid,pid) = 1;
-					this.path_owner(pid) = fid;
-					path = path_list.paths{j};
-					path.local_id = pid;    % record the local path in the slice.
-					for k = 1:(path.Length-1)
-						e = path.Link(k);
-						eid = this.Topology.IndexEdge(e(1),e(2));
-						this.I_edge_path(eid, pid) = 1;
-						dc_index = this.Nodes{e(1),'ServiceNode'};
-						if dc_index~=0
-							this.I_dc_path(dc_index, pid) = 1;
-						end
-					end
-					dc_index = this.Nodes{e(2),'ServiceNode'}; % last node
-					if dc_index~=0
-						this.I_dc_path(dc_index, pid) = 1;
-					end
-				end
-			end
-		end
 		[payment, grad, pseudo_hess] = fcnLinkPricing(this, link_price, link_load);
 		[payment, grad, pseudo_hess] = fcnNodePricing(this, node_price, node_load);
-	end
-	
-	methods (Static)
-		slice_template = loadSliceTemplate(index);
 	end
 	
 end

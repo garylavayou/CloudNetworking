@@ -28,10 +28,11 @@ if isfield(options, 'bCompact') && options.bCompact
     full_vars(this.I_active_variables) = vars;
     vars = full_vars;
 end
-ND = this.NumberServiceNodes;
-NV = this.NumberVNFs;
-NL = this.NumberLinks;
-NP = this.NumberPaths;
+slice = this.hs;
+Nsn = slice.NumberServiceNodes;
+Nvf = slice.NumberVNFs;
+Nl = slice.NumberLinks;
+Np = slice.NumberPaths;
 var_x_index = 1:options.num_varx;
 idx_offset = options.num_varx+options.num_varz;
 var_v_index = (1:options.num_varv) + idx_offset;
@@ -42,9 +43,9 @@ var_tz_index = (1:options.num_varz) + idx_offset;
 idx_offset = idx_offset + options.num_varz;
 var_tv_index = (1:options.num_varv) + idx_offset;
 idx_offset = idx_offset + options.num_varv;
-var_c_index = (1:NL) + idx_offset;
+var_c_index = (1:Nl) + idx_offset;
 
-node_load = sum(reshape(vars(var_v_index), ND, NV),2);
+node_load = sum(reshape(vars(var_v_index), Nsn, Nvf),2);
 link_load = vars(var_c_index);
 var_path = vars(var_x_index);
 
@@ -52,11 +53,11 @@ flow_rate = this.getFlowRate(var_path);
 
 switch options.PricingPolicy
     case {'quadratic-price', 'quadratic'}
-        [link_payment,link_price_grad] = this.fcnLinkPricing(this.prices.Link, link_load);
-        [node_payment,node_price_grad] = this.fcnNodePricing(this.prices.Node, node_load);
-        profit = -this.weight*sum(fcnUtility(flow_rate)) + link_payment + node_payment;
+        [link_payment,link_price_grad] = slice.fcnLinkPricing(this.prices.Link, link_load);
+        [node_payment,node_price_grad] = slice.fcnNodePricing(this.prices.Node, node_load);
+        profit = -slice.weight*sum(fcnUtility(flow_rate)) + link_payment + node_payment;
     case 'linear'
-        profit = -this.weight*sum(fcnUtility(flow_rate)) ...
+        profit = -slice.weight*sum(fcnUtility(flow_rate)) ...
             + dot(this.prices.Link, link_load) + dot(this.prices.Node, node_load);
     otherwise
         error('%s: invalid pricing policy', calledby);
@@ -70,25 +71,25 @@ if isfield(options, 'bFinal') && options.bFinal
 end
 
 if nargout == 2
-    nnz_grad = NP + options.num_varv + ...
-        options.num_varx + options.num_varz + options.num_varv + NL;
+    nnz_grad = Np + options.num_varv + ...
+        options.num_varx + options.num_varz + options.num_varv + Nl;
     gd = spalloc(length(vars), 1, nnz_grad);
     switch options.PricingPolicy
         case {'quadratic-price', 'quadratic'}
-            for p = 1:NP
-                i = this.path_owner(p);
-                gd(p) = -this.weight/(1+this.I_flow_path(i,:)*var_path); %#ok<SPRIX>
+            for p = 1:Np
+                i = slice.path_owner(p);
+                gd(p) = -slice.weight/(1+this.I_flow_path(i,:)*var_path); %#ok<SPRIX>
             end
         case 'linear'
-            for p = 1:NP
-                i = this.path_owner(p);
-                gd(p) = -this.weight/(1+this.I_flow_path(i,:)*var_path); %#ok<SPRIX>
+            for p = 1:Np
+                i = slice.path_owner(p);
+                gd(p) = -slice.weight/(1+this.I_flow_path(i,:)*var_path); %#ok<SPRIX>
             end
         otherwise
             error('%s: invalid pricing policy', calledby);
     end
     %% partial derviatives on w(v)
-    gd(var_v_index) = repmat(node_price_grad, 1, NV);
+    gd(var_v_index) = repmat(node_price_grad, 1, Nvf);
     %% partial derivatives on c
     gd(var_c_index) = link_price_grad;
     %% partial derivatives on auxiliary variables tx,tz,tv

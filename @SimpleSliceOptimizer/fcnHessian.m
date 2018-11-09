@@ -19,6 +19,8 @@
 % options:
 %   # PricingPolicy:
 %   # bCompact: 'true' for compact mode, which reduce the problem scale.
+%% TODO
+% move to Optimizer.
 function hs = fcnHessian(vars, lambda, this, options) %#ok<INUSL>
 if isfield(options, 'bCompact') && options.bCompact
     full_vars = zeros(options.num_orig_vars,1);
@@ -26,17 +28,18 @@ if isfield(options, 'bCompact') && options.bCompact
     vars = full_vars;
 end
 
-if isempty(this.weight)
-    weight = this.FlowTable.Weight;    % for single slice;
+slice = this.hs;
+if isempty(slice.weight)
+    weight = slice.FlowTable.Weight;    % for single slice;
 else
-    weight = this.weight*ones(this.NumberFlows, 1);  % for multiple slices
+    weight = slice.weight*ones(slice.NumberFlows, 1);  % for multiple slices
 end
-NP = this.NumberPaths;
-hs = spalloc(length(vars),length(vars), NP^2);
-var_path = vars(1:NP);
-for p = 1:NP
-    i = this.path_owner(p);
-    hs(p,1:NP) = weight(i)*...
+Np = slice.NumberPaths;
+hs = spalloc(length(vars),length(vars), Np^2);
+var_path = vars(1:Np);
+for p = 1:Np
+    i = slice.path_owner(p);
+    hs(p,1:Np) = weight(i)*...
         this.I_flow_path(i,:)/(1+(this.I_flow_path(i,:)*var_path))^2; %#ok<SPRIX>
 end
 
@@ -56,12 +59,12 @@ if nargin >= 4 && isfield(options, 'PricingPolicy')
             % Then, for all paths, the hessian matrix component can represented by 
             % $G^T D_e\c G$, where matrix $G(e,p) = g_{e,p}$, $D_e$ is the
             % diagnoal matrix for $\rho_e^{''}$.
-            [~,~,lph] = this.fcnLinkPricing(this.prices.Link, this.getLinkLoad(var_path)); % equal to <getLinkCapacity>
+            [~,~,lph] = slice.fcnLinkPricing(this.prices.Link, this.getLinkLoad(false, var_path)); % equal to <getLinkCapacity>
             h1 = (this.I_edge_path') * diag(lph) * this.I_edge_path;
-            hs(1:NP, 1:NP) = hs(1:NP, 1:NP) + h1;
-            var_node = vars((NP+1):this.num_vars);
-            [~,~,nph] = this.fcnNodePricing(this.prices.Node, this.getNodeLoad(var_node));
-            NC = this.NumberServiceNodes;
+            hs(1:Np, 1:Np) = hs(1:Np, 1:Np) + h1;
+            var_node = vars((Np+1):this.NumberVariables);
+            [~,~,nph] = slice.fcnNodePricing(this.prices.Node, this.getNodeLoad(false,var_node));
+            Nsn = slice.NumberServiceNodes;
             %%%
             % Second derivatives on the node payment componet:
             % 
@@ -82,22 +85,22 @@ if nargin >= 4 && isfield(options, 'PricingPolicy')
             %   n2p2f1                                    *
             %   ...                                            ...
             %   nNp2f1                                                *   ...
-            h2 = spalloc(NP*NC, NP*NC, NP*NP*NC);
-            z_index1 = 1:NC;
-            for p1 = 1:NP
-                z_index2 = 1:NC;
+            h2 = spalloc(Np*Nsn, Np*Nsn, Np*Np*Nsn);
+            z_index1 = 1:Nsn;
+            for p1 = 1:Np
+                z_index2 = 1:Nsn;
                 for p2 = 1:p1           
                     % we only calculate the lower triangle, and use the symetric property
                     % to fill the upper triangle.
                     h2(z_index1,z_index2) = ...
                         diag(this.I_dc_path(:,p1) .* nph .* this.I_dc_path(:,p2)); %#ok<SPRIX>
-                    z_index2 = z_index2 + NC;
+                    z_index2 = z_index2 + Nsn;
                 end
-                z_index1 = z_index1 + NC;
+                z_index1 = z_index1 + Nsn;
             end
             h2 = h2 + (tril(h2,-1))';   % fill the upper triangle since the
-            h2 = repmat(h2, this.NumberVNFs, this.NumberVNFs);
-            hs((NP+1):this.num_vars, (NP+1):this.num_vars) = h2;
+            h2 = repmat(h2, slice.NumberVNFs, slice.NumberVNFs);
+            hs((Np+1):this.NumberVariables, (Np+1):this.NumberVariables) = h2;
         case 'linear'
         otherwise
             error('%s: invalid pricing policy', calledby);

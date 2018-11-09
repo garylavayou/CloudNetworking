@@ -19,8 +19,7 @@ net_opt.Threshold = 'average';
 VNF_opt.Number = 6;            % number of VNF type
 VNF_opt.Model = VNFIntegrateModel.AllInOne;
 VNF_opt.RandomSeed = [20161101 0]; 
-net_opt.AdmitPolicy = 'reject-flow';
-net_opt.Form = 'compact';
+opopt.Form = 'compact';
 
 %% control variables
 b_static = true;
@@ -34,18 +33,19 @@ slice_type = 33;
 %% 
 if b_optimal
     net_opt.SlicingMethod = SlicingMethod.SingleNormal;
-    PN = CloudAccessNetwork(node_opt, link_opt, VNF_opt, net_opt);
+    PN = SimpleCloudAccessNetwork(node_opt, link_opt, VNF_opt, net_opt);
     PN.slice_template = Slice.loadSliceTemplate(slice_type);
     link_capacity = PN.readLink('Capacity');
     node_capacity = PN.readDataCenter('Capacity');
     seed = floor(now);
     slice_opt = PN.slice_template(1);
     fprintf('\nSingle Slice Optimization:\n');
-    fprintf('\tAverage unit link cost: %.2G, average unit node cost: %.2G.\n', ...
-        mean(PN.readLink('UnitCost')), ...
-        mean(PN.readDataCenter('UnitCost')));
-    fprintf('\t\t(Ratio of unit node cost to unit link cost: %.2G.)\n\n',...
-        mean(PN.readDataCenter('UnitCost'))/mean(PN.readLink('UnitCost')));
+		fprintf('\tAverage unit link cost: %.2G, average unit node cost: %.2G.\n', ...
+			mean(PN.readLink('UnitCost')), ...
+			mean(PN.readDataCenter('UnitCost')));
+		fprintf('\t\t(Ratio of unit node cost to unit link cost: %.2G.)\n\n',...
+			mean(PN.readDataCenter('UnitCost'))/mean(PN.readLink('UnitCost')));
+		PN.getOptimizer(opopt);
     N = 5;
     while true && N > 0
         slice_opt.RandomSeed = seed;
@@ -69,13 +69,16 @@ if b_optimal
             break;
         else
             N = N - 1;
-        end
+				end
+				for i = 1:PN.NumberSlices
+					PN.slices{i}.initialize;
+				end
     end
 end
 %%
 if b_static
     net_opt.SlicingMethod = SlicingMethod.StaticPricing;
-    PN_static = CloudAccessNetwork(node_opt, link_opt, VNF_opt, net_opt);
+    PN_static = SimpleCloudAccessNetwork(node_opt, link_opt, VNF_opt, net_opt);
     PN_static.slice_template = Slice.loadSliceTemplate(slice_type);
     link_capacity = PN_static.readLink('Capacity');
     node_capacity = PN_static.readDataCenter('Capacity');
@@ -89,7 +92,8 @@ if b_static
         fprintf('\nStatic Slicing Repeat:\n');
     else
         fprintf('\nStatic Slicing:\n');
-    end
+		end
+		PN.getOptimizer(opopt);
     seed = floor(now);
     while true
         slice_opt.RandomSeed = seed;

@@ -16,26 +16,27 @@
 %   # PricingPolicy:
 % NOTE: The second and third arguments must be provided. To accelarate the computation of _fmincon_,
 %     we do not perform any arguments checking.
-function [profit, gd] = fcnProfit(vars, slice, options)
+function [profit, gd] = fcnProfit(vars, this, options)
 if isfield(options, 'bCompact') && options.bCompact
     full_vars = zeros(options.num_orig_vars,1);
-    full_vars(slice.I_active_variables) = vars;
+    full_vars(this.I_active_variables) = vars;
     vars = full_vars;
 end
+slice = this.hs;
 var_x = vars(1:slice.NumberPaths);
-var_z = vars((slice.NumberPaths+1):slice.NumberVariables);
-link_load = slice.getLinkLoad(var_x);    % equal to <getLinkCapacity>
-node_load = slice.getNodeLoad(var_z);
-flow_rate = slice.getFlowRate(var_x);
+var_z = vars((slice.NumberPaths+1):this.NumberVariables);
+link_load = slice.getLinkLoad(false, var_x);    % equal to <getLinkCapacity>
+node_load = slice.getNodeLoad(false, var_z);
+flow_rate = this.getFlowRate(var_x);
 
 switch options.PricingPolicy
     case {'quadratic-price', 'quadratic'}
-        [link_payment,link_price_grad] = slice.fcnLinkPricing(slice.prices.Link, link_load);
-        [node_payment,node_price_grad] = slice.fcnNodePricing(slice.prices.Node, node_load);
+        [link_payment,link_price_grad] = slice.fcnLinkPricing(this.prices.Link, link_load);
+        [node_payment,node_price_grad] = slice.fcnNodePricing(this.prices.Node, node_load);
         profit = -slice.weight*sum(fcnUtility(flow_rate)) + link_payment + node_payment;
     case 'linear'
         profit = -slice.weight*sum(fcnUtility(flow_rate)) ...
-            + dot(slice.prices.Link, link_load) + dot(slice.prices.Node, node_load);
+            + dot(this.prices.Link, link_load) + dot(this.prices.Node, node_load);
     otherwise
         error('%s: invalid pricing policy', calledby);
 end
@@ -71,17 +72,17 @@ if nargout == 2
     % $$ \frac{\partial f}{\partial x(p)} =
     %    -\frac{w}{1+\sum_{p_0\in\mathcal{P}}{q_{i_p,p_0}\cdot x_{p_0}}} +
     %    \sum_{e\in p}{\rho^{'}_e\cdot g_{e,p}},~~ \forall p\in\mathcal{P}$$
-    gd = spalloc(slice.NumberVariables, 1, ...
-        slice.NumberPaths+nnz(slice.I_dc_path)*slice.NumberVNFs);
+    gd = spalloc(this.NumberVariables, 1, ...
+        slice.NumberPaths+nnz(this.I_dc_path)*slice.NumberVNFs);
     for p = 1:slice.NumberPaths
         i = slice.path_owner(p);
         switch options.PricingPolicy
             case {'quadratic-price', 'quadratic'}
-                gd(p) = -slice.weight/(1+slice.I_flow_path(i,:)*var_x) +  ...
-                    dot(link_price_grad,slice.I_edge_path(:,p)); %#ok<SPRIX>
+                gd(p) = -slice.weight/(1+this.I_flow_path(i,:)*var_x) +  ...
+                    dot(link_price_grad,this.I_edge_path(:,p)); %#ok<SPRIX>
             case 'linear'
-                gd(p) = -slice.weight/(1+slice.I_flow_path(i,:)*var_x) +  ...
-                    dot(slice.prices.Link,slice.I_edge_path(:,p)); %#ok<SPRIX>
+                gd(p) = -slice.weight/(1+this.I_flow_path(i,:)*var_x) +  ...
+                    dot(this.prices.Link,this.I_edge_path(:,p)); %#ok<SPRIX>
             otherwise
                 error('%s: invalid pricing policy', calledby);
         end
@@ -109,9 +110,9 @@ if nargout == 2
             case 'quadratic-price'
                 % |grad(z_index)| is a vector, and the right side is a matrix, the value
                 % of the matrix will be assigned to |grad(z_index)| column by column.
-                gd(z_index) = node_price_grad.*slice.I_dc_path; %#ok<SPRIX>
+                gd(z_index) = node_price_grad.*this.I_dc_path; %#ok<SPRIX>
             case 'linear'
-                gd(z_index) = slice.prices.Node.*slice.I_dc_path; %#ok<SPRIX>
+                gd(z_index) = this.prices.Node.*this.I_dc_path; %#ok<SPRIX>
             otherwise
                 error('%s: invalid pricing policy', calledby);
         end
@@ -119,7 +120,7 @@ if nargout == 2
     end
     
     if isfield(options, 'bCompact') && options.bCompact
-        gd = gd(slice.I_active_variables);
+        gd = gd(this.I_active_variables);
     end
 end
 end
