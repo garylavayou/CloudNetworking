@@ -20,7 +20,7 @@ We propose two fast slice reconfiguration schemes:
 2. *Reconfigure Slice with Elastic VNF capacity (RSEV)*: in addtion to the ability of RSCV, we can further adjust the VNF instance's capacity.
 
 
-## Hibrid Slice Reconfiguration
+## Hybrid Slice Reconfiguration
 
 At long time scale, the traffic variation might be huge, so that the traffic demand and available resource in the slice might be mismathced.
 As a result, the slice cannot achieve its optimal profit, without reconfigure the resource allocation for the slice.
