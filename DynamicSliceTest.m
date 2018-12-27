@@ -21,7 +21,7 @@ classdef DynamicSliceTest < DynamicSlice
         function [exitflag,fidx] = executeMethod(this, action)
             global event_num DEBUG;  %#ok<NUSED>
             [exitflag,fidx] = executeMethod@DynamicSlice(this, action);
-            if event_num == this.getOption('NumberEventWarmUp')
+            if event_num == this.options.NumberEventWarmUp
                 this.options.ReconfigMethod = this.saved_options.ReconfigMethod;
             end
         end
