@@ -1,80 +1,69 @@
 %% Hybrid Slice Reconfiguration
 % Task 1: evaluating the influcence of serveral parameters to the
 %		reconfiguration ratio of HSR and HSR-RSV, compared with FSR and a
-%		baseline scheme that does not consider reconfiguration cost.
-%	Task 2: evaluting the performance of HSR and HSR-RSV.
+%		baseline scheme that does not consider reconfiguration cost. (testparams)
+%	Task 2: evaluting the performance of HSR and HSR-RSV. (perfeval)
 %
 % Task 3: evaluating the efficacy of the parallel computing algorithm
-%		(dual-ADMM) for FSR.
-
+%		(dual-ADMM) for FSR. 
 global DEBUG;
 DEBUG = true;
-if nargin == 0
-	task = 'PerfEval';
-end
-if nargin >= 3
-	b_save = bitand(operations, hex2dec('0001'));
-	b_plot = bitand(operations, hex2dec('0002'));
-else
-	b_save = 0;
-	b_plot = 0;
-end
 
 pre_slice_reconfigure;
-type.Index = [144; 154; 164; 174; 184];
-type.Permanent = 4;
-type.Static = [1; 2; 3];
+VNF_opt.Ordered = true;
+
+task = 'perfeval';			% {'perfeval'|'testparam'|'paracomp'}
+mode = 'vareta';
+% b_save = false; % initialized in pre_slice_reconfigure
+% b_plot = false;
+
+% type.Index = [144; 154; 164; 174; 184];
+% type.Permanent = 4;
+% type.Static = [1; 2; 3];
 type.StaticCount = [1; 2; 2];
-type.StaticClass = {'SimpleSlice'};
-if strcmpi(task, 'PerfEval')
-	mode = 'var-eta'; etas = 1; numberflow = 100; weight = 10;
-elseif strcmpi(task, 'Vars')
+% type.StaticClass = {'SimpleSlice'};
+if startsWith(task, 'perfeval')
+	mode = 'vareta'; etas = 1; numberflow = 100; weight = 10; num_vars = 1;
+elseif startsWith(task, 'testparams')
 	switch mode
-		case 'var-eta'
-			etas = [1/32 1/16 1/8 1/4 1/2 1 2 4 8]; numberflow = 100; weight = 10; %#ok<*NASGU>
-		case 'var-weight'
-			weight = 10:10:80; etas = 1;  numberflow = 100;
-		case 'var-number'
-			numberflow = 30:30:240; etas = 1; weight = 10;
+		case 'vareta'
+			etas = [1/32 1/16 1/8 1/4 1/2 1 2 4 8]; 
+			numberflow = 40; weight = 10; num_vars = length(etas);
+		case 'varweight'
+			weight = 10:10:80; 
+			etas = 1;  numberflow = 100; num_vars = length(weight);
+		case 'varnumber'
+			numberflow = 30:30:240; 
+			etas = 1; weight = 10; num_vars = length(numberflow);
 		otherwise
 			error('error: invalid mode [%s].', task);
 	end
-elseif strcmpi(task, 'PerfEvalFSR')
-	
+elseif strcmpi(task, 'paracomp')
+	error('error: to implement.');
 end
-if exist('test_mode', 'var') && ~isempty(task)
-	switch task
-		case 'var-eta'
-			etas = [1/32 1/16 1/8 1/4 1/2 1 2 4 8]; numberflow = 100; weight = 10; %#ok<*NASGU>
-		case 'var-weight'
-			weight = 10:10:80; etas = 1;  numberflow = 100;
-		case 'var-number'
-			numberflow = 30:30:240; etas = 1; weight = 10;
-		otherwise
-			error('error: invalid mode [%s].', task);
-	end
-	mode = task;
-else
-	mode = 'var-eta'; etas = 1; numberflow = 100; weight = 10;
+if VNF_opt.Ordered
+	options.NetworkType = 'NormalDynamicNetwork';
+	type.StaticClass = {'NormalSlice'};
 end
-b_dimbaseline = true;       % Baseline
-b_dimconfig0 = true;        % HSR
-b_dimconfig = true;         % HSR-RSV
-b_fastconfig0 = true;				% FSR
+
+% test_methods = {'Baseline', 'Dimconfig', 'DimconfigReserve', 'Fastconfig', 'DimBaseline'};
+test_methods = {'DimconfigReserve'};
 NUM_EVENT = 401;            % {200,400} the trigger-interval is set to 50. 
-EXPNAME = sprintf('EXP04');
+EXPNAME = sprintf('TEST04');
+warning('off', 'backtrace');
+warning('on', 'verbose');
 runexp04xxx;
 
 %% Output
 % # plot figure
-if nargin >= 3 && ~isempty(b_plot) && b_plot
+if b_plot
 	data_plot3;
 	data_plot31;
 	dataplot3s;
 	dataplot3sa;
 end
 % # Save Results
-if nargin>= 2 && ~isempty(b_save) && b_save
+if b_save
 	if exist('test_mode', 'var')
 		description = sprintf('Experiment 4-1: verify the influence of %s',...
 			config_num, ...

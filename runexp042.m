@@ -1,27 +1,15 @@
 %% Hybrid Slice Reconfiguration
-% Task 11: evaluating the influcence of serveral parameters to the
-%		reconfiguration ratio of HSR and HSR-RSV (FSR), compared with FSR and a
-%		baseline scheme that does not consider reconfiguration cost.
-%	Task 12: evaluting the performance of HSR and HSR-RSV.
-% Task 21: evaluating the influcence of parameters to the reconfiguration
-%		ratio of FSR. 
-%	Task 22: evaluting the performance of FSR.
-%
-%% Tasks
-% task = {'perfeval.hsr', 'testparam.hsr', 'perfeval.fsr', 'testparam.fsr'}
-% mode = {'vareta', 'varweight', 'varnumber'}
-function results = runexp04(task, mode, ioopts)
+% With ordered servcie functio chain model, see also <runexp04.m>.
+
+function results = runexp042(task, mode, ioopts)
 global DEBUG;
 DEBUG = true;
-EXPNAME = sprintf('EXP041');
-%% Predefined experiment settings
-%		> Network Type:
-%			- DynamicCloudNetwork(1)
-%		> Topology:
-%			- Sample2(2)
-%		> Warm-up phase:
-%			- No(0)
+EXPNAME = sprintf('EXP042');
 pre_slice_reconfigure;
+warning('off', 'backtrace');
+warning('on', 'verbose');
+options.NetworkType = 'NormalDynamicNetwork';
+type.StaticClass = {'NormalSlice'};
 if nargin >= 3
 	b_save = bitand(ioopts, hex2dec('0001')); % initialized in pre_slice_reconfigure
 	b_plot = bitand(ioopts, hex2dec('0002'));
@@ -42,7 +30,7 @@ if nargin == 0
 			warning('invalid value, task is set to ''%s''.', task);
 	end
 end
-if nargin <= 1 && startsWith(task,'testparam')
+if nargin <= 1 && startsWith(task,'testparam', 'IgnoreCase',true)
 	i = input('Please give the mode: 1. ''vareta'', 2. ''varweight'', 3.''varnumber'':{1|2|3}', 's');
 	switch i
 		case '1', mode = 'vareta';
@@ -54,16 +42,18 @@ if nargin <= 1 && startsWith(task,'testparam')
 	end
 end
 %% Set Simulation Parameters
-if endsWith(task, 'hsr')
-	NUM_EVENT = 401;            % the trigger-interval is set to 60.
+if endsWith(task, 'hsr', 'IgnoreCase',true)
+	NUM_EVENT = 401;            % {201,401} the trigger-interval is set to 50.
 	test_methods = {'DimBaseline', 'Dimconfig', 'DimconfigReserve'}; %#ok<*NASGU>
-elseif endsWith(task, 'fsr')
+elseif endsWith(task, 'fsr', 'IgnoreCase',true)
 	NUM_EVENT = 51;
 	test_methods = {'Baseline', 'Fastconfig'};
+else 
+	error('error: must specify the reconfiguration scheme: HSR or FSR.');
 end
-if startsWith(task,'perfeval')
+if startsWith(task,'perfeval', 'IgnoreCase',true)
 	mode = 'vareta'; etas = 1; numberflow = 100; weight = 10; num_vars = 1;
-elseif startsWith(task,'testparam')
+elseif startsWith(task,'testparam', 'IgnoreCase',true)
 	switch mode
 		case 'vareta'
 			etas = [1/32 1/16 1/8 1/4 1/2 1 2 4 8]; 
@@ -102,7 +92,7 @@ if b_plot
 	if endsWith(task, 'hsr')
 		dataplot3l1approx
 		%%
-		load('Results/singles/EXP41_OUTPUT241s0100.mat', 'results');
+		load('Results/singles/EXP42_OUTPUT241s0100.mat', 'results');
 		dataplot3sa2(results); %#ok<*NODEF>
 		%%
 		dataplot3params(mode, [], [], [], options)
@@ -115,7 +105,7 @@ if b_plot
 		dataplot3params(mode, lines, [], [], options)
 		%%
 		if ~exist('results', 'var')
-			load('Results/singles/EXP41_OUTPUT241s0100.mat', 'results');
+			load('Results/singles/EXP42_OUTPUT241s0100.mat', 'results');
 		end
 		for i = 1:length(lines.Sources)
 			results.(lines.Sources{i}) = results.(lines.Sources{i})(ex_id);
@@ -134,14 +124,14 @@ if b_save
 		suffix = '_fast';
 	end
 	if startsWith(task, 'testparam')
-		description = 'Experiment 4-11: verify the influence of network settings to ';
+		description = 'Experiment 4-21: verify the influence of network settings to ';
 		output_name = sprintf('Results/%s1_%s%s.mat', EXPNAME, mode, suffix);
 	elseif startsWith(task, 'perfeval')
-		description = 'Experiment 4-12: Performance evaluation of ';
+		description = 'Experiment 4-22: Performance evaluation of ';
 		output_name = sprintf('Results/%s2_%se%04d.mat', EXPNAME, suffix, round(etas(1)*100));
 	end
 	description = [description, tag, ...
-			'(un-ordered SFC, without warm-up phase, disable ad-hoc mode).', newline, ...
+			'(ordered SFC, without warm-up phase, disable ad-hoc mode).', newline, ...
 			'Topology = ', node_opt.Model.char, newline, ...
 			sprintf('SliceType = %d\n', type.Index(type.Permanent))];
 	if startsWith(task, 'testparam')
