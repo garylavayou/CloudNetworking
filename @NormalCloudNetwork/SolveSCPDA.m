@@ -1,6 +1,6 @@
 %% Subroutine: SCP
 % Solve the SCP with Dual-ADMM.
-function results = SolveSCP0(this, slices, prices, options)
+function results = SolveSCPDA(this, slices, prices, options)
 %% Global Declaration
 global ITER_LIMIT; 
 if isempty(ITER_LIMIT)
@@ -8,32 +8,17 @@ if isempty(ITER_LIMIT)
 end
 %% Initialization parameters
 num_process = length(slices);
-if ~isfield(options, 'PenaltyFactor')
-	options.PenaltyFactor = 1;
-end
-r = options.PenaltyFactor;
-if ~isfield(options, 'RelativeTolerance')
-	eps_rel = 10^-3;
-else
-	eps_rel = options.RelativeTolerance;
-end
-if ~isfield(options, 'AbsolueTolerance')
-	eps_abs = 10^-6;
-else
-	eps_abs = options.AbsoluteTolerance;
-end
-if ~isfield(options, 'OptimizeOrder')
-	opt_order = 1;
-else
-	opt_order = options.OptimizeOrder;
-end
+r = this.options.InterSlicePenalty;
+eps_rel = this.options.RelativeTolerance;
+eps_abs = this.options.AbsoluteTolerance;
+opt_order = this.options.OptimizeOrder;
 M = getParallelInfo();
 %% Initialization variables
 Ns = length(slices);
 num_duals = this.NumberLinks + this.NumberDataCenters;
 num_links = this.NumberLinks;
 for si = 1:num_process
-	sl = slices{si};
+	sl = slices(si);
 	dc_id = sl.getDCPI;
 	sl.prices.Link = link_price;
 	sl.prices.Link = sl.prices.Link(sl.VirtualLinks.PhysicalLink);
@@ -70,7 +55,7 @@ while true
 	%% Step 2: solve the sub-problems, returning the primal variables
 	parfor (sj = 1:num_process,M)
 		% 			for sj = 1:num_process
-		sl = slices{sj};
+		sl = slices(sj);
 		dc_id = sl.getDCPI;
 		idx = [sl.VirtualLinks.PhysicalLink; num_links+dc_id];
 		lambda = lambda_k;
@@ -137,7 +122,7 @@ fprintf('Dual-ADMM: elapsed time: %d\n', t2);
 
 loads = zeros(num_duals, num_process);
 for si = 1:num_process
-	sl = slices{si};
+	sl = slices(si);
 	sl.op.saveTempResults(output_k{si});
 	loads(:,si) = output_k{si}.loads;
 end
@@ -152,8 +137,8 @@ results.numiters = k;
 %% Capacity Distribution
 % (a) Distribute the capacity according to the value of 'q';
 % (b) Distribute the capacity accroding to the load;
-if isfield(options, 'capacities')
-	capacities = options.capacities/Ns;
+if isfield(options, 'Capacities')
+	capacities = options.Capacities/Ns;
 	delta_capacity = zeros(size(q_k));
 	for i = 1:num_duals
 		delta_capacity(i,:) = min(q_k(i,:), capacities(i));
@@ -164,6 +149,6 @@ if isfield(options, 'capacities')
 				(-sum(delta_capacity(i,~b_transfer))/sum(delta_capacity(i,b_transfer)));
 		end
 	end
-	results.capacities = capacities - delta_capacity;
+	results.Capacities = capacities - delta_capacity;
 end
 end

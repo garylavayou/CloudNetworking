@@ -1,13 +1,13 @@
 %% Virtual Network
 % Define resource information in a network.
-classdef (Abstract) INetwork < BaseCopyable & matlab.mixin.Heterogeneous
+classdef (Abstract) INetwork < BaseCopyable & HeteroObject
 	properties
 		Identifier uint64;
 		
-		graph;					% <DirectedGraph> topology information
-		Links;					% <table> information of links
-		Nodes;					% <table> information of nodes
-		options;
+		graph DirectedGraph;					% <DirectedGraph> topology information
+		Links = table;					% <table> information of links
+		Nodes = table;					% <table> information of nodes
+		options Dictionary;
 	end
 	%%%
 	% |Nodes|: the fields in node table include _Name_, _Location_.
@@ -42,16 +42,23 @@ classdef (Abstract) INetwork < BaseCopyable & matlab.mixin.Heterogeneous
 			end
 			if isfield(netdata, 'Identifier')
 				this.Identifier = netdata.Identifier;
-			end			
+			end		
+			
+			this.options = Dictionary();
 		end
 		
+		function delete(this)
+			if ~isempty(this.graph) && isvalid(this.graph)
+				delete(this.graph);
+			end
+		end
 	end
 	
 	methods (Access = protected)
 		function newobj = copyElement(this)
 			% Make a shallow copy of all properties
 			if this.isShallowCopyable
-				newobj = copyElement@matlab.mixin.Copyable(this);
+				newobj = copyElement@BaseCopyable(this);
 			else
 				newobj = this;
 			end
@@ -102,14 +109,14 @@ classdef (Abstract) INetwork < BaseCopyable & matlab.mixin.Heterogeneous
 		function [theta, t_link, t_node] = utilizationRatio(this)
 			[cap,load] = this.readCapacityLoad();
 			capacities = [cap.node; cap.link];
-			load = [load.node; load.link];
+			loads = [load.node; load.link];
 			idx = capacities>eps;
 			if isempty(idx)
 				error('error:[%s] this network has no capacity.', calledby);
 			end
 			
-			theta.Mean = mean(load(idx)./capacities(idx));
-			theta.Overall = sum(load)/sum(capacities);
+			theta.Mean = mean(loads(idx)./capacities(idx));
+			theta.Overall = sum(loads)/sum(capacities);
 			if nargout >= 2
 				eidx = cap.link>eps;
 				if isempty(eidx)
@@ -131,6 +138,7 @@ classdef (Abstract) INetwork < BaseCopyable & matlab.mixin.Heterogeneous
 	end
 	
 	methods (Abstract,Access = protected)
+		% Get the link and node's capacity and load.
 		[cap, load] = readCapacityLoad(this);
 	end	
 	

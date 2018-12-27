@@ -15,7 +15,7 @@
 % maintained for arrival and departure events, and we need to sort the departure events.
 % # 
 
-classdef RandomEventDispatcher < matlab.mixin.Copyable
+classdef RandomEventDispatcher < matlab.mixin.Copyable & HeteroObject
     
     properties (SetAccess = protected)
         rand_state;
@@ -53,7 +53,7 @@ classdef RandomEventDispatcher < matlab.mixin.Copyable
                     entity_builder = ListArray('EntityBuilder');
                 end
                 if isa(entity_builder, 'ListArray') && ...
-                        iscompatible(entity_builder.TypeName, 'EntityBuilder')
+                        istype(entity_builder.TypeName, 'EntityBuilder')
                     this.entity_builder = entity_builder.copy;
                 elseif isa(entity_builder, 'EntityBuilder')
                     this.entity_builder = ListArray([], entity_builder);
@@ -100,43 +100,43 @@ classdef RandomEventDispatcher < matlab.mixin.Copyable
             %     copy. <RandomEventDispatcher> has access to <Entity.Builder>, and
             %     <SliceEntity.Child>.
             %
-            newobj.entity_builder = this.entity_builder.copy;
-            newobj.entities = this.entities.copy;
-            newobj.event_queue = this.event_queue.copy;
+            newobj.entity_builder = this.entity_builder.copy();
+            newobj.entities = this.entities.copy();
+            newobj.event_queue = this.event_queue.copy();
             for i = 1:newobj.entity_builder.Length
-                if isa(this.entity_builder(i), 'FlowEntityBuilder')
-                    if ~isempty(this.entity_builder(i).Parent)
-                        idx = this.entities.Find(this.entity_builder(i).Parent);
-                        eb = newobj.entity_builder(i);
-                        eb.Parent = newobj.entities(idx);
+                if isa(this.entity_builder{i}, 'FlowEntityBuilder')
+                    if ~isempty(this.entity_builder{i}.Parent)
+                        idx = this.entities.Find(this.entity_builder{i}.Parent);
+                        eb = newobj.entity_builder{i};
+                        eb.Parent = newobj.entities{idx};
                     end
                 end
             end
             for i = 1:newobj.entities.Length
-                if ~isempty(this.entities(i).Builder)
-                    idx = this.entity_builder.Find(this.entities(i).Builder);
-                    et = newobj.entities(i);
+                if ~isempty(this.entities{i}.Builder)
+                    idx = this.entity_builder.Find(this.entities{i}.Builder);
+                    et = newobj.entities{i};
                     % Since (slice) entities may be mannually added to the dispatcher, thus without
                     % associated builder in the dispatcher. Since the external builder will not be
                     % used, we set the |Builder| field of the new copy as empty.
                     if isempty(idx)
                         et.Builder = creatempty('EntityBuilder');
                     else
-                        et.Builder = newobj.entity_builder(idx);
+                        et.Builder = newobj.entity_builder{idx};
                     end
                 end
-                if isa(this.entities(i), 'SliceEntity')
-                    if ~isempty(this.entities(i).Child)
+                if isa(this.entities{i}, 'SliceEntity')
+                    if ~isempty(this.entities{i}.Child)
                         warning('<Child> is non-empty.');
                     end
                 end
                 
             end
             for i = 1:newobj.event_queue.Length
-                if ~isempty(this.event_queue(i).Entity)
-                    idx = this.entities.Find(this.event_queue(i).Entity);
-                    ev = newobj.event_queue(i);
-                    ev.Entity = newobj.entities(idx);
+                if ~isempty(this.event_queue{i}.Entity)
+                    idx = this.entities.Find(this.event_queue{i}.Entity);
+                    ev = newobj.event_queue{i};
+                    ev.Entity = newobj.entities{idx};
                 end
             end
         end
@@ -147,8 +147,8 @@ classdef RandomEventDispatcher < matlab.mixin.Copyable
                 this.seed = seed;
             end
             
-            this.entities.Clear;
-            this.event_queue.Clear;
+            this.entities.Clear();
+            this.event_queue.Clear();
             
             rng(this.seed);
                         
@@ -183,7 +183,7 @@ classdef RandomEventDispatcher < matlab.mixin.Copyable
                 end
             end
             
-            if this.event_queue(1).Type == EventType.Depart
+            if this.event_queue{1}.Type == EventType.Depart
                 % When there is another 'Arrive' event in the event queue, we know there
                 % is no other 'Arrive' event before this event. So we will process the
                 % 'Depart' event.
@@ -196,11 +196,11 @@ classdef RandomEventDispatcher < matlab.mixin.Copyable
                 %       determined that no more event before it.
                 if ~this.b_pending_arrive
                     this.addnewentity;
-                    assert(issorted(this.event_queue.Time), 'error: EventQueue.');
+                    assert(issorted(this.event_queue{'Time'}), 'error: EventQueue.');
                     this.b_pending_arrive = true;
                 end
             end
-            ev = this.event_queue.PopFront;
+            ev = this.event_queue.PopFront();
             this.current_time = ev.Time;
             %%%
             % when removing events, we need to check if we also need to remove the
@@ -240,7 +240,7 @@ classdef RandomEventDispatcher < matlab.mixin.Copyable
         end
         
         function update_entity_builder(this)
-            arrive_rate = this.entity_builder(:).ArrivalRate;
+            arrive_rate = this.entity_builder{'ArrivalRate'};
             if ~isempty(arrive_rate)
                 this.avg_arrive_interval = 1/sum(arrive_rate);
                 this.entity_probability = cumsum(arrive_rate/sum(arrive_rate));
@@ -257,7 +257,7 @@ classdef RandomEventDispatcher < matlab.mixin.Copyable
             if isinteger(argin)
                 eb_id = argin;
                 for i = 1:this.entity_builder.Length
-                    if this.entity_builder(i).Identifer == eb_id
+                    if this.entity_builder{i, 'Identifer'} == eb_id
                         %%%
                         % with no return value, the object of entity source will be
                         % deleted.
@@ -280,17 +280,17 @@ classdef RandomEventDispatcher < matlab.mixin.Copyable
         function e = addnewentity(this)
             arrive_time = this.current_time + exprnd(this.avg_arrive_interval);
             ei = this.nextEntityId;
-            service_time = exprnd(this.entity_builder(ei).ServiceInterval);
-            e = Entity(arrive_time, service_time, this.entity_builder(ei));
+            service_time = exprnd(this.entity_builder{ei}.ServiceInterval);
+            e = Entity(arrive_time, service_time, this.entity_builder{ei});
             this.entities.Add(e);
             %%%
             % PushBack can return the storage index in the queue.
             %             this.last_arrive_pos = ...
             this.event_queue.PushBack(...
-                Event(arrive_time, EventType.Arrive, this.entities(end)), 'front');
+                Event(arrive_time, EventType.Arrive, this.entities{this.entities.Length}), 'front');
             %             depart_pos = ...
             this.event_queue.PushBack(...
-                Event(e.DepartTime, EventType.Depart, this.entities(end)));
+                Event(e.DepartTime, EventType.Depart, this.entities{this.entities.Length}));
             %             if depart_pos < this.next_depart_pos
             %                 this.next_depart_pos = depart_pos;
             %             end

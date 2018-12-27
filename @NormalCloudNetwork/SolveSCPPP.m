@@ -7,14 +7,14 @@ if isempty(ITER_LIMIT)
 	ITER_LIMIT = inf;
 end
 %%
-if ~isfield(options, 'PenaltyFactor')
-	% 	options.PenaltyFactor = 0.1*mean([node_price; link_price]);
-	options.PenaltyFactor = 32/length(slices)/mean([node_price; link_price]);
+if ~isfield(options, 'InterSlicePenalty')
+	% 	options.InterSlicePenalty = 0.1*mean([node_price; link_price]);
+	options.InterSlicePenalty = 32/length(slices)/mean([node_price; link_price]);
 end
 M = getParallelInfo();
 
 %% Initialization parameters
-r = options.PenaltyFactor;
+r = options.InterSlicePenalty;
 Ns = length(slices);
 num_process = Ns;
 options.NumberSlices = Ns;
@@ -28,7 +28,7 @@ fval__ = 0;
 output_k = cell(num_process,1);
 loads = zeros(num_duals, num_process);
 for si = 1:num_process
-	sl = slices{si};
+	sl = slices(si);
 	dc_id = sl.getDCPI;
 	sl.prices.Link = link_price;
 	sl.prices.Link = sl.prices.Link(sl.VirtualLinks.PhysicalLink);
@@ -46,7 +46,7 @@ while true
 	%% Step-2: solve the sup-problems, return the resource load
 	parfor (sj = 1:num_process,M)
 % 	for sj = 1:num_process
-		sl = slices{sj};
+		sl = slices(sj);
 		dc_id = sl.getDCPI;
 		idx = [sl.VirtualLinks.PhysicalLink; num_links+dc_id];
 		lambda = lambda_k;
@@ -107,7 +107,7 @@ t2 = toc(t1);
 fprintf('Partial-Inverse: elapsed time: %d\n', t2);
 
 for si = 1:Ns
-	sl = slices{si};
+	sl = slices(si);
 	sl.op.saveTempResults(output_k{si});
 end
 results.LinkPrice = lambda_k(1:num_links) + link_price;

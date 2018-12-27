@@ -39,15 +39,9 @@ if nargin < 2 || ~isfield(link_opt, 'DelayModel')
     warning('lacking link delay option, set to Random.'); 
     link_opt.DelayModel = LinkDelayOption.Random;
 end
-if nargin < 2 || ~isfield(link_opt, 'CostModel')
-    error('error: lacking link cost option.'); % link_opt.CostModel = LinkCostOption.LengthDependent;
-end
-if nargin < 1 || ~isfield(node_opt, 'CapacityModel')
-    error('error: lacking node capacity option.'); % node_opt.CapacityModel = NodeCapacityOption.Default;
-end
-if nargin < 1 || ~isfield(node_opt, 'CostModel') 
-    error('error: lacking node cost option.'); % node_opt.CostModel = NodeCostOption.Uniform;
-end
+getstructfields(link_opt, 'CostModel', 'error', 'lacking link cost option.'); % link_opt.CostModel = LinkCostOption.LengthDependent;
+getstructfields(node_opt, 'CapacityModel', 'error', 'lacking node capacity option.'); % node_opt.CapacityModel = NodeCapacityOption.Default;
+getstructfields(node_opt, 'CostModel', 'error', 'lacking node cost option.'); % node_opt.CostModel = NodeCostOption.Uniform;
 
 switch node_opt.Model
     case NetworkModel.Sample1
@@ -119,7 +113,7 @@ switch link_opt.DelayModel
 end
 
 graph_data.Edges = table([head, tail], link_delay, ...
-	'VariableNames', {'EndNodes', 'Delay'});
+	'VariableNames', {'EndNodes', 'Delay'});   % The second column will be treated as Weight
 if exist('node_name','var')
     graph_data.Nodes = table(node_name, 'VariableNames', {'Name'});
 else
@@ -182,7 +176,7 @@ switch node_opt.CostModel
         node_opt.Cost = node_opt.Alpha*mean(link_opt.Cost)...
             *(ones(graph_data.numnodes,1).*node_opt.CostWeight);
     case NodeCostOption.CapacityInverse
-        node_opt.Cost = 1 ./ node_capacity;
+        node_opt.Cost = 1 ./ node_capacity;  % Cost == Inf  => not a Data Center
     case NodeCostOption.NetworkSpecified
         if ~isfield(node_opt, 'Cost') || isempty(node_opt.Cost)
             error('Node cost information should be provided.');

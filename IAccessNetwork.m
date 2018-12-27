@@ -118,7 +118,6 @@ classdef IAccessNetwork < handle
 					else
 						slice_opt.NodeSet = this.base_stations;
 					end
-					slice_opt.NumberNodes = length(slice_opt.NodeSet);
 				case FlowPattern.RandomDataCenter2BaseStation
 					if ~slice_opt.DuplicateFlow
 						slice_opt.NumberFlows = min(slice_opt.NumberFlows, this.NumberBaseStations*this.NumberDataCenters);
@@ -133,7 +132,6 @@ classdef IAccessNetwork < handle
 					else
 						slice_opt.DCNodeSet = this.DataCenters.Node;
 					end
-					slice_opt.NumberDCs = length(slice_opt.DCNodeSet);
 				otherwise
 			end
 		end
@@ -141,10 +139,10 @@ classdef IAccessNetwork < handle
 		function end_points = generateEndPoints(this, slice_opt) %#ok<INUSL>
 			switch slice_opt.FlowPattern
 				case FlowPattern.RandomInterBaseStation
-					id = unique_randi(slice_opt.NumberNodes, 2, 'stable');
+					id = unique_randi(length(slice_opt.NodeSet), 2, 'stable');
 					end_points = slice_opt.NodeSet(id);
 				case FlowPattern.RandomDataCenter2BaseStation
-					id = randi(slice_opt.NumberDCs, 1);
+					id = randi(length(slice_opt.DCNodeSet), 1);
 					end_points(1) = slice_opt.DCNodeSet(id);
 					bs = slice_opt.BSNodeSet;
 					bs(bs==end_points(1)) = [];     % avoid the same node as BS and DC.

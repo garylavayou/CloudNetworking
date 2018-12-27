@@ -12,33 +12,35 @@
 %       *PricingPolicy*:
 %       *bFinal*:
 function profit = getProfit(this, options)
-defaultopts = getstructfields(this.hs.options, {'PricingPolicy'});
-options = structmerge(defaultopts, options);
+if nargin <= 1
+	options = Dictionary;
+else
+	options = Dictionary(options);
+end
+setdefault(options, this.hs.options, {'PricingPolicy'});
 
 % determine varriables.
-if nargin >= 2 && isfield(options, 'bFinal') && options.bFinal
+if this.hs.isFinal()
     vars = [this.Variables.x; this.Variables.z];
 else
     vars = [this.temp_vars.x; this.temp_vars.z];
 end
-if nargin >= 2
-    if isfield(options, 'LinkPrice')
-        this.prices.Link = options.LinkPrice;
-    elseif isfield(options, 'bFinal') && options.bFinal 
-        this.prices.Link = this.hs.Links.Price;
-    end
-    if isfield(options, 'NodePrice')
-        this.prices.Node = options.NodePrice;
-    elseif isfield(options, 'bFinal') && options.bFinal
-        this.prices.Node= this.hs.ServiceNodes.Price;
-    end
+if isfield(options, 'LinkPrice')
+	this.prices.Link = options.LinkPrice;
+elseif this.hs.isFinal()
+	this.prices.Link = this.hs.Links.Price;
+end
+if isfield(options, 'NodePrice')
+	this.prices.Node = options.NodePrice;
+elseif this.hs.isFinal()
+	this.prices.Node= this.hs.ServiceNodes.Price;
 end
 %%
 % Here, the invoked method must be <Slice.fcnProfit>.
 % Use class name to avoid dynamic loading of class.
 % Subclasses may override this method to define different ways to calculate profits.
 options.bFinal = true;
+options.bCompact = false;
 profit = SimpleSliceOptimizer.fcnProfit(vars, this, options); 
-this.prices.Node = [];
-this.prices.Link = [];
+this.setProblem('Price', []);
 end

@@ -4,29 +4,30 @@ global DEBUG; %#ok<NUSED>
 %% Initialization
 if nargin <= 1 || isempty(slices)
 	slices = this.slices;       % all slices are involved in slice dimensioning
-	node_capacity = this.readDataCenter('Capacity');
-	link_capacity = this.readLink('Capacity');
+	capacities.Node = this.readDataCenter('Capacity');
+	capacities.Link = this.readLink('Capacity');
 else
 	% residual capacity + reallocatable capacity.
-	node_capacity = this.readDataCenter('ResidualCapacity');
-	link_capacity = this.readLink('ResidualCapacity');
+	capacities.Node = this.readDataCenter('ResidualCapacity');
+	capacities.Link = this.readLink('ResidualCapacity');
 	for i = 1:length(slices)
-		sl = slices{i};
-		node_capacity(sl.getDCPI) = node_capacity(sl.getDCPI) + ...
+		sl = slices(i);
+		capacities.Node(sl.getDCPI) = capacities.Node(sl.getDCPI) + ...
 			sl.VirtualDataCenters.Capacity;
-		link_capacity(sl.VirtualLinks.PhysicalLink) = ...
-			link_capacity(sl.VirtualLinks.PhysicalLink) + sl.VirtualLinks.Capacity;
+		capacities.Link(sl.VirtualLinks.PhysicalLink) = ...
+			capacities.Link(sl.VirtualLinks.PhysicalLink) + sl.VirtualLinks.Capacity;
 	end	
 end
 Ns = length(slices);
 Ne = this.NumberLinks;
 Ndc = this.NumberDataCenters;
 if nargin <= 2 || ~isfield(options, 'PricingMethod')
-	iter_method = 'RandomizeCost';
+	cost_init_method = 'RandomizeCost';
 else
-	iter_method = options.PricingMethod;
+	cost_init_method = options.PricingMethod;
+	options = rmfield('PricingMethod');
 end
-switch iter_method
+switch cost_init_method
 	case 'RandomizeCost'
 		st = rng;
 		rng(20180909);
@@ -40,10 +41,17 @@ switch iter_method
 		link_uc = this.getLinkCost();
 		node_uc = this.getNodeCost();
 	otherwise
-		error('error: %s.',iter_method);
+		error('error: %s.',cost_init_method);
 end
-if strcmpi(this.options.Form, 'compact')
-	options.bCompact = true;
+defaultopts = Dictionary('ResidualCapacity', capacities, ...
+	'Slices', {slices}, ...
+	'PricingPolicy', 'linear', ...
+	'Stage', 'temp', ...
+	'bFinal', false);
+if nargin <= 2
+	options = defaultopts;
+else
+	options = structmerge(defaultopts, options);
 end
 if nargout >= 2 
 	options.CountTime = true;
@@ -60,11 +68,13 @@ array = cell(Ns, 1);
 problem = cell(Ns, 1);
 indices = cell(Ns, 1);
 parfor (pj = 1:Ns,M)
-	sl = slices{pj};
-	[array{pj}, problem{pj}, indices{pj}] = sl.initializeProblem(options);
+	%% TODO if return handle objects is valid.
+	sl = slices(pj);
+	[array{pj}, problem{pj}, indices{pj}] = sl.op.initializeParallel(options);  
+	% slices(i).Optimizer.initializeParallel('priceOptimalFlowRate', options);
 end
 for j = 1:Ns
-	slices{j}.setProblem(array{j}, problem{j}, indices{j});
+	slices(j).setProblem(array{j}, problem{j}, indices{j});
 end
 
 %% Trial Prices
@@ -157,7 +167,7 @@ end
 		loads = zeros(Ne+Ndc, num_process);
 		nin = nargin;
 		for si = 1:num_process
-			sl = slices{si};
+			sl = slices(si);
 			dc_id = sl.getDCPI;
 			link_id = sl.VirtualLinks.PhysicalLink;
 			sl.prices.Link = prices.Link(link_id);
@@ -168,12 +178,12 @@ end
 		end
 		nout = nargout;
 		opts = options;
-		if nargin >= 3 && ~isempty(capacities)
+		if nargin >= 2 && ~isempty(capacities)
 			opts.CapacityConstrained = true;
 		end
 		parfor (sj = 1:Ns,M)
 			%for sj = 1:num_process
-			sl = slices{sj};
+			sl = slices(sj);
 			if nout >= 2
 				[output_k{sj}, loads(:,sj)] = sl.priceOptimalFlowRateCC([], opts);
 			else
@@ -181,14 +191,14 @@ end
 			end
 		end
 		for si = 1:Ns
-			sl = slices{si};
+			sl = slices(si);
 			sl.op.saveTempResults(output_k{si});
 		end
 		
 		%% Output
-		sp_profit = this.getSliceProviderProfit(prices, struct('PricingPolicy', 'linear'));
+		sp_profit = this.getSliceProviderProfit(slices, prices, struct('PricingPolicy', 'linear'));
 		if nargout >= 2
-			violates = sum(loads,2)>[link_capacity; node_capacity];
+			violates = sum(loads,2)>[capacities.Link; capacities.Node];
 			b_violate = ~isempty(find(violates,1)); 
 		end
 	end

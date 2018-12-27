@@ -23,29 +23,29 @@
 %
 % See also <fcnProfitReserveSlicing>, <hessSlicing>.
 function [profit, gd] = fcnProfitReconfigureSlicing(vars, this, options)
-if isfield(options, 'bCompact') && options.bCompact
-    full_vars = zeros(options.num_orig_vars,1);
+if options.bCompact
+    full_vars = sparse(options.num_orig_vars,1);
     full_vars(this.I_active_variables) = vars;
     vars = full_vars;
 end
 slice = this.hs;
 Nsn = slice.NumberServiceNodes;
-Nvf = slice.NumberVNFs;
+Nvnf = slice.NumberVNFs;
 Nl = slice.NumberLinks;
 Np = slice.NumberPaths;
-var_x_index = 1:options.num_varx;
-idx_offset = options.num_varx+options.num_varz;
-var_v_index = (1:options.num_varv) + idx_offset;
-idx_offset = idx_offset + options.num_varv;
-var_tx_index = (1:options.num_varx) + idx_offset;
-idx_offset = idx_offset + options.num_varx;
-var_tz_index = (1:options.num_varz) + idx_offset;
-idx_offset = idx_offset + options.num_varz;
-var_tv_index = (1:options.num_varv) + idx_offset;
-idx_offset = idx_offset + options.num_varv;
+var_x_index = 1:this.num_vars(1);			%% USE the original variables
+idx_offset = sum(this.num_vars(1:2));
+var_v_index = (1:this.num_vars(3)) + idx_offset;
+idx_offset = idx_offset + this.num_vars(3);
+var_tx_index = (1:this.num_vars(1)) + idx_offset;
+idx_offset = idx_offset + this.num_vars(1);
+var_tz_index = (1:this.num_vars(2)) + idx_offset;
+idx_offset = idx_offset + this.num_vars(2);
+var_tv_index = (1:this.num_vars(3)) + idx_offset;
+idx_offset = idx_offset + this.num_vars(3);
 var_c_index = (1:Nl) + idx_offset;
 
-node_load = sum(reshape(vars(var_v_index), Nsn, Nvf),2);
+node_load = sum(reshape(vars(var_v_index), Nsn, Nvnf),2);
 link_load = vars(var_c_index);
 var_path = vars(var_x_index);
 
@@ -53,11 +53,11 @@ flow_rate = this.getFlowRate(var_path);
 
 switch options.PricingPolicy
     case {'quadratic-price', 'quadratic'}
-        [link_payment,link_price_grad] = slice.fcnLinkPricing(this.prices.Link, link_load);
-        [node_payment,node_price_grad] = slice.fcnNodePricing(this.prices.Node, node_load);
-        profit = -slice.weight*sum(fcnUtility(flow_rate)) + link_payment + node_payment;
+        [link_payment,link_price_grad] = this.fcnLinkPricing(this.prices.Link, link_load);
+        [node_payment,node_price_grad] = this.fcnNodePricing(this.prices.Node, node_load);
+        profit = -slice.Weight*sum(fcnUtility(flow_rate)) + link_payment + node_payment;
     case 'linear'
-        profit = -slice.weight*sum(fcnUtility(flow_rate)) ...
+        profit = -slice.Weight*sum(fcnUtility(flow_rate)) ...
             + dot(this.prices.Link, link_load) + dot(this.prices.Node, node_load);
     otherwise
         error('%s: invalid pricing policy', calledby);
@@ -66,30 +66,29 @@ profit = profit + dot(vars(var_tx_index), this.topts.x_reconfig_cost) + ...
     dot(vars(var_tz_index), this.topts.z_reconfig_cost) + ...
     dot(vars(var_tv_index), this.topts.vnf_reconfig_cost);
 % When the 'bFinal' option is provided, return the real profit (positive).
-if isfield(options, 'bFinal') && options.bFinal
+if options.bFinal
     profit = -profit;
 end
 
 if nargout == 2
-    nnz_grad = Np + options.num_varv + ...
-        options.num_varx + options.num_varz + options.num_varv + Nl;
+    nnz_grad = Np + this.num_vars(3) + sum(this.num_vars(1:3))+ Nl;
     gd = spalloc(length(vars), 1, nnz_grad);
     switch options.PricingPolicy
         case {'quadratic-price', 'quadratic'}
             for p = 1:Np
                 i = slice.path_owner(p);
-                gd(p) = -slice.weight/(1+this.I_flow_path(i,:)*var_path); %#ok<SPRIX>
+                gd(p) = -slice.Weight/(1+this.I_flow_path(i,:)*var_path); %#ok<SPRIX>
             end
         case 'linear'
             for p = 1:Np
                 i = slice.path_owner(p);
-                gd(p) = -slice.weight/(1+this.I_flow_path(i,:)*var_path); %#ok<SPRIX>
+                gd(p) = -slice.Weight/(1+this.I_flow_path(i,:)*var_path); %#ok<SPRIX>
             end
         otherwise
             error('%s: invalid pricing policy', calledby);
     end
     %% partial derviatives on w(v)
-    gd(var_v_index) = repmat(node_price_grad, 1, Nvf);
+    gd(var_v_index) = repmat(node_price_grad, 1, Nvnf);
     %% partial derivatives on c
     gd(var_c_index) = link_price_grad;
     %% partial derivatives on auxiliary variables tx,tz,tv
@@ -97,7 +96,7 @@ if nargout == 2
     gd(var_tz_index) = this.topts.z_reconfig_cost;
     gd(var_tv_index) = this.topts.vnf_reconfig_cost;
     
-    if isfield(options, 'bCompact') && options.bCompact
+    if options.bCompact
         gd = gd(this.I_active_variables);
     end
 end

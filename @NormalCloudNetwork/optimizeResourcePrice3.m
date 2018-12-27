@@ -1,4 +1,4 @@
-function [output, runtime] = optimizeResourcePrice1(this, slices)
+function [output, runtime] = optimizeResourcePrice3(this, slices)
 global DEBUG; %#ok<NUSED>
 %% Initialization
 if nargin == 1
@@ -23,7 +23,7 @@ else
 	node_capacity = this.readDataCenter('ResidualCapacity');
 	link_capacity = this.readLink('ResidualCapacity');
 	for i = 1:NS
-		sl = slices{i};
+		sl = slices(i);
 		node_capacity(sl.getDCPI) = node_capacity(sl.getDCPI) + ...
 			sl.ServiceNodes.Capacity;
 		link_capacity(sl.Links.PhysicalLink) = ...
@@ -37,24 +37,24 @@ node_uc = 0.5*this.getNodeCost.*((rand(this.NumberDataCenters,1)-0.5)/100+1);
 rng(st);
 t = 0;
 sp_profit = -inf*ones(3,1);
-% fmincon_opt = optimoptions(@fmincon);
-% fmincon_opt.Algorithm = 'interior-point';
-% fmincon_opt.SpecifyObjectiveGradient = true;
-% fmincon_opt.Display = 'notify';     % iter
-% fmincon_opt.OptimalityTolerance = 1e-5;
-% fmincon_opt.CheckGradients = true;
-% fmincon_opt.FiniteDifferenceType = 'central';
+% minopts = optimoptions(@fmincon);
+% minopts.Algorithm = 'interior-point';
+% minopts.SpecifyObjectiveGradient = true;
+% minopts.Display = 'notify';     % iter
+% minopts.OptimalityTolerance = 1e-5;
+% minopts.CheckGradients = true;
+% minopts.FiniteDifferenceType = 'central';
 %% Parallel initialization
 M = getParallelInfo();
 array = cell(Ns, 1);
 problem = cell(Ns, 1);
 indices = cell(Ns, 1);
 parfor (pj = 1:Ns,M)
-	sl = slices{pj};
-	[array{pj}, problem{pj}, indices{pj}] = sl.initializeProblem(options);
+	sl = slices(pj);
+	[array{pj}, problem{pj}, indices{pj}] = sl.op.initializeParallel(options);
 end
 for j = 1:Ns
-	slices{j}.setProblem(array{j}, problem{j}, indices{j}, link_capacity/Ns, node_capacity/Ns);
+	slices(j).setProblem(array{j}, problem{j}, indices{j}, link_capacity/Ns, node_capacity/Ns);
 end
 %% Joint Slice Dimensioning Problem: First Stage
 % The slice provider continually increases the trail price based on

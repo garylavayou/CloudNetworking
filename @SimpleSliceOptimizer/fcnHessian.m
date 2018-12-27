@@ -22,23 +22,22 @@
 %% TODO
 % move to Optimizer.
 function hs = fcnHessian(vars, lambda, this, options) %#ok<INUSL>
-if isfield(options, 'bCompact') && options.bCompact
-    full_vars = zeros(options.num_orig_vars,1);
+if options.bCompact
+    full_vars = sparse(options.num_orig_vars,1);
     full_vars(this.I_active_variables) = vars;
     vars = full_vars;
 end
 
-slice = this.hs;
-if isempty(slice.weight)
-    weight = slice.FlowTable.Weight;    % for single slice;
+if isempty(this.pardata.Weight)
+    weight = this.pardata.FlowWeight;    % for <SingleSliceOptimziation>;
 else
-    weight = slice.weight*ones(slice.NumberFlows, 1);  % for multiple slices
+    weight = this.pardata.Weight*ones(this.pardata.NumberFlows, 1);  % for multiple slices
 end
-Np = slice.NumberPaths;
+Np = this.pardata.NumberPaths;
 hs = spalloc(length(vars),length(vars), Np^2);
 var_path = vars(1:Np);
 for p = 1:Np
-    i = slice.path_owner(p);
+    i = this.pardata.PathOwner(p);
     hs(p,1:Np) = weight(i)*...
         this.I_flow_path(i,:)/(1+(this.I_flow_path(i,:)*var_path))^2; %#ok<SPRIX>
 end
@@ -59,12 +58,12 @@ if nargin >= 4 && isfield(options, 'PricingPolicy')
             % Then, for all paths, the hessian matrix component can represented by 
             % $G^T D_e\c G$, where matrix $G(e,p) = g_{e,p}$, $D_e$ is the
             % diagnoal matrix for $\rho_e^{''}$.
-            [~,~,lph] = slice.fcnLinkPricing(this.prices.Link, this.getLinkLoad(false, var_path)); % equal to <getLinkCapacity>
+            [~,~,lph] = this.fcnLinkPricing(this.prices.Link, this.getLinkLoad(false, var_path)); % equal to <getLinkCapacity>
             h1 = (this.I_edge_path') * diag(lph) * this.I_edge_path;
             hs(1:Np, 1:Np) = hs(1:Np, 1:Np) + h1;
-            var_node = vars((Np+1):this.NumberVariables);
-            [~,~,nph] = slice.fcnNodePricing(this.prices.Node, this.getNodeLoad(false,var_node));
-            Nsn = slice.NumberServiceNodes;
+            var_node = vars((Np+1):(Np+this.num_vars(2)));
+            [~,~,nph] = this.fcnNodePricing(this.prices.Node, this.getNodeLoad(false,var_node));
+            Nsn = this.pardata.NumberServiceNodes;
             %%%
             % Second derivatives on the node payment componet:
             % 
@@ -99,14 +98,14 @@ if nargin >= 4 && isfield(options, 'PricingPolicy')
                 z_index1 = z_index1 + Nsn;
             end
             h2 = h2 + (tril(h2,-1))';   % fill the upper triangle since the
-            h2 = repmat(h2, slice.NumberVNFs, slice.NumberVNFs);
-            hs((Np+1):this.NumberVariables, (Np+1):this.NumberVariables) = h2;
+            h2 = repmat(h2, this.pardata.NumberVNFs, this.pardata.NumberVNFs);
+            hs((Np+1):(Np+this.num_vars(2)), (Np+1):(Np+this.num_vars(2))) = h2;
         case 'linear'
         otherwise
             error('%s: invalid pricing policy', calledby);
     end
 end
-if isfield(options, 'bCompact') && options.bCompact
+if options.bCompact
     hs = hs(this.I_active_variables, this.I_active_variables);
 end
 end

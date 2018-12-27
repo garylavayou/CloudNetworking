@@ -1,15 +1,14 @@
 %% Adjust the pricing factor
 % If 'PricingFactor' is specified, use the given 'PricingFactor'. Otherwise
 % (options.PricingFactor=0),  adjust the pricing factor by three-division method.
-function [prices, runtime] = pricingFactorAdjustment(this, new_opts)
-defaultopts = structmerge(...
-	getstructfields(this.Optimizer.options, {'Form'}, 'error'), ...
-	getstructfields(this.options, {'SlicingMethod', 'PricingPolicy', 'PricingFactor'}, 'error'));
-if nargin < 2
+function [prices, runtime] = pricingFactorAdjustment(this, options)
+defaultopts = getstructfields(this.options, {'PricingPolicy'}, 'error');
+if nargin <= 1
 	options = defaultopts;
 else
-	options = structmerge(defaultopts, new_opts);
+	options = structmerge(defaultopts, options);
 end
+options.bInitialize = true;   % isFinalize = false;
 
 if nargout == 3
     runtime.Serial = 0;
@@ -17,13 +16,14 @@ if nargout == 3
 end
 link_uc = this.getLinkCost;
 node_uc = this.getNodeCost;
-if isfield(options, 'PricingFactor') && options.PricingFactor ~= 0
+if this.op.options.PricingFactor ~= 0
     PricingFactor_h = options.PricingFactor;
 else
     PricingFactor_h = 0.5;
     sp_profit = -inf;
 end
 PricingFactor_l = 0;
+k = 0;
 while true
     prices.Link = link_uc * (1 + PricingFactor_h);
     prices.Node = node_uc * (1 + PricingFactor_h);
@@ -33,8 +33,12 @@ while true
         runtime.Parallel = runtime.Parallel + t.Parallel;
     else
         priceIteration(this, prices, options);
-    end
-    if options.PricingFactor ~= 0
+		end
+		k = k + 1;
+		if k == 1
+			options.bInitialize = false;
+		end
+    if this.options.PricingFactor ~= 0
         break;
     end
     %%%
@@ -48,7 +52,7 @@ while true
         break;
     end
 end
-if options.PricingFactor == 0
+if this.options.PricingFactor == 0
     while PricingFactor_h-PricingFactor_l>=0.1
         sp_profit = zeros(2,1);
         m = zeros(2,1);

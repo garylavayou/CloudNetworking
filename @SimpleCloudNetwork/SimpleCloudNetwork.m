@@ -50,8 +50,8 @@ classdef SimpleCloudNetwork < PhysicalNetwork
 	
 	methods (Access=protected)			
 		function sl = createslice(this, slice_opt, varargin)
-			this.slices{end+1} = SimpleSlice(slice_opt);
-			sl = this.slices{end};
+			this.slices(end+1) = SimpleSlice(slice_opt);
+			sl = this.slices(end);
 			sl.getOptimizer(slice_opt);
     end
 		
@@ -64,22 +64,25 @@ classdef SimpleCloudNetwork < PhysicalNetwork
   end
 	
 	methods
-		[output, runtime] = optimizeResourcePrice(this, init_price, sub_slices);
-		[output, runtime] = optimizeResourcePrice1(this, init_price);
+		% [output, runtime] = optimizeResourcePrice(this, sub_slices, options);
+		[output, runtime] = optimizeResourcePrice1(this, sub_slices, options);
 		function [output, runtime] = singleSliceOptimization(this, new_opts)
 			if nargin <= 1
-				argins = {};
+				options = Dictionary();
 			else
-				argins = {new_opts};
+				options = Dictionary(new_opts);
 			end
+			for i = 1:this.NumberSlices
+				this.slices(i).initialize();
+			end
+			
 			if nargout <= 1
-				[output, prices] = this.op.singleSliceOptimization(argins{:});
+				[output, prices] = this.op.singleSliceOptimization(options);
 			else
-				[output, prices, runtime] = this.op.singleSliceOptimization(argins{:});
+				[output, prices, runtime] = this.op.singleSliceOptimization(options);
 			end
 			% Finalize substrate network
 			this.finalize(prices);
-			options = output.options;
 			options.Slices = this.slices;
 			output = this.calculateOutput(output, options);
 		end

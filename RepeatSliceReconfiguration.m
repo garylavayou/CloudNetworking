@@ -17,8 +17,8 @@ PN.AddListener(SFED, {'AddSliceSucceed', 'AddSliceFailed', 'RemoveSliceSucceed',
     'RemoveSliceFailed', 'AddFlowSucceed', 'AddFlowFailed', 'RemoveFlowSucceed', ...
     'RemoveFlowFailed'}, @SFED.eventhandler);
 for temp_sid = 1:PN.NumberSlices
-    sl = PN.slices{temp_sid};
-    if sl.isDynamicFlow
+    sl = PN.slices(temp_sid);
+    if isa(sl, 'DynamicSlice') && sl.isDynamicFlow()
         PN.AddListener(sl, {'FlowArrive', 'FlowDepart'}, @sl.eventhandler);
         sl.AddListener(PN, {'AddFlowSucceed', 'AddFlowFailed', ...
             'RemoveFlowSucceed', 'RemoveFlowFailed',...

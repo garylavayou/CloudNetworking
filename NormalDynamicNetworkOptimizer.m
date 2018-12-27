@@ -9,19 +9,15 @@ classdef NormalDynamicNetworkOptimizer < NormalNetworkOptimizer & IDynamicNetwor
 	
 	%% Constructor
 	methods
-		function this = NormalDynamicNetworkOptimizer()
-			this@NormalNetworkOptimizer();
-			this@IDynamicNetworkOptimizer();
+		function this = NormalDynamicNetworkOptimizer(varargin)
+			this@NormalNetworkOptimizer(varargin{:});
+			this@IDynamicNetworkOptimizer(varargin{:});
 		end
 		
 		
 	end
 
 	methods
-		function update_options(this, options)
-			update_options@IDynamicSliceOptimizer(this, options);
-			update_options@NormalSliceOpitmizer(this, options);
-		end
 	end
 
 end

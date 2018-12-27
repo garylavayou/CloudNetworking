@@ -16,8 +16,8 @@ else
     fig_stat_reconfig = figure('Name', 'Satistics of Reconfiguration');
 end
 x = 1:length(etas);
-ratio_reconfig = results.Reconfig{idx,'NumberReconfigVariables'}./...
-    results.Reconfig{idx,'NumberVariables'};
+ratio_reconfig = results.Reconfig{idx,'ReVariables'}./...
+    results.Reconfig{idx,'NumVariables'};
 avgrat_reconfig = mean(ratio_reconfig)*ones(length(x),1);
 avgfair_reconfig = mean(results.Reconfig{idx,'FairIndex'})*ones(length(x),1);
 avgrat_fastconfig = zeros(length(x),1);
@@ -32,19 +32,19 @@ if ~exist('b_disable_dimconfig', 'var') || b_disable_dimconfig == false
 end
 sel_index = 51:100;
 for i = x
-    ratio_fastconfig = results.Fastconfig{i}{idx,'NumberReconfigVariables'}./...
-        results.Fastconfig{i}{idx,'NumberVariables'};
-    ratio_fastconfig2 = results.Fastconfig2{i}{idx,'NumberReconfigVariables'}./...
-        results.Fastconfig2{i}{idx,'NumberVariables'};
+    ratio_fastconfig = results.Fastconfig{i}{idx,'ReVariables'}./...
+        results.Fastconfig{i}{idx,'NumVariables'};
+    ratio_fastconfig2 = results.Fastconfig2{i}{idx,'ReVariables'}./...
+        results.Fastconfig2{i}{idx,'NumVariables'};
     avgrat_fastconfig(i) = mean(ratio_fastconfig);
     avgrat_fastconfig2(i) = mean(ratio_fastconfig2);
     avgfair_fastconfig(i) = mean(results.Fastconfig{i}{idx(sel_index),'FairIndex'});
     avgfair_fastconfig2(i) = mean(results.Fastconfig2{i}{idx(sel_index),'FairIndex'});
     if ~exist('b_disable_dimconfig', 'var') || b_disable_dimconfig == false
-        ratio_dimconfig = results.Dimconfig{i}{idx,'NumberReconfigVariables'}./...
-            results.Fastconfig{i}{idx,'NumberVariables'};
-        ratio_dimconfig2 = results.Dimconfig2{i}{idx,'NumberReconfigVariables'}./...
-            results.Dimconfig2{i}{idx,'NumberVariables'};
+        ratio_dimconfig = results.Dimconfig{i}{idx,'ReVariables'}./...
+            results.Fastconfig{i}{idx,'NumVariables'};
+        ratio_dimconfig2 = results.Dimconfig2{i}{idx,'ReVariables'}./...
+            results.Dimconfig2{i}{idx,'NumVariables'};
         avgrat_dimconfig(i) = mean(ratio_dimconfig);
         avgrat_dimconfig2(i) = mean(ratio_dimconfig2);
         avgfair_dimconfig(i) = mean(results.Dimconfig{i}{idx(sel_index),'FairIndex'});
@@ -119,8 +119,8 @@ else
     fig_stat_num_reconfig = figure('Name', 'Satistics of Reconfiguration');
 end
 x = 1:length(etas);
-ratio_reconfig = results.Reconfig{idx,'NumberReconfigVariables'}./...
-    results.Reconfig{idx,'NumberVariables'};
+ratio_reconfig = results.Reconfig{idx,'ReVariables'}./...
+    results.Reconfig{idx,'NumVariables'};
 avgrat_reconfig = mean(ratio_reconfig)*ones(length(x),1);
 avgrat_fastconfig = zeros(length(x),1);
 avgrat_fastconfig2 = zeros(length(x),1);
@@ -129,17 +129,17 @@ if ~exist('b_disable_dimconfig', 'var') || b_disable_dimconfig == false
     avgrat_dimconfig2 = zeros(length(x),1);
 end
 for i = x
-    ratio_fastconfig = results.Fastconfig{i}{idx,'NumberReconfigVariables'}./...
-        results.Fastconfig{i}{idx,'NumberVariables'};
-    ratio_fastconfig2 = results.Fastconfig2{i}{idx,'NumberReconfigVariables'}./...
-        results.Fastconfig2{i}{idx,'NumberVariables'};
+    ratio_fastconfig = results.Fastconfig{i}{idx,'ReVariables'}./...
+        results.Fastconfig{i}{idx,'NumVariables'};
+    ratio_fastconfig2 = results.Fastconfig2{i}{idx,'ReVariables'}./...
+        results.Fastconfig2{i}{idx,'NumVariables'};
     avgrat_fastconfig(i) = mean(ratio_fastconfig);
     avgrat_fastconfig2(i) = mean(ratio_fastconfig2);
     if ~exist('b_disable_dimconfig', 'var') || b_disable_dimconfig == false
-        ratio_dimconfig = results.Dimconfig{i}{idx,'NumberReconfigVariables'}./...
-            results.Fastconfig{i}{idx,'NumberVariables'};
-        ratio_dimconfig2 = results.Dimconfig2{i}{idx,'NumberReconfigVariables'}./...
-            results.Dimconfig2{i}{idx,'NumberVariables'};
+        ratio_dimconfig = results.Dimconfig{i}{idx,'ReVariables'}./...
+            results.Fastconfig{i}{idx,'NumVariables'};
+        ratio_dimconfig2 = results.Dimconfig2{i}{idx,'ReVariables'}./...
+            results.Dimconfig2{i}{idx,'NumVariables'};
         avgrat_dimconfig(i) = mean(ratio_dimconfig);
         avgrat_dimconfig2(i) = mean(ratio_dimconfig2);
     end

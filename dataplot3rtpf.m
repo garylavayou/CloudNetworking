@@ -44,20 +44,20 @@ load('./Results/singles/EXP6002.mat', 'results')
 ll = length(results.Fastconfig);
 mean_rr_normal = zeros(ll,1);
 for i = 1:ll
-    mean_rr_normal(i) = mean(results.Fastconfig{i}.NumberReconfigVariables...
-        ./results.Fastconfig{i}.NumberVariables);
+    mean_rr_normal(i) = mean(results.Fastconfig{i}.ReVariables...
+        ./results.Fastconfig{i}.NumVariables);
 end
 load('./Results/singles/EXP6002e1w10p4.mat', 'results')
 mean_rr_admm = zeros(ll,1);
 for i = 1:ll
-    mean_rr_admm(i) = mean(results.Fastconfig{i}.NumberReconfigVariables...
-        ./results.Fastconfig{i}.NumberVariables);
+    mean_rr_admm(i) = mean(results.Fastconfig{i}.ReVariables...
+        ./results.Fastconfig{i}.NumVariables);
 end
 load('./Results/singles/EXP6002e1w10p4li.mat', 'results')
 mean_rr_admm_limit = zeros(ll,1);
 for i = 1:ll
-    mean_rr_admm_limit(i) = mean(results.Fastconfig{i}.NumberReconfigVariables...
-        ./results.Fastconfig{i}.NumberVariables);
+    mean_rr_admm_limit(i) = mean(results.Fastconfig{i}.ReVariables...
+        ./results.Fastconfig{i}.NumVariables);
 end
 if exist('fig_reconfigratio', 'var') && fig_reconfigratio.isvalid
     figure(fig_reconfigratio);

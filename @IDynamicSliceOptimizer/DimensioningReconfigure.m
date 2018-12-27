@@ -1,14 +1,15 @@
-function [profit,cost, exitflag, fidx] = DimensioningReconfigure( this, action, new_opts )
+function [profit, exitflag, fidx] = DimensioningReconfigure( this, action, options )
 global DEBUG INFO; 
 if nargin <= 2
-    new_opts = struct;
+	options = Dictionary;
+else
+	options = Dictionary(options);
 end
-new_opts.PricingPolicy = 'quadratic-price';
-new_opts = structmerge(new_opts, ...
-    getstructfields(this.hs.Parent.options, 'PricingPolicy', 'ignore'));
+slice = this.hs;
+options = structupdate(options, slice.options, {'PricingPolicy'}, 'error');
 
 %% Slice Dimensioning Scheduling
-[omega, sigma_o] = this.hs.utilizationRatio();
+[omega, sigma_o] = slice.utilizationRatio();
 this.sh_data.index = this.sh_data.index + 1;
 a = this.sh_options.alpha;
 TL = this.sh_options.trend_length;
@@ -45,7 +46,7 @@ if this.options.bReserve
         this.options.Reserve = omega;
     end
 end
-if isempty(fieldnames(this.hs.net_changes))
+if isempty(fieldnames(slice.net_changes))
     this.b_dim = false;
     if omega > this.sh_options.omega_upper && ...
             (length(this.sh_data.omega_trend.ascend)>TL ||...
@@ -74,21 +75,21 @@ if isempty(fieldnames(this.hs.net_changes))
     if ~this.b_dim
         switch this.options.Trigger
             case 'TimeBased'
-                if this.time.Current - this.hs.time.LastDimensioning >= this.options.TimeInterval
+                if slice.time.Current - slice.time.LastDimensioning >= this.options.TimeInterval
                     this.b_dim = true;
                 end
             case 'EventBased'
-                if mod(this.hs.event.RecentCount, this.options.EventInterval) == 0
+                if mod(slice.event.RecentCount, this.options.EventInterval) == 0
                     this.b_dim = true;
                 end
             case 'ProfitBased'
             otherwise
         end
-        if this.hs.NumberFlows > 0 && sum(this.hs.Links.Capacity) == 0
+        if slice.NumberFlows > 0 && sum(slice.Links.Capacity) == 0
             % If the slice has no resource but new flows arrive, perform dimensioning at once.
             this.b_dim = true;
         end
-        if this.hs.NumberFlows == 0
+        if slice.NumberFlows == 0
             % the dimension method will handle the idl slice, see also
             % <DynamicCloudNetwork.optimizeResourcePrice>
             this.b_dim = true;
@@ -103,27 +104,29 @@ end
 if ~this.b_dim 
     switch this.options.ReconfigMethod
         case {ReconfigMethod.Dimconfig, ReconfigMethod.DimconfigReserve, ReconfigMethod.Dimconfig1}
-            [profit,cost] = this.fastReconfigure(action, new_opts);
+            profit = this.fastReconfigure(action, options);
         case ReconfigMethod.Dimconfig2
-            [profit,cost] = this.fastReconfigure2(action, new_opts);
+            profit = this.fastReconfigure2(action, options);
         case ReconfigMethod.DimBaseline
-            new_opts.CostModel = 'fixcost';
-            new_opts.SlicingMethod = SlicingMethod.AdjustPricing;
-            this.prices.Link = this.hs.Links.Price;
-            this.prices.Node = this.hs.ServiceNodes.Price;
-            [profit,cost] = this.optimalFlowRate(new_opts);
+					options = Dictionary(...
+						'CostModel', 'fixcost', ...
+						'isFinalize', true,...
+						'bInitialize', true);
+						this.setProblem('LinkPrice', slice.Links.Price, ...
+							'NodePrice', slice.ServiceNodes.Price);
+            profit = this.optimalFlowRate(options);
         otherwise
             error('%s: invalid reconfiguration method.', calledby);
     end
     
-    fidx = find(this.hs.FlowTable.Rate<=0.1*median(this.hs.FlowTable.Rate));
+    fidx = find(slice.FlowTable.Rate<=0.1*median(slice.FlowTable.Rate));
     if isempty(fidx)
         exitflag = 1;
         this.sh_data.reserve_dev = this.sh_data.reserve_dev/2;
     else
         exitflag = 0;
-        fidx0 = this.hs.FlowTable.Rate<=0;
-        if ~isempty(setdiff(this.hs.FlowTable.Identifier(fidx0), this.hs.reject_index))
+        fidx0 = slice.FlowTable.Rate<=0;
+        if ~isempty(setdiff(slice.FlowTable.Identifier(fidx0), slice.reject_index))
             message = sprintf('%s: [%s] reject flows due to zero rate.', ...
                 calledby, this.options.ReconfigMethod);
             if ~isempty(DEBUG) && DEBUG
@@ -136,7 +139,7 @@ if ~this.b_dim
         end
         % due to reconfiguration cost, some arriving flows might be directly rejected. In this
         % case we need to perform slice redimensioning.
-        if ~isempty(setdiff(this.hs.FlowTable.Identifier(fidx), this.hs.reject_index))
+        if ~isempty(setdiff(slice.FlowTable.Identifier(fidx), slice.reject_index))
             message = sprintf('%s: [%s] reconfigure flows due to low rate.\n', ...
                 calledby, this.options.ReconfigMethod);
             if ~isempty(DEBUG) && DEBUG
@@ -150,15 +153,14 @@ if ~this.b_dim
 %             this.update_reconfig_costinfo(action, true);
             this.temp_vars = struct();
             this.diff_state = struct([]);
-            this.prices.Link = [];
-            this.prices.Node = [];      
+						this.setProblem('Price', []);
             if this.options.bReserve
                 this.sh_data.reserve_dev = this.sh_data.reserve_dev + 1;
                 this.options.Reserve = this.options.Reserve - this.sh_data.reserve_dev*0.02;
             end
         end
     end
-    this.hs.reject_index = this.hs.FlowTable.Identifier(fidx);
+    slice.reject_index = slice.FlowTable.Identifier(fidx);
 end
 %% TODO
 % update vnf_reconfig_cost, since the number of nodes has changed.
@@ -226,11 +228,11 @@ if this.b_dim
         switch this.options.ReconfigMethod
             case ReconfigMethod.Dimconfig1
                 [this.lower_bounds.VNF, this.upper_bounds.VNF] = setbounds(...
-                    this.hs.old_state.vnf_load, this.old_state.vnf_capacity, this.options.Reserve);       % getVNFCapacity should be renamed as this.getVNFLoad.
+                    this.hs.old_state.vnf_load, this.old_state.vnf_capacity, this.options.Reserve);
             case {ReconfigMethod.DimconfigReserve, ReconfigMethod.Dimconfig, ReconfigMethod.Dimconfig2}
                 if this.options.bReserve == 3
                     [this.lower_bounds.VNF, this.upper_bounds.VNF] = setbounds(...
-                        this.hs.old_state.vnf_load, this.old_state.vnf_capacity, this.options.Reserve);       % getVNFCapacity should be renamed as this.getVNFLoad.
+                        this.hs.old_state.vnf_load, this.old_state.vnf_capacity, this.options.Reserve);
                 else
                     [this.lower_bounds.node, this.upper_bounds.node] = setbounds(...
                         this.hs.old_state.node_load, this.hs.old_state.node_capacity, this.options.Reserve);
@@ -244,27 +246,20 @@ if this.b_dim
     %     if isfield(this.options, 'Reserve') && this.options.Reserve>0
     %         this.options.Reserve = -this.options.Reserve;
     %     end
-    notify(this.hs, 'RequestDimensioning', EventData());
+    notify(slice, 'RequestDimensioning', DispatchEventData());
     
-    if this.hs.Results.Value == 0
-        profit = this.hs.Results.Profit(1);
-    else
-        profit = [];
-    end
-    if nargout>=2
-        if this.hs.Results.Value == 0
-            cost = this.hs.getCost(new_opts.PricingPolicy);
-        else
-            cost =[];
-        end
-    end
+		if slice.Results.Value == 0
+			profit = slice.Results.Profit(1);
+		else
+			profit = [];
+		end
     %% Reset statistics
     % update the period for performing dimensioning by exponential moving average
-    new_dim_interval = this.hs.time.DimensionInterval * this.a + ...
-        (this.hs.time.Current-this.hs.time.LastDimensioning)*(1-this.a);
-    this.hs.time.DimensionInterval = max(this.hs.time.MinDimensionInterval, new_dim_interval);
-    this.hs.time.LastDimensioning = this.hs.time.Current;
-    this.hs.event.RecentCount = 0;
+    new_dim_interval = slice.time.DimensionInterval * this.a + ...
+        (slice.time.Current-slice.time.LastDimensioning)*(1-this.a);
+    slice.time.DimensionInterval = max(slice.time.MinDimensionInterval, new_dim_interval);
+    slice.time.LastDimensioning = slice.time.Current;
+    slice.event.RecentCount = 0;
     this.lower_bounds = struct([]);
 end
 
@@ -298,7 +293,7 @@ if this.sh_data.index == intmax
         end
     end
 end
-omega_new = this.hs.utilizationRatio();
+omega_new = slice.utilizationRatio();
 if this.b_dim
     for i = 1:2
         for j = 1:2

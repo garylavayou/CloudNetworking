@@ -45,7 +45,7 @@ if nargin <= 2 || isempty(metrics)
 	metrics = struct;
 end
 if ~isfield(metrics, 'Names')
-	metrics.Names = {'NumberReconfigVariables', 'NumberReconfigFlows',...
+	metrics.Names = {'ReVariables', 'ReFlows',...
 		'Profit', 'Cost', 'Utilization', 'FairIndex'};
 end
 if ~isfield(metrics, 'Labels')
@@ -110,7 +110,7 @@ for i = 1:length(metrics.Names)
 	end
 	hold on;
 	switch metric
-		case {'NumberReconfigVariables', 'NumberReconfigFlows'}  % accumulated
+		case {'ReVariables', 'ReFlows'}  % accumulated
 			%% Number of Reconfiguration Variables and Flows
 			num_lines = length(lines.Sources);
 			data = cell(num_lines, 1);
@@ -180,9 +180,9 @@ for i = 1:length(metrics.Names)
 	end
 	%% small figure
 	switch metric
-		case {'NumberReconfigVariables','NumberReconfigFlows'}
+		case {'ReVariables','ReFlows'}
 			if num_lines >= 3
-				if strcmpi(metric, 'NumberReconfigVariables')
+				if strcmpi(metric, 'ReVariables')
 					% axes('OuterPosition', [0.58, 0.20, 0.41, 0.39]);
 					ax = axes('OuterPosition', [0.58, 0.21, 0.42, 0.41]);
 				else
@@ -203,7 +203,7 @@ for i = 1:length(metrics.Names)
 					ax.Children(j).LineWidth = lines.Width(k);
 				end
 				axis tight
-				if strcmpi(metric, 'NumberReconfigFlows')
+				if strcmpi(metric, 'ReFlows')
 					scale = 10^3; scale_string = sprintf('\\times10^{%d}',log10(scale));
 					ax.YTickLabel = num2str(str2double(ax.YTickLabel)/scale);
 					textBox = text(0, 1.125, scale_string, 'Interpreter', 'tex', ...

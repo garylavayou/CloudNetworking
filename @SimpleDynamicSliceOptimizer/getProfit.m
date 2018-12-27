@@ -22,22 +22,21 @@
 % See also <Slice.getProfit>.
 function profit = getProfit(this, options)
 if nargin == 1
-    options = struct;
+	options = Dictionary;
+else
+	options = Dictionary(options);
 end
 if this.invoke_method == 0
     profit = getProfit@SimpleSliceOptimizer(this, options);
     return;
 end
 
-options = structmerge(rmstructfields(options, 'bCompact'),...
-	getstructfields(options, 'PricingPolicy', 'default', {'quadratic'}));
 slice = this.hs;
-bFinal = slice.isFinal();
-
+options = setdefault(options, slice.options, {'PricingPolicy'});
 options.bFinal = true;      % 'bFinal' is set to output the real profit (min -f => max f).
-options.num_varx = length(this.temp_vars.x);
-options.num_varz = length(this.temp_vars.z);
-options.num_varv = length(this.temp_vars.v);
+options.bCompact = false;
+
+bFinal = slice.isFinal();
 if bFinal
     this.prices.Link = slice.Links.Price;
     this.prices.Node = slice.ServiceNodes.Price;
@@ -49,14 +48,12 @@ if bFinal
         profit = profit - this.get_reconfig_cost('const');
     end
 else
-    if nargin >= 2
-        if isfield(options, 'LinkPrice')
-            this.prices.Link = options.LinkPrice;
-        end
-        if isfield(options, 'NodePrice')
-            this.prices.Node = options.NodePrice;
-        end
-    end
+	if isfield(options, 'LinkPrice')
+		this.prices.Link = options.LinkPrice;
+	end
+	if isfield(options, 'NodePrice')
+		this.prices.Node = options.NodePrice;
+	end
     if this.invoke_method == 1
         vars = [this.temp_vars.x; this.temp_vars.z; this.temp_vars.v;...
             this.temp_vars.c];
@@ -69,6 +66,5 @@ else
     end
 end
 
-this.prices.Node = [];
-this.prices.Link = [];
+this.setProblem('Price', []);
 end

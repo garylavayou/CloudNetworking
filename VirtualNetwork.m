@@ -4,7 +4,7 @@ classdef VirtualNetwork < INetwork
 	% Specify the properties that can only be modified by Physcial Network directly
 	properties
 		Parent;
-		ServiceNodes;		% data centers in the slice
+		ServiceNodes = table;		% data centers in the slice
 	end
 	
 	properties (Dependent)
@@ -71,12 +71,12 @@ classdef VirtualNetwork < INetwork
 		
 		function map = get.PhysicalLinkMap(this)
 			map = zeros(this.Parent.NumberLinks,1);
-			map(this.Links.PhysicalLink) = 1:this.NumberLinks;
+			map(this.Links.PhysicalLink) = 1:this.NumberLinks;  % PhysicalLink presumed to be un-ordered
 		end
 		
 		function map = get.PhysicalNodeMap(this)
 			map = zeros(this.Parent.NumberNodes,1);
-			map(this.Nodes.PhysicalNode) = 1:this.NumberNodes;
+			map(this.Nodes.PhysicalNode) = 1:this.NumberNodes; % % PhysicalNode presumed to be un-ordered
 		end
 		
 	end
@@ -94,7 +94,7 @@ classdef VirtualNetwork < INetwork
 		
 		%%%
 		% Get the data center index of the service node.
-		function dc_index =getDCPI(this,sn_index)
+		function dc_index = getDCPI(this,sn_index)
 			if nargin == 1
 				sn_id = this.getSNPI;
 			else

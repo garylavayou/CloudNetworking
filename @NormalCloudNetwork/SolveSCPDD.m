@@ -13,7 +13,7 @@ fval_k = zeros(num_process,1);
 fval__ = 0;
 output_k = cell(num_process,1);
 for si = 1:num_process
-	sl = slices{si};
+	sl = slices(si);
 	dc_id = sl.getDCPI;
 	sl.prices.Link = link_price;
 	sl.prices.Link = sl.prices.Link(sl.VirtualLinks.PhysicalLink);
@@ -26,7 +26,7 @@ while true
 	%% Step-1: solve the sup-problems, return the resource load
 	parfor (sj = 1:num_process,M)
 		%for sj = 1:num_process
-		sl = slices{sj};
+		sl = slices(sj);
 		dc_id = sl.getDCPI;
 		idx = [sl.VirtualLinks.PhysicalLink; num_links+dc_id];
 		lambda = lambda_k;
@@ -74,7 +74,7 @@ t2 = toc(t1);
 fprintf('Dual-Decomposition: elapsed time: %d\n', t2);
 
 for si = 1:Ns
-	sl = slices{si};
+	sl = slices(si);
 	sl.op.saveTempResults(output_k{si});
 end
 results.LinkPrice = lambda_k(1:this.NumberLinks) + link_price;

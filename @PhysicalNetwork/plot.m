@@ -22,7 +22,7 @@ plot_args = {...
 if b_undirect
 	g = graph(this.graph.Adjacent+this.Topology.Adjacent');
 else
-	g = digraph(this.Links{:,{'EndNodes'}}, this.Nodes);
+	g = digraph(this.Links(:,{'EndNodes'}), this.Nodes);
 	plot_args = [plot_args, ...
 		'EdgeLabel', 1:this.NumberLinks, ...
 		];
@@ -37,10 +37,10 @@ g.plot(plot_args{:})
 title('Substrate Network');
 for i = 2:num_figure
 	h = subplot(plot_row,plot_col, i);
-	node_label = cell(this.slices{i-1}.NumberVirtualNodes,1);
-	for j = 1:this.slices{i-1}.NumberVirtualNodes
+	node_label = cell(this.slices(i-1).NumberVirtualNodes,1);
+	for j = 1:this.slices(i-1).NumberVirtualNodes
 		node_label{j} = sprintf('%d(%d)', ...
-			j, this.slices{i-1}.VirtualNodes.PhysicalNode(j));
+			j, this.slices(i-1).VirtualNodes.PhysicalNode(j));
 	end
 	plot_args = {...
 		'NodeLabel', node_label, ...
@@ -51,18 +51,18 @@ for i = 2:num_figure
 		};
 	if contains('Location', this.Nodes.Properties.VariableNames)
 		plot_args = [plot_args, ...
-			'XData', this.Nodes.Location(this.slices{i-1}.VirtualNodes.PhysicalNode,1), ...
-			'YData', this.Nodes.Location(this.slices{i-1}.VirtualNodes.PhysicalNode,2), ...
+			'XData', this.Nodes.Location(this.slices(i-1).VirtualNodes.PhysicalNode,1), ...
+			'YData', this.Nodes.Location(this.slices(i-1).VirtualNodes.PhysicalNode,2), ...
 			]; %#ok<AGROW>
 	end
 	if b_undirect
-		g = graph(this.slices{i-1}.Topology.Adjacent+...
-			this.slices{i-1}.Topology.Adjacent');
+		g = graph(this.slices(i-1).Topology.Adjacent+...
+			this.slices(i-1).Topology.Adjacent');
 	else
-		g = digraph(this.slices{i-1}.Links{:,{'EndNodes'}}, this.slices{i-1}.Nodes);
-		edge_label = cell(this.slices{i-1}.NumberVirtualLinks,1);
-		for j = 1:this.slices{i-1}.NumberLinks
-			edge_label{j} = sprintf('%d(%d)', j, this.slices{i-1}.Links.PhysicalLink(j));
+		g = digraph(this.slices(i-1).Links{:,{'EndNodes'}}, this.slices(i-1).Nodes);
+		edge_label = cell(this.slices(i-1).NumberVirtualLinks,1);
+		for j = 1:this.slices(i-1).NumberLinks
+			edge_label{j} = sprintf('%d(%d)', j, this.slices(i-1).Links.PhysicalLink(j));
 		end
 		plot_args = [plot_args, ...
 			'EdgeLabel', edge_label, ...

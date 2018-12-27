@@ -1,7 +1,7 @@
 classdef Slice < VirtualNetwork
 	properties
 		Type;           % Type from slice template
-		weight;         % weight for the slice user's utility.
+		Weight;         % weight for the slice user's utility.
 		
 		FlowTable;      % flow information in the slice
 		VNFList;        % List of virtual network functions in the slice
@@ -21,13 +21,6 @@ classdef Slice < VirtualNetwork
 		path_owner; % Associated flow of path, to provide fast inquiry of associated flow than using |I_flow_path|.
 	end
 	
-  methods (Abstract)
-    profit = getProfit(slice, options);
-    r = getRevenue(this);
-		vc = getVNFCapacity(this, ~);
-		sc = getCost(this, load, model);
-	end
-    	
   %% Constructor and Destructor
   methods
     function this = Slice(slice_data)
@@ -45,7 +38,7 @@ classdef Slice < VirtualNetwork
         this.Type = slice_data.Type;
       end
       if isfield(slice_data,'Weight')
-        this.weight = slice_data.Weight;
+        this.Weight = slice_data.Weight;
       end
       %%%
       % Link price
@@ -66,13 +59,12 @@ classdef Slice < VirtualNetwork
       % convert node index to virtual node index
       phy_nodes = this.PhysicalNodeMap;
       this.FlowTable = slice_data.FlowTable;
-      for k = 1:height(this.FlowTable)
-        path_list = this.FlowTable{k, 'Paths'};
-        for p = 1:path_list.Width
-          path_list{p}.node_list = phy_nodes(path_list{p}.node_list);
-        end
-      end
-      
+			for k = 1:height(this.FlowTable)
+				path_list = this.FlowTable{k, 'Paths'};
+				for p = 1:path_list.Width
+					path_list{p}.node_list = phy_nodes(path_list{p}.node_list);
+				end
+			end
       this.VNFList = slice_data.VNFList;
       
       % Flow options
@@ -82,6 +74,9 @@ classdef Slice < VirtualNetwork
 				));
       this.options = structupdate(this.options, slice_data, ...
 				{'SlicingMethod', 'PricingPolicy', 'FlowPattern', 'DelayConstraint', 'NumberPaths'});
+			this.options = structmerge(this.options, getstructfields(slice_data, { ...
+				'NodeSet' ...
+				}, 'ignore'));
     end
     
     function delete(this)
@@ -138,7 +133,6 @@ classdef Slice < VirtualNetwork
       this.ServiceNodes{:,{'Load', 'Capacity'}} = 0;
       this.Links{:,{'Load', 'Capacity'}} = 0;
       this.FlowTable{:, 'Rate'} = 0;
-      this.Optimizer.clear();
       this.b_final = false;
     end
     
@@ -150,19 +144,26 @@ classdef Slice < VirtualNetwork
         % subclass may override _postProcessing_, it is recommended that
         % the subclass maintains the default behavior of this function.
         this.Optimizer.postProcessing();
+				this.Optimizer.setPathBandwidth();
         this.ServiceNodes.Load = this.getNodeLoad();
         this.Links.Load = this.getLinkLoad();
         this.ServiceNodes.Capacity = this.ServiceNodes.Load;
         this.Links.Capacity = this.Links.Load;
         this.FlowTable.Rate = this.getFlowRate;
-        %this.setPathBandwidth;
+			else
+				this.op.clear();
+        this.ServiceNodes{:,{'Load','Capacity'}} = 0;
+        this.Links{:,{'Load','Capacity'}} = 0;
       end
       
-      if nargin >= 2
-        this.ServiceNodes.Price = prices.Node(this.getDCPI);
-        this.Links.Price = prices.Link(this.Links.PhysicalLink);
-      end
-      
+			if nargin >= 2
+				this.ServiceNodes.Price = prices.Node(this.getDCPI());
+				this.Links.Price = prices.Link(this.Links.PhysicalLink);
+			end
+			
+      % Clear the |pardata| to enable trigger initialization in further call to
+      % <optimalFlowRate>. 
+			this.Optimizer.pardata.erase();		
       this.b_final = true;
     end
     
@@ -222,7 +223,55 @@ classdef Slice < VirtualNetwork
 		%                 end
 		%             end
 		%         end
-  end
+		function r = getRevenue(this, isfinal)
+			if nargin <= 1
+				isfinal = false;
+			end
+			if isfinal
+				r = this.Weight*sum(fcnUtility(this.FlowTable.Rate));
+			else
+				r = this.Weight*sum(fcnUtility(this.op.temp_vars.r));
+			end
+		end
+
+		function sc = getCost(this, varargin)
+			sc = this.getResourceCost(this, varargin{:});
+		end
+		
+		% override the <INetwork>.<utilizationRatio> method.
+		% <varargout https://www.mathworks.com/help/releases/R2017b/matlab/ref/varargout.html>
+		% function varargout = utilizationRatio(this)
+		% [varargout{1:nargout}] = this.op.utilizationRatio();
+		%
+		function [omega, sigma, alpha] = utilizationRatio(this)
+			n_idx = this.ServiceNodes.Capacity>eps;
+			e_idx = this.Links.Capacity>eps;
+			c_node = sum(this.ServiceNodes.Capacity(n_idx));
+			c_link = sum(this.Links.Capacity(e_idx));
+			alpha = [c_node c_link]./(c_node+c_link);
+			theta_v = sum(this.ServiceNodes.Load(n_idx))/c_node;
+			theta_l = sum(this.Links.Load(e_idx))/c_link;
+			omega = dot(alpha, [theta_v, theta_l]);
+			
+			if nargout == 2
+				sigma = std([this.Links.Load(e_idx)./this.Links.Capacity(e_idx);...
+					this.ServiceNodes.Load(n_idx)./this.ServiceNodes.Capacity(n_idx)]);
+			end
+		end
+		
+		function old_value = setOptions(this, varargin)
+			if isstruct(varargin{1}) || isa(varargin{1}, 'Dictionary')
+				old_value = getstructfields(this.options, varargin{1}.Keys, 'silent');
+				this.options = structupdate(this.options, varargin{1});
+			else
+				num_fields = length(varargin);
+				old_value = getstructfields(this.options, varargin(1:2:(num_fields-1)), 'silent');
+				for i = 1:2:(num_fields-1)
+					this.options.(varargin{i}) = varargin{i+1};
+				end
+			end
+		end
+	end
 	
   %% Protected Methods
 	methods (Access = protected)
@@ -273,11 +322,6 @@ classdef Slice < VirtualNetwork
 	methods(Static)
 		%% TODO: move to Network and split it according to type
 		slice_template = loadSliceTemplate(index);
-	end
-
-	methods
-		[payment, grad, pseudo_hess] = fcnLinkPricing(this, link_price, link_load);
-		[payment, grad, pseudo_hess] = fcnNodePricing(this, node_price, node_load);
 	end
 	
 end

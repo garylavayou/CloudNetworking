@@ -3,17 +3,12 @@ classdef SimpleSliceOptimizer < SliceOptimizer
 		As_res;   % Coefficient matrix of the processing constraints.
 		Hrep;     % Coefficient used to compute node resource consumption.
 		Hdiag;		% Coefficient used to compute VNF intance capacity.
-    num_varz; % number of variables in vector |z_npf|.
-  end
-
-  properties (Dependent)
-		VNFCapacity;
 	end
 	
 	methods
 		profit = getProfit(this, options);
 	end
-	methods(Static)
+	methods(Static, Access = protected)
 		[profit, grad] = fcnSocialWelfare(x_vars, op, options);
 		%% fcnProfit
     % Evalute the objective function and gradient.
@@ -38,6 +33,7 @@ classdef SimpleSliceOptimizer < SliceOptimizer
     hs = fcnHessian(var_x, ~, slice, options);
 	end
   
+	%% Constructor
   methods
     function this = SimpleSliceOptimizer(slice, options)
 			if nargin >= 2
@@ -48,44 +44,42 @@ classdef SimpleSliceOptimizer < SliceOptimizer
 				args = {};
 			end
       this@SliceOptimizer(args{:});
-
-      this.getAs_res;
-      this.getHrep;
-      this.getHdiag;
     end
-  end
-  
-  %% Property Get Methods
-  methods
-    function c = get.VNFCapacity(this)
-      if ~isfield(this.Variables, 'v') || isempty(this.Variables.v)
-        warning('VNF capacity not set, set to VNF load.');
-        c = this.getVNFCapacity;
-        this.Variables.v = c;
-      else
-        c = this.Variables.v;
-      end
-    end
-    
-		function n = get.num_varz(this)
-			n = this.hs.NumberVNFs*this.hs.NumberServiceNodes*this.hs.NumberPaths;
-		end
-    
-  end
+	end  
   
   %% Public Methods
   methods
-		[profit,cost] = optimalFlowRate(this, new_opts);		% see also <SliceOptimizer>
+		[profit, cost, output] = optimalFlowRate(this, new_opts);		% see also <SliceOptimizer>
 		[utility, load] = priceOptimalFlowRate(this, x0, options); % see also <SliceOptimizer>
 
-		
-    function clear(this)
-      this.Variables.x = [];
-      this.Variables.z = [];
-      this.temp_vars.x = [];
-      this.temp_vars.z = [];
+		function initializeState(this)
+			initializeState@SliceOptimizer(this);
+			this.getAs_res;
+			this.getHrep;
+			this.getHdiag;
 		end
-    
+		
+		% 		function initializeParallel(this, options)
+		% 			initializeParallel@SliceOptimizer(this, options);
+		% 		end
+		
+		% 		function setProblem(this, varargin)
+		% 			setProblem@SliceOptimizer(this, varargin{:});
+		% 		end
+		
+		function b = checkFeasible(this, vars, opt_opts)
+			if nargin <= 1 || isempty(vars)
+				vars = [this.Variables.x; this.Variables.z];
+			else
+				vars = vars(1:sum(this.num_vars(1:2)));
+			end
+			if nargin >= 3 && isfield(opt_opts, 'ConstraintTolerance')
+				b = isempty(find(this.As_res*vars>opt_opts.ConstraintTolerance,1));
+			else
+				b = isempty(find(this.As_res*vars>1e-10,1));
+			end
+		end
+				
 		%%
 		% Implement <SliceOptimizer.getFlowRate>
     function r = getFlowRate(this, vars)
@@ -98,40 +92,25 @@ classdef SimpleSliceOptimizer < SliceOptimizer
       end
       r = full(r);
 		end
-		
-		%%
-		% Override <SliceOptimizer.setPathBandiwdth>
-		function setPathBandwidth(this, x)
-			if nargin == 1
-				x = this.Variables.x;
-			end
-			p = 1;
-			for i = 1:this.hs.NumberFlows
-				pathlist = this.hs.FlowTable{i,'Paths'};
-				for l = 1:length(pathlist)
-					pathlist{l}.bandwidth = x(p);
-					p = p + 1;
-				end
+		    
+		function vc = getVNFCapacity(this)
+			if ~isfield(this.Variables, 'v') || isempty(this.Variables.v)
+				error('error: cannot retrive VNF capacity, the variables not initilized yet.');
+			else
+				vc = this.Variables.v;
 			end
 		end
 		
-    function b = checkFeasible(this, vars, opt_opts)
-      if nargin <= 1 || isempty(vars)
-        vars = [this.Variables.x; this.Variables.z];
-      else
-        vars = vars(1:this.NumberVariables);
-      end
-      if nargin >=3 && isfield(opt_opts, 'ConstraintTolerance')
-        b = isempty(find(this.As_res*vars>opt_opts.ConstraintTolerance,1));
-      else
-        b = isempty(find(this.As_res*vars>1e-10,1));
-      end
-    end
-    
-    function initializeProblem(this)
-      
-    end
-    
+		function lc = getVNFLoad(this, z)
+			% znpf = reshape(full(this.Variables.z), this.NumberServiceNodes, ...
+			% this.NumberPaths, this.NumberVNFs);
+			% znpf = znpf.* full(this.I_dc_path);  % compatible arithmetic operation
+			% this.VNFCapacity = reshape(sum(znpf,2), this.NumberServiceNodes*this.NumberVNFs,1);
+			if nargin <= 1
+				z = this.Variables.z;
+			end
+			lc = full(this.Hdiag * z);
+		end
 		%     function setProblem(this, varargin)
 		% 			idx = true(length(varargin,1));  % filter varargins to
 		% 			setProblem@SliceOptimizer
@@ -189,7 +168,6 @@ classdef SimpleSliceOptimizer < SliceOptimizer
 			%%
 			% |node_vars| is index by |(node,path,function)|.
 			v_n = full(this.Hrep*node_vars);
-			% assert(isempty(find(abs(this.Hrep*node_vars-v_n)>10^-6,1)), 'error: unequal node load');
 			
 			%% Alternative way to compute the node load.
 			% _Hrep_ replace the following procedure.
@@ -205,49 +183,46 @@ classdef SimpleSliceOptimizer < SliceOptimizer
 			%                 z_index = z_index + np;
 			%             end
 		end
-    %% priceOptimalFlowRateCompact
-    % Find the optimal flow rate that maximizing the net profit of the network slice.
-    %
-    %      x = priceOptimalFlowRateCompact(this, x0)
-    %
-    % The optimizition procedure in this method remove the unnecessary components from the
-    % independent variable |x|, so that the problem scale is cut down.
 		
-		
+		% options:
+		%		SlicingMethod: {SingleNormal|SingleFunction}.
 		function runtime = optimalFlowRateSingleSlice(this, slice_data, options)
 			slice = this.hs;
 			Nf = slice.NumberFlows;
-			if options.SlicingMethod == SlicingMethod.SingleFunction
-				this.getAs_res(slice_data.flow_owner, slice_data.Alpha_f);
-				options.Alpha_f = slice_data.Alpha_f;
-			elseif options.SlicingMethod == SlicingMethod.SingleNormal
-				%% Coefficient for global optimization
-				% When all slices are combined into one slice, a VNF might not be used by all paths
-				% (_i.e._ all flows). If a VNF |f| is not used by a path |p|, there is no
-				% processing-rate constraints on $f \times p$(|delete_items|). To form the constraint
-				% coefficient matrix, the related items in |As| should be removed. See also <Slice
-				% file://E:/workspace/MATLAB/Projects/Documents/CloudNetworking/Slice.html>.
-				%
-				% By the way, $z_{n,p,f}=0, \forall n$, if |p| does not use NFV |f|.
-				I_flow_function = zeros(Nf, slice.NumberVNFs);
-				for f = 1:Nf
-					[~, vid] = ismember(slice.Parent.slices{slice_data.flow_owner(f)}.VNFList, slice.VNFList);
-					I_flow_function(f, vid) = 1;
-				end
-				I_path_function = this.I_flow_path'*I_flow_function;
-				this.As_res = this.As_res(logical(I_path_function(:)),:);
+			options = Dictionary(options);
+			switch slice.options.SlicingMethod
+				case SlicingMethod.SingleFunction
+					this.getAs_res(slice_data.flow_owner, slice_data.Alpha_f);
+					options.Alpha_f = slice_data.Alpha_f;
+				case SlicingMethod.SingleNormal
+					%% Coefficient for global optimization
+					% When all slices are combined into one slice, a VNF might not be used by all paths
+					% (_i.e._ all flows). If a VNF |f| is not used by a path |p|, there is no
+					% processing-rate constraints on $f \times p$(|delete_items|). To form the constraint
+					% coefficient matrix, the related items in |As| should be removed. See also <Slice
+					% file://E:/workspace/MATLAB/Projects/Documents/CloudNetworking/Slice.html>.
+					%
+					% By the way, $z_{n,p,f}=0, \forall n$, if |p| does not use NFV |f|.
+					I_flow_function = zeros(Nf, slice.NumberVNFs);
+					for f = 1:Nf
+						[~, vid] = ismember(slice.Parent.slices(slice_data.flow_owner(f)).VNFList, slice.VNFList);
+						I_flow_function(f, vid) = 1;
+					end
+					I_path_function = this.I_flow_path'*I_flow_function;
+					this.As_res = this.As_res(logical(I_path_function(:)),:);
 			end
 			
 			if nargout == 1
 				tic;
 			end
-			% Only return intermediate results, so no return value provided.
+			options.bInitialize = true;
+			options.isFinalize = false;			% only intrmediate results
 			this.optimalFlowRate(options);
 			if nargout == 1
 				runtime.Serial = toc;
 				runtime.Parallel = runtime.Serial;
 			end
-			if options.SlicingMethod == SlicingMethod.SingleNormal
+			if slice.options.SlicingMethod == SlicingMethod.SingleNormal
 				nz = slice.NumberServiceNodes*slice.NumberPaths;
 				z_index = 1:nz;
 				for v = 1:slice.NumberVNFs
@@ -262,19 +237,19 @@ classdef SimpleSliceOptimizer < SliceOptimizer
 			z_npf = reshape(full(this.temp_vars.z), slice.NumberServiceNodes, slice.NumberPaths, slice.NumberVNFs);
 			% node_load = zeros(this.NumberNodes, 1);
 			% link_load = zeros(this.NumberLinks, 1);
-			fmincon_opt = optimoptions('fmincon');
+			minopts = optimoptions('fmincon');
 			for s = 1:slice.Parent.NumberSlices
-				sl = slice.Parent.slices{s};
+				sl = slice.Parent.slices(s);
 				op = sl.Optimizer;
 				pid = 1:sl.NumberPaths;
 				op.temp_vars.x = this.temp_vars.x(pid_offset+pid);
 				nid = sl.getDCPI;       % here is the DC index, not the node index.
 				[~, vid] = ismember(sl.VNFList, slice.VNFList);
 				op.temp_vars.z = ...
-					reshape(z_npf(nid,pid+pid_offset,vid), op.NumberVariables-sl.NumberPaths, 1);
+					reshape(z_npf(nid,pid+pid_offset,vid), sum(op.num_vars(1:2))-sl.NumberPaths, 1);
 				pid_offset = pid_offset + sl.NumberPaths;
 				assert(op.checkFeasible([op.temp_vars.x; op.temp_vars.z], ...
-					struct('ConstraintTolerance', fmincon_opt.ConstraintTolerance)), ...
+					struct('ConstraintTolerance', minopts.ConstraintTolerance)), ...
 					'error: infeasible solution.');
 				sl.ServiceNodes.Capacity = sl.getNodeCapacity(false);
 				sl.Links.Capacity = sl.getLinkCapacity(false);
@@ -305,7 +280,7 @@ classdef SimpleSliceOptimizer < SliceOptimizer
 		function [tf, vars] = postProcessing(this)
 			global DEBUG INFO;
 			Np = this.hs.NumberPaths;
-			Nvf = this.hs.NumberVNFs;
+			Nvnf = this.hs.NumberVNFs;
 			Nsn = this.hs.NumberServiceNodes;
 			var_x = this.temp_vars.x;
 			var_z = this.temp_vars.z;
@@ -318,12 +293,12 @@ classdef SimpleSliceOptimizer < SliceOptimizer
 			v2 = A2*var_z;
 			index_violate = find(v1+v2>0);      % re = v1+v2
 			if ~isempty(index_violate)
-				message = sprintf('[%s] Maximal violation is %.4f before processing.', ...
-					calledby, full(max(v1+v2)));
+				message = sprintf('Maximal violation is %.4f before processing.', ...
+					full(max(v1+v2)));
 				if ~isempty(DEBUG) && DEBUG
 					warning(message); %#ok<SPWRN>
 				elseif ~isempty(INFO) && INFO
-					cprintf('SystemCommands', 'Warning: %s\n', message);
+					cprintf('SystemCommands', 'Warning:[%s] %s\n', calledby, message);
 				end
 				
 				post_process = this.options.PostProcessing; % TODO: replace with the optimizer.options.
@@ -331,7 +306,7 @@ classdef SimpleSliceOptimizer < SliceOptimizer
 					case 'round'
 						b_violate = false(size(v1));
 						b_violate(index_violate) = true;
-						pid_offset = 0:Np:((Nvf-1)*Np);
+						pid_offset = 0:Np:((Nvnf-1)*Np);
 						for i = 1:Np
 							pid = pid_offset + i;
 							p_violate = find(b_violate(pid));
@@ -386,7 +361,7 @@ classdef SimpleSliceOptimizer < SliceOptimizer
 						vi_idx = nz_index(b_violate);
 						pidx = mod(vi_idx-1, Np)+1;
 						if strcmpi(post_process, 'recover')
-							fidx = ceil(vi_idx/Nvf);
+							fidx = ceil(vi_idx/Nvnf);
 							for i = 1:length(vi_idx)
 								zidx = (1:Nsn)+ ((fidx(i)-1)*Nsn*Np + (pidx(i)-1)*Nsn);
 								var_z(zidx) = this.temp_vars.z(zidx);  % recover
@@ -405,19 +380,36 @@ classdef SimpleSliceOptimizer < SliceOptimizer
 			this.Variables.x = var_x;
 			this.Variables.z = var_z;
 			tf = true;
+			this.setPathBandwidth();
 		end
 		
+		%%
+		% Override <SliceOptimizer.setPathBandiwdth>
+		function setPathBandwidth(this, x)
+			if nargin == 1
+				x = this.Variables.x;
+			end
+			p = 1;
+			for i = 1:this.hs.NumberFlows
+				pathlist = this.hs.FlowTable{i,'Paths'};
+				for l = 1:length(pathlist)
+					pathlist{l}.bandwidth = x(p);
+					p = p + 1;
+				end
+			end
+		end
+
 	end
 	methods (Static)
-		function [profit, grad] = fcnSocialWelfareCompact(act_vars, op)
+		function [profit, grad] = fcnSocialWelfareCompact(act_vars, this)
 			vars = zeros(options.num_orig_vars,1);
-			vars(op.I_active_variables) = act_vars;
+			vars(this.I_active_variables) = act_vars;
 			
 			if nargout <= 1
-				profit = SimpleSliceOptimizer.fcnSocialWelfare(vars, op);
+				profit = SimpleSliceOptimizer.fcnSocialWelfare(vars, this);
 			else
-				[profit, grad] = SimpleSliceOptimizer.fcnSocialWelfare(vars, op);
-				grad = grad(op.I_active_variables);
+				[profit, grad] = SimpleSliceOptimizer.fcnSocialWelfare(vars, this);
+				grad = grad(this.I_active_variables);
 			end
 		end
 		
@@ -439,168 +431,160 @@ classdef SimpleSliceOptimizer < SliceOptimizer
   
   %% Protected Methods
   methods (Access = protected)
-		function n = get_number_variables(this)
-			n = (this.hs.NumberVNFs*this.hs.NumberServiceNodes+1)*this.hs.NumberPaths;
-    end
-    
-    function n = get_number_linear_constraints(this)
-			n = size(this.As_res,1);
-    end
-
-    %     function temp_vars = get_temp_variables(this)
-    %       temp_vars = [this.temp_vars.x; this.temp_vars.z];
-    %     end
-				
-    %% Linear constraint without consdiering the bound constraint.
-    % |As| takes the following form
-    %
-    % $$\left[ \begin{array}{ccccc}
-    %   I_1     & H_s &      &          &       \\
-    %   I_2     &     & H_s  &          &       \\
-    %   \vdots  &     &      &  \ddots  &       \\
-    %   I_F     &     &      &          & H_s
-    % \end{array} \right]
-    % \left[ \begin{array}{c}x\\z_1\\z_2\\\vdots\\z_f\\\vdots\\z_F\end{array}\right] $$
-    %
-    % where
-    %
-    % $$I_f = {\left[ \begin{array}{cccc}
-    % \alpha_f &          &        &         \\
-    %          & \alpha_f &        &         \\
-    %          &          & \ddots &         \\
-    %          &          &        & \alpha_f
-    % \end{array} \right]}_{P\times P},$$
-    % $$H_s = {\left[ \begin{array}{cccccccccc}
-    % -h_{1,1} & \cdots & -h_{N,1} &          &        &          &        &         &        & \\
-    %          &        &          & -h_{1,2} & \cdots & -h_{N,2} &        &         &        & \\
-    %          &        &          &          &        &          & \ddots &         &        & \\
-    %          &        &          &          &        &          &        &-h_{1,P} & \cdots & -h_{N,P}
-    % \end{array} \right]}_{P\times NP},$$
-    % $$ x = \left[\begin{array}{c}x_1\\x_2\\ \vdots\\x_P\end{array}\right]$$
-    % $$ z_f = \left[\begin{array}{c}z_{1,1,f}\\ \vdots\\ z_{N,1,f}\\z_{1,2,f}\\
-    %   \vdots\\ z_{N,2,f}\\ \vdots\\z_{N,P,F}\end{array}\right]$$
-    %
-    % According to the martix formulation, the number of non-zero elements in |As|
-    % is equal to |F*(P+nnz(Hs))|, where |nnz(Hs)| is equal to the number of
-    % nonzero elements in |I_dc_path|.
-    %
-    % NOTE: it is not necessary to evaluate As_res each time when visiting it. so, we
-    % define a normal function to update the property |As_res|.
-    function As = getAs_res(this, flow_owner, alpha_f)
-			slice = this.hs;
-      Nsn = slice.NumberServiceNodes;
-      Np = slice.NumberPaths;
-      Nvf = slice.NumberVNFs;       % For 'single-function', NV=1.
-      nnz_As = Nvf*(Np+nnz(this.I_dc_path));
-      num_lcon = Np*Nvf;
-      As = spalloc(num_lcon, this.NumberVariables, nnz_As);
-      row_index = 1:Np;
-      for f = 1:Nvf
-        if nargin >= 3   % used when treat all VNFs as one function.
-          for p = 1:Np
-            As(p,p) = alpha_f(flow_owner(slice.path_owner(p))); %#ok<SPRIX>
-          end
-        else
-          af = slice.Parent.VNFTable{slice.VNFList(f),{'ProcessEfficiency'}};
-          As(row_index,1:Np) = af * speye(Np); %#ok<SPRIX>
-        end
-        row_index = row_index + Np;
-      end
-      col_index = 1:Nsn;
-      Hst = zeros(Np, Nsn*Np);     % |Hst| is a staircase-like diagnoal.
-      for p = 1:Np
-        Hst(p, col_index) = -this.I_dc_path(:,p);
-        col_index = col_index + Nsn;
-      end
-      As(:, (Np+1):end) = block_diag(Hst, Nvf);
-      this.As_res = As;
-    end
-    
-    % equation:
-    %    $\sum_{p,f}{b_{np}z_{npf}} \le V_{n}$
-    %
-    % For the _node capacity constraint_, the coefficient matrix is filled row-by-row.
-    % On row i, the non-zero elements located at (i-1)+(1:NC:((NP-1)*NC+1)) for the
-    % first |NC*NP| columns, and then the first |NC*NP| columns are duplicated for
-    % |NV| times, resulting in |NC*NP*NV| columns.
-    %
-    % The base matrix is the same as in <Hdiag>.
-    function H = getHrep(this)
-      Np = this.hs.NumberPaths;
-      Nsn = this.hs.NumberServiceNodes;
-      Nvf = this.hs.NumberVNFs;
-      
-      H = spalloc(Nsn, this.num_varz, nnz(this.I_dc_path)*Nvf);
-      col_index = (1:Nsn:((Np-1)*Nsn+1))';      % the vnf variable index related to the first node
-      col_index = repmat(col_index, 1, Nvf);   % derive other node's vnf variable index
-      for v = 2:Nvf
-        col_index(:,v) = col_index(:,v-1) + Nsn*Np;
-      end
-      col_index = col_index(:);
-      for n = 1:Nsn    % all path that use node n is counted
-        H(n, col_index) = repmat(this.I_dc_path(n,:), 1, Nvf);  %#ok<SPRIX>
-        col_index = col_index + 1;
-      end
-      this.Hrep = H;
-    end
-    
-    % equation:
-    %    $\sum_{p}{b_{np}z_{npf}} \le v_{nf}$
-    %
-    % For the node capacity constraint for VNF |f|, the coeffiect matrix Hs is
-    % filled block-by-block. In the |k|th block (NC*NC), we put the |k|th column
-    % of H_np to the diagnal of the block. Then |H_np| is duplicated into a larger
-    % diagonal corresponding to all VNFs.
-    %
-    % The capacity of VNF instance |VNFCapacity|, has been calculate after
-    % allocating resource to the slice. Some component of |VNFCapacity| might be
-    % zero, since VNF f may not be located at node n.
-    %
-    % See also <Hrep>.
-    function Hs = getHdiag(this)
-      global DEBUG; %#ok<NUSED>
-      Nsn = this.hs.NumberServiceNodes;
-      Np = this.hs.NumberPaths;
-      Hs_np = spalloc(Nsn, Nsn*Np, nnz(this.I_dc_path));
-      col_index = 1:Nsn;
-      for p = 1:Np
-        Hs_np(1:Nsn,col_index) = diag(this.I_dc_path(:,p));  %#ok<SPRIX>
-        col_index = col_index + Nsn;
-      end
-      Hs = block_diag(Hs_np, this.hs.NumberVNFs);
-      this.Hdiag = Hs;
-    end
-    
     % Called by <optimalFlowRate>, if 'bCompact = true', options should be speicifed with
     % 'num_orig_vars'.
     % See also <SlicingMethod>.
     function [x, fval] = optimize(this, options)
-			if options.SlicingMethod.IsSingle
+			if isfield(options, 'SlicingMethod') && options.SlicingMethod.IsSingle
 				% 'normal', 'single-function'
 				fobj = @SimpleSliceOptimizer.fcnSocialWelfare;
-			elseif options.SlicingMethod.IsPricing
-				fobj = @SimpleSliceOptimizer.fcnProfit;
 			else
-				error('error: unrecognized SlicingMethod.');
+				fobj = @SimpleSliceOptimizer.fcnProfit;
 			end
       
+			prbm = this.problem;
 			[xs, fval, exitflag, output] = ...
-				fmincon(@(x)fobj(x, this, options), ...
-				this.problem.x0, this.problem.As, this.problem.bs, this.problem.Aeq, ...
-				this.problem.beq, this.problem.lb, this.problem.ub, [], options.fmincon_opt);
+				fmincon(@(x)fobj(x, this, options), prbm.x0, ...
+				prbm.A, prbm.b, prbm.Aeq, prbm.beq, prbm.lb, prbm.ub, [], prbm.minopts);
       SimpleSliceOptimizer.interpretExitflag(exitflag, output);
-      if isfield(options, 'bCompact') && options.bCompact
-        x = zeros(options.num_orig_vars, 1);
-        x(this.I_active_variables) = xs;
-      else
-        x = xs;
-      end
-      assert(this.checkFeasible(x, ...
-        struct('ConstraintTolerance', options.fmincon_opt.ConstraintTolerance)), ...
-        'error: infeasible solution.');
+			if options.bCompact
+				x = zeros(options.num_orig_vars, 1);
+				x(this.I_active_variables) = xs;
+			else
+				x = xs;
+			end
+			constr_tol = getstructfields(prbm.options, 'ConstraintTolerance', ...
+				'default-ignore', {this.options.ConstraintTolerance});
+      assert(this.checkFeasible(x, constr_tol), 'error: infeasible solution.');
     end
-    
-
+    		
 	end
+	methods(Access = protected, Sealed)
+		%% Linear constraint without consdiering the bound constraint.
+		% |As| takes the following form
+		%
+		% $$\left[ \begin{array}{ccccc}
+		%   I_1     & H_s &      &          &       \\
+		%   I_2     &     & H_s  &          &       \\
+		%   \vdots  &     &      &  \ddots  &       \\
+		%   I_F     &     &      &          & H_s
+		% \end{array} \right]
+		% \left[ \begin{array}{c}x\\z_1\\z_2\\\vdots\\z_f\\\vdots\\z_F\end{array}\right] $$
+		%
+		% where
+		%
+		% $$I_f = {\left[ \begin{array}{cccc}
+		% \alpha_f &          &        &         \\
+		%          & \alpha_f &        &         \\
+		%          &          & \ddots &         \\
+		%          &          &        & \alpha_f
+		% \end{array} \right]}_{P\times P},$$
+		% $$H_s = {\left[ \begin{array}{cccccccccc}
+		% -h_{1,1} & \cdots & -h_{N,1} &          &        &          &        &         &        & \\
+		%          &        &          & -h_{1,2} & \cdots & -h_{N,2} &        &         &        & \\
+		%          &        &          &          &        &          & \ddots &         &        & \\
+		%          &        &          &          &        &          &        &-h_{1,P} & \cdots & -h_{N,P}
+		% \end{array} \right]}_{P\times NP},$$
+		% $$ x = \left[\begin{array}{c}x_1\\x_2\\ \vdots\\x_P\end{array}\right]$$
+		% $$ z_f = \left[\begin{array}{c}z_{1,1,f}\\ \vdots\\ z_{N,1,f}\\z_{1,2,f}\\
+		%   \vdots\\ z_{N,2,f}\\ \vdots\\z_{N,P,F}\end{array}\right]$$
+		%
+		% According to the martix formulation, the number of non-zero elements in |As|
+		% is equal to |F*(P+nnz(Hs))|, where |nnz(Hs)| is equal to the number of
+		% nonzero elements in |I_dc_path|.
+		%
+		% NOTE: it is not necessary to evaluate As_res each time when visiting it. so, we
+		% define a normal function to update the property |As_res|.
+		function As = getAs_res(this, flow_owner, alpha_f)
+			slice = this.hs;
+			Nsn = slice.NumberServiceNodes;
+			Np = slice.NumberPaths;
+			Nvnf = slice.NumberVNFs;       % For 'single-function', NV=1.
+			nnz_As = Nvnf*(Np+nnz(this.I_dc_path));
+			num_lcon = Np*Nvnf;
+			this.num_vars = [Np; Nsn*Np*Nvnf];
+			As = spalloc(num_lcon, sum(this.num_vars(1:2)), nnz_As);
+			row_index = 1:Np;
+			for f = 1:Nvnf
+				if nargin >= 3   % used when treat all VNFs as one function.
+					for p = 1:Np
+						As(p,p) = alpha_f(flow_owner(slice.path_owner(p))); %#ok<SPRIX>
+					end
+				else
+					af = slice.Parent.VNFTable{slice.VNFList(f),{'ProcessEfficiency'}};
+					As(row_index,1:Np) = af * speye(Np); %#ok<SPRIX>
+				end
+				row_index = row_index + Np;
+			end
+			col_index = 1:Nsn;
+			Hst = zeros(Np, Nsn*Np);     % |Hst| is a staircase-like diagnoal.
+			for p = 1:Np
+				Hst(p, col_index) = -this.I_dc_path(:,p);
+				col_index = col_index + Nsn;
+			end
+			As(:, (Np+1):end) = block_diag(Hst, Nvnf);
+			this.As_res = As;
+		end
 		
+		% equation:
+		%    $\sum_{p,f}{b_{np}z_{npf}} \le V_{n}$
+		%
+		% For the _node capacity constraint_, the coefficient matrix is filled row-by-row.
+		% On row i, the non-zero elements located at (i-1)+(1:NC:((NP-1)*NC+1)) for the
+		% first |NC*NP| columns, and then the first |NC*NP| columns are duplicated for
+		% |NV| times, resulting in |NC*NP*NV| columns.
+		%
+		% The base matrix is the same as in <Hdiag>.
+		function H = getHrep(this)
+			Np = this.hs.NumberPaths;
+			Nsn = this.hs.NumberServiceNodes;
+			Nvnf = this.hs.NumberVNFs;
+			
+			H = spalloc(Nsn, Nsn*Np*Nvnf, nnz(this.I_dc_path)*Nvnf);
+			col_index = (1:Nsn:((Np-1)*Nsn+1))';      % the vnf variable index related to the first node
+			col_index = repmat(col_index, 1, Nvnf);   % derive other node's vnf variable index
+			for v = 2:Nvnf
+				col_index(:,v) = col_index(:,v-1) + Nsn*Np;
+			end
+			col_index = col_index(:);
+			for n = 1:Nsn    % all path that use node n is counted
+				H(n, col_index) = repmat(this.I_dc_path(n,:), 1, Nvnf);  %#ok<SPRIX>
+				col_index = col_index + 1;
+			end
+			this.Hrep = H;
+		end
+		
+		% Equality for the node capacity constraint for VNF |f|:
+		%    $\sum_{p}{b_{np}z_{npf}} \le v_{nf}$
+		%
+		% The coeffiect matrix Hs is filled block-by-block. In a simple block (Ndc*Ndc), we put
+		% the |p|th column of H_np to the diagnal of the block, to prsent the VNF consumption
+		% of path |p| on each DC, then each path's consumption is cummulated by duplicate the
+		% block, illustrated by
+		%			+     +   ...  +
+		%       +     +   ...  +
+		%         +     +   ...  +
+		% Then the cummulated block is duplicated into a larger diagonal corresponding to all
+		% types of VNFs. 
+		%
+		% The capacity of VNF instance |VNFCapacity|, has been calculate after allocating
+		% resource to the slice. Some component of |VNFCapacity| might be zero, since VNF f
+		% may not be located at node n. 
+		%
+		% See also <Hrep>.
+		function Hs = getHdiag(this)
+			global DEBUG; %#ok<NUSED>
+			Nsn = this.hs.NumberServiceNodes;
+			Np = this.hs.NumberPaths;
+			Hs_np = spalloc(Nsn, Nsn*Np, nnz(this.I_dc_path));
+			col_index = 1:Nsn;
+			for p = 1:Np
+				Hs_np(1:Nsn,col_index) = diag(this.I_dc_path(:,p));  %#ok<SPRIX>
+				col_index = col_index + Nsn;
+			end
+			Hs = block_diag(Hs_np, this.hs.NumberVNFs);
+			this.Hdiag = Hs;
+		end
+		
+	end
 end

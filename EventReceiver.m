@@ -1,7 +1,8 @@
-classdef (Abstract, HandleCompatible) EventReceiver 
+classdef (Abstract) EventReceiver < matlab.mixin.Copyable
     
-    properties (Access = protected)
+    properties
         event = struct('Count', 0);     %statistics of events
+				time = struct;
     end
     
     methods(Abstract)

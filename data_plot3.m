@@ -13,13 +13,13 @@ xlabel('Experiment Time');
 % fig_num_reconfig.OuterPosition = [100 400 400 380];
 for i = 1:length(etas)
     yyaxis('left');
-    hl = plot(idx, results.Reconfig{idx,'NumberReconfigVariables'}, '-.', ...
-        idx, results.Fastconfig{i}{idx,'NumberReconfigVariables'}, ':',...
-        idx, results.Fastconfig2{i}{idx,'NumberReconfigVariables'}, '.');
+    hl = plot(idx, results.Reconfig{idx,'ReVariables'}, '-.', ...
+        idx, results.Fastconfig{i}{idx,'ReVariables'}, ':',...
+        idx, results.Fastconfig2{i}{idx,'ReVariables'}, '.');
     if ~exist('b_disable_dimconfig', 'var') || b_disable_dimconfig == false
         hold on;
-        plot(idx, results.Dimconfig{i}{idx,'NumberReconfigVariables'},'-',...
-            idx, results.Dimconfig{i}{idx,'NumberReconfigVariables'},'+');
+        plot(idx, results.Dimconfig{i}{idx,'ReVariables'},'-',...
+            idx, results.Dimconfig{i}{idx,'ReVariables'},'+');
         hold off;
     end
     hl = hl(1).Parent.Children;
@@ -31,7 +31,7 @@ for i = 1:length(etas)
     ylabel('Number of Reconfiguration');
     ylimmax = hl(1).Parent.YLim(2);
     yyaxis right
-    hr = plot(idx, results.Reconfig{idx,'NumberVariables'}, '--');
+    hr = plot(idx, results.Reconfig{idx,'NumVariables'}, '--');
     hr(1).Color = Color.Orange.RGB;
     hr(1).LineWidth = 1;
     ylabel('Number of Variables');
@@ -55,20 +55,20 @@ end
 % fig_num_reconfig.OuterPosition = [100 400 400 380];
 % yyaxis left;
 for i = 1:length(etas)
-    ratio_reconfig = results.Reconfig{idx,'NumberReconfigVariables'}./...
-        results.Reconfig{idx,'NumberVariables'};
-    ratio_fastconfig = results.Fastconfig{i}{idx,'NumberReconfigVariables'}./...
-        results.Fastconfig{i}{idx,'NumberVariables'};
-    ratio_fastconfig2 = results.Fastconfig2{i}{idx,'NumberReconfigVariables'}./...
-        results.Fastconfig2{i}{idx,'NumberVariables'};
+    ratio_reconfig = results.Reconfig{idx,'ReVariables'}./...
+        results.Reconfig{idx,'NumVariables'};
+    ratio_fastconfig = results.Fastconfig{i}{idx,'ReVariables'}./...
+        results.Fastconfig{i}{idx,'NumVariables'};
+    ratio_fastconfig2 = results.Fastconfig2{i}{idx,'ReVariables'}./...
+        results.Fastconfig2{i}{idx,'NumVariables'};
     hl = plot(idx, ratio_reconfig, '-.', ...
         idx, ratio_fastconfig, ':',...
         idx, ratio_fastconfig2, '.');
     if ~exist('b_disable_dimconfig', 'var') || b_disable_dimconfig == false
-        ratio_dimconfig = results.Dimconfig{i}{idx,'NumberReconfigVariables'}./...
-            results.Dimconfig{i}{idx,'NumberVariables'};
-        ratio_dimconfig2 = results.Dimconfig2{i}{idx,'NumberReconfigVariables'}./...
-            results.Dimconfig2{i}{idx,'NumberVariables'};
+        ratio_dimconfig = results.Dimconfig{i}{idx,'ReVariables'}./...
+            results.Dimconfig{i}{idx,'NumVariables'};
+        ratio_dimconfig2 = results.Dimconfig2{i}{idx,'ReVariables'}./...
+            results.Dimconfig2{i}{idx,'NumVariables'};
         hold on;
         plot(idx, ratio_dimconfig, '-',...
             idx, ratio_dimconfig2, '+');
@@ -133,13 +133,13 @@ else
 end
 for i = 1:length(etas)
     yyaxis left;
-    hl = plot(idx, results.Reconfig{idx,'NumberReconfigFlows'}, '-.', ...
-        idx, results.Fastconfig{i}{idx,'NumberReconfigFlows'}, ':', ...
-        idx, results.Fastconfig2{i}{idx,'NumberReconfigFlows'}, '.');
+    hl = plot(idx, results.Reconfig{idx,'ReFlows'}, '-.', ...
+        idx, results.Fastconfig{i}{idx,'ReFlows'}, ':', ...
+        idx, results.Fastconfig2{i}{idx,'ReFlows'}, '.');
     if ~exist('b_disable_dimconfig', 'var') || b_disable_dimconfig == false
         hold on;
-        plot(idx, results.Dimconfig{i}{idx,'NumberReconfigFlows'}, '-', ...
-            idx, results.Dimconfig2{i}{idx,'NumberReconfigFlows'}, '+');
+        plot(idx, results.Dimconfig{i}{idx,'ReFlows'}, '-', ...
+            idx, results.Dimconfig2{i}{idx,'ReFlows'}, '+');
         hold off;
     end
     hl = hl(1).Parent.Children;
@@ -151,7 +151,7 @@ for i = 1:length(etas)
     ylabel('Number of Reconfigured Flows');
     ylimmax(1) = hl(1).Parent.YLim(2);
     yyaxis right;
-    hr = plot(idx, results.Reconfig{idx,'NumberFlows'});
+    hr = plot(idx, results.Reconfig{idx,'Flows'});
     hr(1).Color = Color.Orange.RGB;
     hr(1).LineWidth = 1;
     ylimmax(2) = hr(1).Parent.YLim(2);
@@ -195,7 +195,7 @@ for i = 1:length(etas)
     %     hl(1).Parent.YLim(1) = 0;
     ylabel('Profit');
     yyaxis right;
-    hr = plot(idx, results.Reconfig{idx,'NumberFlows'}, 'r--');
+    hr = plot(idx, results.Reconfig{idx,'Flows'}, 'r--');
     hr.Parent.YLim(1) = 0;
     ylabel('Number of Flows');
     legend([legend_label, {'Flow #'}], 'Location', 'northwest');

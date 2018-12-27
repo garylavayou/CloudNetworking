@@ -19,7 +19,6 @@ this.getHdiag;
 %     end
 %     this.old_variables.v = this.VNFCapacity(:);
 % end
-tic
 t1 = tic;
 switch this.options.ReconfigMethod
     case ReconfigMethod.Baseline
@@ -28,10 +27,12 @@ switch this.options.ReconfigMethod
         % constant, is not include in the objective value |profit|. So, we
         % should exclude it from the |profit|, as well as the reconfiguration
         % cost.
-        options.CostModel = 'fixcost';
-        options.SlicingMethod = SlicingMethod.AdjustPricing;
-        this.prices.Link = this.hs.Links.Price;
-        this.prices.Node = this.hs.ServiceNodes.Price;
+				this.setProblem('LinkPrice', this.hs.Links.Price, ...
+					'NodePrice', this.hs.ServiceNodes.Price);
+				options = Dictionary(...
+					'CostModel', 'fixcost', ...
+					'isFinalize', true, ...
+					'bInitialize', true);
         profit = this.optimalFlowRate(options);
     case {ReconfigMethod.Fastconfig,ReconfigMethod.FastconfigReserve}
         profit = this.fastReconfigure(action);
@@ -102,11 +103,10 @@ g_results(event_num,:) = stat;
 % These variables should be cleared. If it is used next time, it will be assigned with new
 % values. Some methods will execute according to the state (if it is initialized) of the
 % variables.
-this.prices.Link = [];
-this.prices.Node = [];
+this.setProblem('Price', []);
 this.topts = struct();
 this.changed_index = struct();
-this.hs.net_changes = struct();
+this.hs.net_changes.erase();
 this.b_dim = false;
 exitflag = 0;
 end

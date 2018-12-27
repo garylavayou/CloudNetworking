@@ -4,9 +4,9 @@
 % * *TODO* Resource Cost Model: linear, convex (quatratic)
 function [output, runtime] = optimizeResourcePrice1(this, init_price)
 global DEBUG;
-options.Threshold = this.options.Threshold;
-options.PricingPolicy = 'quadratic';
-options.Stage = 'temp';
+options = Dictionary('PricingPolicy', 'quadratic', ...
+	'Stage', 'temp', ...
+	'bFinal', false);
 % this.clearStates;
 if nargout == 2
 	slice_runtime = 0;
@@ -16,11 +16,15 @@ if nargout == 2
 else
 	options.CountTime = false;
 end
+for i = 1:Ns
+  this.slices(i).initialize();
+	this.slices(i).Optimizer.setProblem('priceOptimalFlowRate', options);
+end
 
 % network data
-NC = this.NumberDataCenters;
-NS = this.NumberSlices;
-NL = this.NumberLinks;
+Ndc = this.NumberDataCenters;
+Ns = this.NumberSlices;
+Nl = this.NumberLinks;
 node_capacity = this.readDataCenter('Capacity');
 link_capacity = this.readLink('Capacity');
 link_uc = this.getLinkCost;
@@ -29,7 +33,7 @@ node_uc = this.getNodeCost;
 %% Social-welfare aware price adjustment
 % Initial Price
 t1 = 0.8;           % {0.1|1}
-if nargin >=2 && ~isempty(init_price)
+if nargin >= 2 && ~isempty(init_price)
 	prices.Link = t1 * init_price.Link;
 	prices.Node = t1 * init_price.Node;
 else
@@ -72,8 +76,8 @@ d1 = 10^-0;
 stop_cond1 = ~isempty(find(delta_price.Link > d0 * link_uc, 1));
 stop_cond2 = ~isempty(find(delta_price.Node > d0 * node_uc, 1));
 stop_cond3 = this.checkProfitRatio(prices, options);
-partial_link_violate = false(NL, 1);
-partial_node_violate = false(NC, 1);
+partial_link_violate = false(Nl, 1);
+partial_node_violate = false(Ndc, 1);
 b_first = true;
 while stop_cond1 && stop_cond2 && stop_cond3
 	number_iter = number_iter + 1;
@@ -105,8 +109,8 @@ while stop_cond1 && stop_cond2 && stop_cond3
 			delta_price.Link = delta_price.Link + min_delta_link_price;
 			delta_price.Node = delta_price.Node + min_delta_node_price;
 		end
-		partial_link_violate = false(NL, 1);
-		partial_node_violate = false(NC, 1);
+		partial_link_violate = false(Nl, 1);
+		partial_node_violate = false(Ndc, 1);
 	else
 		b_first = false;
 		prices.Link(b_link) = prices.Link(b_link) + delta_price.Link(b_link);
@@ -122,7 +126,7 @@ while stop_cond1 && stop_cond2 && stop_cond3
 			partial_link_violate = partial_link_violate | b_link_violate;
 			delta_price.Link(partial_link_violate) = 0;
 		else
-			partial_link_violate = false(NL, 1);
+			partial_link_violate = false(Nl, 1);
 		end
 		delta_price.Link = delta_price.Link / 2;
 		min_delta_link_price = min(delta_price.Link/4, min_delta_link_price);
@@ -130,7 +134,7 @@ while stop_cond1 && stop_cond2 && stop_cond3
 			partial_node_violate = partial_node_violate | b_node_violate;
 			delta_price.Node(partial_node_violate) = 0;
 		else
-			partial_node_violate = false(NC, 1);
+			partial_node_violate = false(Ndc, 1);
 		end
 		delta_price.Node = delta_price.Node / 2;
 		min_delta_node_price = min(delta_price.Node/4, min_delta_node_price);
@@ -213,15 +217,15 @@ end
 
 %%
 	function SolveSCP(node_price_t, link_price_t)
-		for s = 1:NS
-			sl = this.slices{s};
+		for s = 1:Ns
+			sl = this.slices(s);
 			sl.prices.Link = link_price_t(sl.VirtualLinks.PhysicalLink);
 			dc_id = sl.getDCPI;
 			sl.prices.Node = node_price_t(dc_id);
 			if options.CountTime
 				tic;
 			end
-			this.slices{s}.priceOptimalFlowRate([], options);
+			this.slices(s).priceOptimalFlowRate([], options);
 			if options.CountTime
 				t = toc;
 				slice_runtime = max(slice_runtime, t);

@@ -1,15 +1,25 @@
 %% Link Pricing Function
 %%
-function [ payment, grad, pseudo_hess ] = fcnLinkPricing(this, link_price, link_load)
+function [ payment, grad, pseudo_hess ] = fcnLinkPricing(this, link_price, link_load, unit)
 %% Quadratic pricing
 % $b = \frac{1}{2} \rho_s$ and $a = \frac{b \cdot |S|}{V_n}$
 % 
 % the cost of a candidate path is usually much larger than that of the main path.
 theta = 3;
 % b = (2/(1+theta))*link_price;
-b = link_price;
-link_id = this.Links.PhysicalLink;
-aggr_link_usage = this.Parent.AggregateLinkUsage;
+if nargin <= 3
+	unit = 1;
+end
+b = link_price * unit;
+if isempty(this.hs)
+	% In parallel mode, the host slice is unavailable, the data is stored in |pardata|.
+	aggr_link_usage = this.pardata.AggregateLinkUsage;
+	phy_link_capacity = this.pardata.PhysicalLinkCapacity;
+else
+	slice = this.hs;
+	aggr_link_usage = slice.Parent.AggregateLinkUsage(slice.Links.PhysicalLink);
+	phy_link_capacity = slice.Parent.readLink('Capacity', slice.Links.PhysicalLink);
+end
 %%%
 % Since $\mathit{S}$ slices share the resource amount |V|, we consider the price when the
 % load equals to 0 and $\frac{V}{\mathit{S}}$.
@@ -19,7 +29,7 @@ aggr_link_usage = this.Parent.AggregateLinkUsage;
 % NOTE: we may compute prices for only a part of slices, while we do not use the residual
 % capacity and the involved slices, since this might lead to very low prices (when
 % residual resource is plentful, and involved slices is few). 
-a = (theta-1)*b.*aggr_link_usage(link_id)./this.Parent.readLink('Capacity', link_id);
+a = unit * (theta-1)*b.*aggr_link_usage./phy_link_capacity;
 
 %%%
 % When computing hession matrix, the first two output arguments are not needed.

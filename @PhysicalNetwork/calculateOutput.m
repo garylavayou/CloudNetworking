@@ -8,16 +8,9 @@
 %%
 % |argin|: existing field for output.
 function argout = calculateOutput(this, argin, options)
-if nargin>= 2 && ~isempty(argin)
+if nargin >= 2 && ~isempty(argin)
     argout = argin;
 end
-if nargin < 3
-    options = struct;
-end
-options = structmerge(...
-	getstructfields(options, 'Slices', 'default', {this.slices}),...
-	getstructfields(options, 'PricingPolicy', 'error'));
-options.bFinal = true;
 
 argout.LinkPrice = this.readLink('Price');
 argout.NodePrice = this.readDataCenter('Price');            
@@ -26,14 +19,19 @@ argout.NodeLoad = this.readDataCenter('Load');
 argout.FlowRate = [];
 argout.Welfare = 0;
 
+if isa(options, 'Dictionary')
+	options = options.data;
+end
+options.bFinal = true;
+options.bCompact = false;
 profit_table = zeros(length(options.Slices)+1, 1);
 
 for s = 1:length(options.Slices)
-    sl = options.Slices{s};
+    sl = options.Slices(s);
     argout.FlowRate = [argout.FlowRate; sl.FlowTable.Rate];
     %% Calculate the net social welfare
     %       The net social welfare is the total utility less the total network cost.
-    argout.Welfare = argout.Welfare + sl.weight*sum(fcnUtility(sl.FlowTable.Rate));
+    argout.Welfare = argout.Welfare + sl.Weight*sum(fcnUtility(sl.FlowTable.Rate));
     
     % Calculate the profit of slices
     profit_table(s) = sl.Optimizer.getProfit(options);

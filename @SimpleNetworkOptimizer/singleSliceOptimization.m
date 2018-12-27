@@ -25,16 +25,16 @@
 % NFV-capable nodes.
 % 
 % TODO: Part of the functionalities are moved to <ClouldNetworkEx>.
-function [output, prices, runtime] = singleSliceOptimization( this, new_opts )
+% 
+% options: [in-out]
+function [output, prices, runtime] = singleSliceOptimization( this, options )
 % this.clearStates;
 net = this.hn;
-defaultopts = structmerge(...
-	getstructfields(net.options, {'SlicingMethod', 'PricingPolicy', 'PricingFactor'}, 'error'), ...
-	getstructfields(this.options, {'Form'}, 'error'));
+defaultopts = getstructfields(net.options, {'PricingPolicy'}, 'error');
 if nargin < 2
     options = defaultopts;
 else
-	options = structmerge(defaultopts, new_opts);
+	options = structmerge(defaultopts, options);
 end
 assert(options.SlicingMethod.IsSingle,...
 	'error[%s]: unrecognized method (%s).', calledby(0), options.SlicingMethod.char);
@@ -55,11 +55,11 @@ slice_data.NodeMapS2P = (1:Nn)';
 slice_data.NodeMapP2S = (1:Nn)';
 slice_data.NodeCapacity = net.readDataCenter('Capacity');
 slice_data.FlowTable = table([],[],[],[],[],[],[],'VariableNames',...
-    {net.slices{1}.FlowTable.Properties.VariableNames{:,:},'Weight'});
+    {net.slices(1).FlowTable.Properties.VariableNames{:,:},'Weight'});
 flow_owner = zeros(net.NumberFlows, 1);
 nf = 0;
 for s = 1:Ns
-    sl = net.slices{s};
+    sl = net.slices(s);
     new_table = sl.FlowTable;
     % Map the virtual nodes to physical nodes.
     new_table.Source = sl.Nodes{new_table.Source, {'PhysicalNode'}};
@@ -72,7 +72,7 @@ for s = 1:Ns
         end
         new_table{f,'Paths'} = path_list;
     end
-    new_table.Weight = sl.weight*ones(height(new_table),1);
+    new_table.Weight = sl.Weight*ones(height(new_table),1);
     slice_data.FlowTable = [slice_data.FlowTable; new_table];
     flow_owner(nf+(1:sl.NumberFlows)) = s;
     nf = nf + sl.NumberFlows;
@@ -88,8 +88,7 @@ slice_data.Parent = net;
 ss = SimpleSlice(slice_data);
 op = ss.getOptimizer(slice_data);
 slice_data.flow_owner = flow_owner;
-pricing_policy = options.PricingPolicy;
-options.PricingPolicy = 'linear';  % the first step use the cost as price, so the policy is linear
+ss.setOptions('PricingPolicy', 'linear'); % the first step use the cost as price, so the policy is linear
 if nargout >= 3 
 	runtime = op.optimalFlowRateSingleSlice(slice_data, options);
 else
@@ -98,7 +97,9 @@ end
 output = calculateOptimalOutput(this, ss);
 
 %% Compute the real resource demand with given prices
-options.PricingPolicy = pricing_policy;
+for i = 1:Ns
+  this.slices(i).initialize();
+end
 if nargout == 3
     [prices, rt] = pricingFactorAdjustment(net, options);
     runtime.Serial = runtime.Serial + rt.Serial;
@@ -109,5 +110,4 @@ end
 
 %% Calculate the output
 output.SingleSlice = ss;
-output.options = options;
 end

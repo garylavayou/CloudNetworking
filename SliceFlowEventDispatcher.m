@@ -26,7 +26,7 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
                     % To add existing flows and the flow entity builder.
                     % |userdata| is the successfully added slice.
                     sl = eventData.userdata;
-                    if sl.isDynamicFlow
+                    if isa(sl, 'DynamicSlice') && sl.isDynamicFlow()
                         flow_entity_builder = ...
                             FlowEntityBuilder(sl.FlowArrivalRate, sl.FlowServiceInterval, eventData.entity);
                         tic;
@@ -234,14 +234,14 @@ classdef SliceFlowEventDispatcher < RandomEventDispatcher & EventSender & EventR
         function e = addnewentity(this)
             arrive_time = this.CurrentTime + exprnd(this.avg_arrive_interval);
             ei = this.nextEntityId;
-            service_time = exprnd(this.entity_builder(ei).ServiceInterval);
-            e = this.entity_builder(ei).Build(arrive_time, service_time);
+            service_time = exprnd(this.entity_builder{ei}.ServiceInterval);
+            e = this.entity_builder{ei}.Build(arrive_time, service_time);
             this.entities.Add(e);
             this.event_queue.PushFront(...
-                Event(arrive_time, EventType.Arrive, this.entities(end)));
+                Event(arrive_time, EventType.Arrive, this.entities{this.entities.Length}));
             
             this.event_queue.PushBack(...
-                Event(e.DepartTime, EventType.Depart, this.entities(end)));
+                Event(e.DepartTime, EventType.Depart, this.entities{this.entities.Length}));
         end
     end
     

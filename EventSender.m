@@ -1,11 +1,10 @@
-classdef (Abstract) EventSender < matlab.mixin.Copyable
+classdef (Abstract) EventSender < BaseCopyable
     % <EventSender> and <EventReceiver> are interfaces for inter-class communication.
     
     properties (Access = protected)
         listeners;  % Save the informations about the listeners (<event.listener>).
 				% [optional] Remove some listeners when the listeners have been destoryed.
         targets;		% handle reference to the event target.
-				bCopyReady logical = true; 
     end
     
     properties 
@@ -31,12 +30,17 @@ classdef (Abstract) EventSender < matlab.mixin.Copyable
             if ischar(event_name)
                 event_name = {event_name};
             end
-            idx = this.targets(:)==target;
+            idx = this.targets{:}==target;
+						if ~isempty(idx)
+							exist_events = this.listeners{idx,'EventName'};
+						else
+							exist_events = {};
+						end
             for i = 1:length(event_name)
-                if ~ismember(event_name{i},this.listeners(idx).EventName)
+                if isempty(exist_events) || ~contains(event_name{i}, exist_events)
                     this.targets.Add(target);
                     this.listeners.Add(addlistener(this, event_name{i}, callback));
-                    idx = [idx true]; %#ok<AGROW>
+                    exist_events = [exist_events, event_name{i}]; %#ok<AGROW>
                 end
             end
             %%
@@ -47,11 +51,11 @@ classdef (Abstract) EventSender < matlab.mixin.Copyable
         
         % When slice is leaving, we should remove the slice form the listener's set
         function RemoveListener(this, target, event)
-            idx = find(this.targets(:)==target);
+            idx = find(this.targets{:}==target);
             b_removed = false(length(this.listeners));
             if nargin >= 3
                 for i = idx
-                    if strcmp(this.listeners(i).EventName,event)
+                    if strcmp(this.listeners{i, 'EventName'},event)
                         b_removed(i) = true;
                     end
                 end
@@ -66,17 +70,16 @@ classdef (Abstract) EventSender < matlab.mixin.Copyable
 					delete(this.listeners);
 					this.listeners = ListArray('event.listener');
 					this.targets.Clear();
-					this.bCopyReady = true;
 				end
         
         function t = findTargets(this, ev_name)
             b_targets = false(length(this.listeners),1);
             for i = 1:length(this.listeners)
-                if strcmp(this.listeners(i).EventName, ev_name)
+                if strcmp(this.listeners{i, 'EventName'}, ev_name)
                     b_targets(i) = true;
                 end
             end
-            t = this.targets(b_targets);
+            t = this.targets{b_targets};
         end
     end
     
@@ -92,17 +95,18 @@ classdef (Abstract) EventSender < matlab.mixin.Copyable
 			% Then we need to first <delete> the existing listeners and then add
 			% new listeners.
         function newobj = copyElement(this)
-            % Make a shallow copy of all properties
-            newobj = copyElement@matlab.mixin.Copyable(this);
-            % Make a deep copy of the DeepCp object
-            newobj.listeners = ListArray('event.listener');
-						cprintf('Comments', 'info:[%s] copy listeners to the new object.\n', calledby);
-						for i=1:newobj.targets.Length
-							newobj.listeners.Add(addlistener(newobj, ...
-								this.listeners(i).EventName, this.listeners(i).callback));
-						end
-						
-						this.bCopyReady = false;
+					if this.isShallowCopyable
+            newobj = copyElement@BaseCopyable(this);
+					else
+						newobj = this;
+					end
+					% Make a deep copy of the DeepCp object
+					newobj.listeners = ListArray('event.listener');
+					cprintf('Comments', 'info:[%s] copy listeners to the new object.\n', calledby);
+					for i=1:newobj.targets.Length
+						newobj.listeners.Add(addlistener(newobj, ...
+							this.listeners{i, 'EventName'}, this.listeners{i, 'callback'}));
+					end
 				end
 				
 		end
