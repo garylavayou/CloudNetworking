@@ -61,12 +61,10 @@ classdef SliceEx < SimpleSlice
         %
         % When calculate network cost as a single slice, this method equals to
         % _getNetworkCost_ .
-        function sc = getCost(this, node_load, link_load, model)
-            if nargin <= 1 || isempty(node_load)
-                node_load = this.VirtualDataCenters.Load;
-            end
-            if nargin <= 2 || isempty(link_load)
-                link_load = this.VirtualLinks.Load;
+        function sc = getCost(this, loads, model)
+            if nargin <= 1 || isempty(loads)
+                loads.Node = this.VirtualDataCenters.Load;
+                loads.Link = this.VirtualLinks.Load;
             end
             if nargin <= 3
                 warning('model is set as Approximate.');
@@ -86,13 +84,13 @@ classdef SliceEx < SimpleSlice
                 %   \frac{\epsilon\delta(N-1)\sum_{n\in\mathcal{N}^{(s)}}{v_n}}{\sum_{n\in\mathcal{N}}{V_n}}
                 % + \frac{\epsilon(1-\delta)(N-1)\sum_{e\in\mathcal{L}^{(s)}}{y_e}}{\sum_{e\in\mathcal{L}}{C_e}}
                 % + \frac{\epsilon}{|\mathcal{S}|}$$
-                sc = dot(link_uc, link_load) + dot(node_uc, node_load) ...
-                    + pn.phis_n*sum(node_load)+pn.phis_l*sum(link_load)+...
+                sc = dot(link_uc, loads.Link) + dot(node_uc, loads.Node) ...
+                    + pn.phis_n*sum(loads.Node)+pn.phis_l*sum(loads.Link)+...
                     pn.static_factor*epsilon/pn.NumberSlices;
                 %%%
                 % equal to:
                 %
-                %   sc = dot(link_uc+pn_phis_l, link_load) + dot(node_uc+pn.phis_n, node_load) + ...
+                %   sc = dot(link_uc+pn_phis_l, loads.Link) + dot(node_uc+pn.phis_n, loads.Node) + ...
                 %       pn.static_factor*epsilon/pn.NumberSlices;
             elseif strcmp(model, 'Accurate')
                 %% Accurate Model
@@ -101,7 +99,7 @@ classdef SliceEx < SimpleSlice
                 % of each slice. So this function only calculate the dynamic part of the
                 % cost, and the slices should further calculate the static cost outside
                 % this method.
-                sc = dot(link_uc, link_load) + dot(node_uc, node_load);
+                sc = dot(link_uc, loads.Link) + dot(node_uc, loads.Node);
             else
                 error('error: invalid model %s', model);
             end
@@ -123,8 +121,8 @@ classdef SliceEx < SimpleSlice
             r = getRevenue@SimpleSlice(this) + this.constant_profit;
         end
         
-        [fval, node_load, link_load] = subproblemNetSocialWelfare( this, lambda );
-        [fval, node_load, link_load] = subproblemNetSocialWelfare2( this, lambda );
+        [fval, loads] = subproblemNetSocialWelfare( this, lambda );
+        [fval, loads] = subproblemNetSocialWelfare2( this, lambda );
 
     end
     
@@ -145,18 +143,16 @@ classdef SliceEx < SimpleSlice
     end
     
     methods(Access=private)
-        function rc = getResourceCost(this, node_load, link_load, model)
-            if nargin <= 1 || isempty(node_load)
-                node_load = this.VirtualDataCenters.Load;
-            end
-            if nargin <= 2 || isempty(link_load)
-                link_load = this.VirtualLinks.Load;
+        function rc = getResourceCost(this, loads, model)
+            if nargin <= 1 || isempty(loads)
+                loads.Node = this.VirtualDataCenters.Load;
+                loads.Link = this.VirtualLinks.Load;
             end
             if nargin <= 3
                 warning('model is set as Approximate.');
                 model = 'Approximate';
             end
-            rc = getResourceCost@SimpleSlice(this, node_load, link_load, model);
+            rc = getResourceCost@SimpleSlice(this, loads, model);
             epsilon = pn.unitStaticNodeCost;
             switch model
                 case 'Approximate'
@@ -169,23 +165,23 @@ classdef SliceEx < SimpleSlice
                     %%%
                     % equal to:
                     %
-                    %   sc = dot(link_uc+pn_phis_l, link_load) + dot(node_uc+pn.phis_n,
-                    %   node_load) + ... 
+                    %   sc = dot(link_uc+pn_phis_l, loads.Link) + dot(node_uc+pn.phis_n,
+                    %   loads.Node) + ... 
                     %       pn.static_factor*epsilon/pn.NumberSlices; 
             end
         end
     end
     
     methods(Access=protected)
-        function [x, fval, exitflag] = optimize(this, params, options)
-            if options.SlicingMethod.IsPricing
-							[x, fval, exitflag] = optimize@SimpleSlice(this, params, options);
-						else
-							[x, fval, exitflag] = ...
-								fmincon(@(x)SimpleSlice.fcnSocialWelfare(x,this,'Approximate'), ...
-								params.x0, params.As, params.bs, params.Aeq, params.beq, ...
-								params.lb, params.ub, [], fmincon_opt);
-						end
+        function [x, fval, exitflag] = optimize(this, options)
+					if options.SlicingMethod.IsPricing
+						[x, fval, exitflag] = optimize@SimpleSliceOptimizer(this, options);
+					else
+						[x, fval, exitflag] = ...
+							fmincon(@(x)SimpleSliceOptimizer.fcnSocialWelfare(x,this,'Approximate'), ...
+							this.problem.x0, this.problem.As, this.problem.bs, this.problem.Aeq, this.problem.beq, ...
+							this.problem.lb, this.problem.ub, [], this.problem.options);
+					end
         end
     end
 end

@@ -9,27 +9,28 @@ function [fval, node_load, link_load] = subproblemNetSocialWelfare( this, lambda
 % |dg_pf|, |dg_p|, |dg_npf| is the inrement of gradient on lambda.
 global DEBUG;
 %% Set the feasible start point
-x0 = zeros(this.NumberVariables,1);
+x0 = zeros(num_vars,1);
 x0(1:this.NumberPaths) = 1;
 alpha_max = max(this.Parent.VNFTable.ProcessEfficiency(this.VNFList));
 x0((this.NumberPaths+1):end) = alpha_max;
 if ~this.checkFeasible(x0)
     error('error: infeasible start point.');
 end
-bs = sparse(this.NumberLinearConstraints,1);
-lbs = sparse(this.NumberVariables,1);
-% node_capacity = this.Parent.readNode('Capacity', this.VirtualNodes.PhysicalNode);
+num_lcon_res = size(this.As_res,1);
+bs = sparse(num_lcon_res,1);
+lbs = sparse(num_vars,1);
+% node_capacity = this.Parent.readNode('Capacity', this.Nodes.PhysicalNode);
 % ubs = [inf*ones(this.NumberPaths,1);
 %     repmat(node_capacity, this.NumberPaths*this.NumberVNFs, 1)];
 % Algorithm option
-fmincon_opt = optimoptions(@fmincon);
-fmincon_opt.Algorithm = 'interior-point';
-fmincon_opt.HessianFcn = @(x,lmd)SimpleSlice.fcnHessian(x,lmd,this);
-fmincon_opt.SpecifyObjectiveGradient = true;
-fmincon_opt.SpecifyConstraintGradient = false;
-fmincon_opt.Display = 'notify';
+minopts = optimoptions(@fmincon);
+minopts.Algorithm = 'interior-point';
+minopts.HessianFcn = @(x,lmd)SimpleSlice.fcnHessian(x,lmd,this);
+minopts.SpecifyObjectiveGradient = true;
+minopts.SpecifyConstraintGradient = false;
+minopts.Display = 'notify';
 [x, fval, exitflag] = fmincon(@(x)SimpleSlice.subproblemObjective(x, lambda, this), ...
-    x0, this.As_res, bs, [], [], lbs, [], [], fmincon_opt);
+    x0, this.As_res, bs, [], [], lbs, [], [], minopts);
 % fprintf('\tThe optimal net profit of the slice: %G.\n', -fval);
 if exitflag == 1 || exitflag == 2
 %     x(x<10^-5) = 0;
@@ -39,7 +40,7 @@ if exitflag == 1 || exitflag == 2
     this.x_path = x(1:this.NumberPaths);
     this.temp_vars.z = x((this.NumberPaths+1):end);
     %% when compute node load, z_npf corresonding to h_np = 0 has been set as zero.
-    nz = this.NumberVirtualNodes*this.NumberPaths;
+    nz = this.NumberNodes*this.NumberPaths;
     z_index = 1:nz;
     for f = 1:this.NumberVNFs
         this.temp_vars.z(z_index) = this.I_dc_path(:).*this.temp_vars.z(z_index);
@@ -58,7 +59,7 @@ if exitflag == 1 || exitflag == 2
 
     % |x_path.*alpha_f'| is a compatible arithmetic operation.
     %     dg_pf = x_path.*alpha_f';
-    %         z_np = reshape(z_npf(z_index), this.NumberVirtualNodes, this.NumberPaths);
+    %         z_np = reshape(z_npf(z_index), this.NumberNodes, this.NumberPaths);
     %         %% gradient of lambda(p,f)
     %         % |z_np = this.I_dc_path.*z_npf(index)|
     %         %
@@ -68,13 +69,13 @@ if exitflag == 1 || exitflag == 2
 
     node_load = zeros(1, this.Parent.NumberNodes);
     link_load = zeros(1, this.Parent.NumberLinks);
-    node_load(this.VirtualNodes.PhysicalNode) = this.getNodeLoad(this.z_npf);
-    link_load(this.VirtualLinks.PhysicalLink) = this.getLinkLoad(this.x_path);   
+    node_load(this.Nodes.PhysicalNode) = this.getNodeLoad(false, this.z_npf);
+    link_load(this.Links.PhysicalLink) = this.getLinkLoad(false, this.x_path);   
 %     if nargout > 3
 %         g_p = -x_path;
 %     end
 %     if nargout > 4
-%         g_npf = -reshape(z_npf, this.NumberVirtualNodes, this.NumberPaths, this.NumberVNFs);
+%         g_npf = -reshape(z_npf, this.NumberNodes, this.NumberPaths, this.NumberVNFs);
 %     end
 else
     if ~isempty(DEBUG) && DEBUG

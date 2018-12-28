@@ -1,18 +1,18 @@
-function [fval,  grad] = subproblemObjective(var_x, lambda, S)
+function [fval,  grad] = subproblemObjective(var_x, lambda, slice)
 %SUBPROBLEMOBJECTIVE the subproblem's objective function, used in the dual decomposition
 %   method. This subproblem is associate with one of the slice.
-var_path = var_x(1:S.NumberPaths);
-var_node = var_x((S.NumberPaths+1):end);
-link_load = S.getLinkLoad(var_path);    % the load of virtual links in the slice, equal to <getLinkCapacity>
-node_load = S.getNodeLoad(var_node);    % the load of virtual nodes in the slice 
+var_path = var_x(1:slice.NumberPaths);
+var_node = var_x((slice.NumberPaths+1):end);
+link_load = slice.getLinkLoad(false, var_path);    % the load of virtual links in the slice, equal to <getLinkCapacity>
+node_load = slice.getNodeLoad(false, var_node);    % the load of virtual nodes in the slice 
 
 %% net profit of a slice
 % The net profit of a slice (objective value) is equal to the utility less the slice cost
 % and the cost introduced by dual variables.
 %
 % *Note*: cannot use _CloudNetworkEx.getNetworkCost_ to calculate the slice cost.
-profit = S.weight*sum(fcnUtility(S.getFlowRate(var_path))) - ...
-    S.getResourceCost(node_load, link_load);
+profit = slice.Weight*sum(fcnUtility(slice.getFlowRate(var_path))) - ...
+    slice.getResourceCost(node_load, link_load);
 
 %% dual variable cost
 dual_cost = dot(lambda.n, node_load) + dot(lambda.e, link_load);
@@ -35,22 +35,22 @@ else
     %  whether the gradient on node variable is zeros is depend on the node-path
     %  incidence matrix, so the number of non-zero elements is less than i.e.
     %  |nnz(I_dc_path)*F|.
-    link_uc = S.Parent.readLink('UnitCost', S.VirtualLinks.PhysicalLink);
-    node_uc = S.Parent.readNode('UnitCost', S.VirtualNodes.PhysicalNode);
-    grad = spalloc(length(var_x),1, S.NumberPaths+nnz(S.I_dc_path)*S.NumberVNFs);
-    for p = 1:S.NumberPaths
-        i = S.path_owner(p);
-        grad(p) = -S.weight/(S.I_flow_path(i,:)*var_path) + ...
-            dot((link_uc+S.Parent.phis_l+lambda.e),S.I_edge_path(:,p)); %#ok<SPRIX>
+    link_uc = slice.Parent.readLink('UnitCost', slice.VirtualLinks.PhysicalLink);
+    node_uc = slice.Parent.readNode('UnitCost', slice.VirtualNodes.PhysicalNode);
+    grad = spalloc(length(var_x),1, slice.NumberPaths+nnz(slice.I_dc_path)*slice.NumberVNFs);
+    for p = 1:slice.NumberPaths
+        i = slice.path_owner(p);
+        grad(p) = -slice.Weight/(slice.I_flow_path(i,:)*var_path) + ...
+            dot((link_uc+slice.Parent.phis_l+lambda.e),slice.I_edge_path(:,p)); %#ok<SPRIX>
     end
     
-    nz = S.NumberVirtualNodes*S.NumberPaths;
-    z_index = S.NumberPaths+(1:nz);
-    for f = 1:S.NumberVNFs
+    nz = slice.NumberVirtualNodes*slice.NumberPaths;
+    z_index = slice.NumberPaths+(1:nz);
+    for f = 1:slice.NumberVNFs
         %% Each iteration: find z(:,:,f)'s derivatives.
         % compatible arithmetic operation: node_unit_cost, s_n and lambda.n is column
         % vectors and (lambda.pf(:,f))' is a row vectors, the result is a matrix.
-        grad(z_index) = (node_uc + S.Parent.phis_n + lambda.n).*S.I_dc_path; %#ok<SPRIX>
+        grad(z_index) = (node_uc + slice.Parent.phis_n + lambda.n).*slice.I_dc_path; %#ok<SPRIX>
         z_index = z_index + nz;
     end
 end
