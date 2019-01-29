@@ -55,7 +55,8 @@ classdef (Abstract) DynamicNetwork < PhysicalNetwork & EventSender & EventReceiv
 			this.options = setdefault(this.options, defaultopts);
 			go = IDynamicSliceOptimizer.GLOBAL_OPTIONS;
 			go.eta = this.options.UnitReconfigureCost;
-			% assert(isempty(h.eta) || isempty(this.options.UnitReconfigureCost))
+      assert(isfield(IDynamicSliceOptimizer.GLOBAL_OPTIONS, 'eta') &&...
+        ~isempty(IDynamicSliceOptimizer.GLOBAL_OPTIONS.eta));
 			this.pending_slices = ListArray('Slice');
 		end
 	end
@@ -715,21 +716,18 @@ classdef (Abstract) DynamicNetwork < PhysicalNetwork & EventSender & EventReceiv
 			revenue = revenue + reconfig_cost;
 		end
 		
-		function argout = calculateOutput(this, argin, options)
-			if nargin <= 1 
-				argin = Dictionary();
-			end
-			if nargin <= 2
-				options = Dictionary();
-			end
-			argout = calculateOutput@PhysicalNetwork(this, argin, options);
-			
+		function varargout = calculateOutput(this, slices, varargin)
+			[varargout{1:nargout}] = calculateOutput@PhysicalNetwork(this, slices, varargin{:});			
 			%%
 			% the base method does not count the reconfiguration cost;
-			options = getstructfields(options, 'Slices', 'default', {this.slices});
-			rc = this.getReconfigurationCost(options.Slices);
-			argout.Welfare = argout.Welfare - rc;
-			argout.Profit(end) = argout.Profit(end) - rc;
+			if nargout >= 1
+				if nargin <= 1 || isempty(slices)
+					slices = this.slices;
+				end
+				rc = this.getReconfigurationCost(slices);
+				varargout{1}.Welfare = varargout{1}.Welfare - rc;
+				varargout{1}.Profit = varargout{1}.Profit - rc;
+			end
 		end
 		
 		%%%
