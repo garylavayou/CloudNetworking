@@ -1,4 +1,12 @@
 classdef NormalSliceOptimizer < SliceOptimizer
+	properties
+		temp_vars;
+		problem;
+		pardata;
+	end
+	properties (SetAccess = protected)
+		options;
+	end
 	
 	properties
 		%% Augmented Topology
@@ -41,15 +49,9 @@ classdef NormalSliceOptimizer < SliceOptimizer
 	
 	%% Constructor
 	methods
-		function this = NormalSliceOptimizer(slice, options)
-			if nargin >= 2
-				args = {slice, options};
-			elseif nargin == 1
-				args = {slice};
-			else
-				args = {};
-			end
-			this@SliceOptimizer(args{:});
+		%		this = NormalSliceOptimizer(slice, options)
+		function this = NormalSliceOptimizer(varargin)
+			this@SliceOptimizer(varargin{:});
 			
 			this.problem = struct('Aeq', [], 'A', [], 'beq', [], 'b', []);
 			this.flow_section_table = table([], [], [], ...
@@ -76,7 +78,8 @@ classdef NormalSliceOptimizer < SliceOptimizer
 	methods
 		[profit, cost, output] = optimalFlowRate(this, options);
 		[output, loads, fval] = priceOptimalFlowRate(this, x0, options);
-		
+		[gamma, fval, output] = priceOptimalFlowRateDA(this, x0, lambda, q, options);
+		[gamma, fval, x_prox, output] = priceOptimalFlowRatePP(this, x0, options);
 		% explictly call this function.
 		function [array] = initializeState(this, options)
 			initializeState@SliceOptimizer(this);
@@ -96,9 +99,10 @@ classdef NormalSliceOptimizer < SliceOptimizer
 			num_aug_links = length(aug_heads);
 			props.Weight = eps*ones(num_aug_links,1);
 			props.Capacity = inf*ones(num_aug_links,1);
-			this.augraph.Update(aug_heads, aug_tails, props);		% TODO: remap
+			this.augraph.Update(aug_heads, aug_tails, props);		
 			Nan = this.NumberAugmentedNodes;
 			Nal = this.NumberAugmentedLinks;
+			
 			
 			%% Build virtual flow table
 			% Fields include: flow index, source, destination, etc.
@@ -302,7 +306,19 @@ classdef NormalSliceOptimizer < SliceOptimizer
 			end
 		end
 		
-		% function initializeParallel(this, options)
+		function initializeParallel(this, procedure, options)
+			initializeParallel@SliceOptimizer(this, procedure, options);
+			slice = this.hs;
+      this.pardata.NumberFlowSections = this.NumberFlowSections;
+			switch procedure
+				case {'priceOptimalFlowRatePP', 'priceOptimalFlowRateDA'}
+					this.pardata.DualIndex = [slice.Links.PhysicalLink;
+						slice.Parent.NumberLinks+ slice.getDCPI()];
+					this.pardata.NumberDuals = slice.Parent.NumberLinks + ...
+						slice.Parent.NumberDataCenters;
+			end
+			
+		end
 
 		function setProblem(this, varargin) 
 			setProblem@SliceOptimizer(this, varargin{:});
@@ -344,7 +360,7 @@ classdef NormalSliceOptimizer < SliceOptimizer
 			update_options@SliceOptimizer(this, options);
 			fields = fieldnames(options);
 			for i = 1:length(fields)
-				switch options
+				switch fields{i}
 					case 'CapacityConstrained'
 						this.options.CapacityConstrained = options.CapacityConstrained;
 				end
@@ -491,7 +507,7 @@ classdef NormalSliceOptimizer < SliceOptimizer
         idx_fx = eidx_offset+(1:Nal*num_segs);
         fx_mask = this.I_fake_edgevars(idx_fx);
         fx = this.temp_vars.x(idx_fx);
-        gen_paths = struct('idx_edgevar', [], 'nodes', [], 'bandwidth', []);
+        gen_paths = struct('idx_edgevar', [], 'idx_nodevar', [], 'bandwidth', []);
         p = 0;
         while true
           t_nidx_offset = 0;
@@ -515,7 +531,7 @@ classdef NormalSliceOptimizer < SliceOptimizer
           %% build a single path edge-by-edge
           nodes = [src, zeros(1,19)];
           idx_varedge = zeros(1,20);
-          t_eidx_offset = 0;
+          t_eidx_offset = 0; t_nidx_offset = 0;
           nidx = 1;
           eidx = 0;
           for j = 1:num_segs
@@ -525,7 +541,7 @@ classdef NormalSliceOptimizer < SliceOptimizer
                 [~,idx] = max(fx(eout+t_eidx_offset));
                 [n_cur, n_next] = this.augraph.IndexEdge(eout(idx));
                 assert(n_cur==src);
-                nidx = nidx + 1; nodes(nidx) = n_next;
+                nidx = nidx + 1; nodes(nidx) = n_next + t_nidx_offset;
                 eidx = eidx + 1; idx_varedge(eidx) = eout(idx)+t_eidx_offset;
                 As{j}(src,eout(idx)) = 0;
                 src = n_next;
@@ -536,11 +552,11 @@ classdef NormalSliceOptimizer < SliceOptimizer
                 break;
               end
             end
-            t_eidx_offset = t_eidx_offset + Nal;
+            t_eidx_offset = t_eidx_offset + Nal; t_nidx_offset = t_nidx_offset + Nan;
           end
           nodes = nodes(1:nidx);
           idx_varedge = idx_varedge(1:eidx);
-          if nodes(end) ~= slice.FlowTable{fid, 'Target'}
+          if mod(nodes(end),Nan) ~= slice.FlowTable{fid, 'Target'}
             break;  % this is not a complete path, and no more paths can be generated.
           end
           % 					idx_aug_nodes = find(path.nodes>Nn);
@@ -549,8 +565,8 @@ classdef NormalSliceOptimizer < SliceOptimizer
           % 					path.idx_simple_edgevar = path_idx_edgevar;
           % 					path.idx_simple_edgevar(idx_aug_edges) = [];
           p = p + 1; gen_paths(p) = struct(...
-            'idx_edgevar', idx_varedge, ...
-            'nodes', nodes, ...
+            'idx_edgevar', idx_varedge+eidx_offset, ...
+            'idx_nodevar', nodes+nidx_offset, ...
             'bandwidth', min(fx(idx_varedge)) ...
             );
           % edge_vars on all links (including augmented links) are effective.
@@ -560,7 +576,7 @@ classdef NormalSliceOptimizer < SliceOptimizer
             break;
           end
         end
-        if isempty(gen_paths(1).nodes)
+        if isempty(gen_paths(1).idx_nodevar)
           warning('No bandwidth allocated to flow %d, create a dummy path.', fid);
           slice.FlowTable{fid, 'Paths'} = PathList(slice.FlowTable{fid, 'Paths'}{1});
           slice.FlowTable{fid, 'Paths'}{1}.bandwidth = 0;
@@ -571,8 +587,10 @@ classdef NormalSliceOptimizer < SliceOptimizer
           num_paths = min(p,slice.options.NumberPaths);
           for i = 1:num_paths
             p = pidx(i);
-            slice.FlowTable{fid, 'Paths'}.Add(Path(gen_paths(p).nodes, gen_paths(p).bandwidth));
-            idx = gen_paths(p).idx_edgevar + eidx_offset;
+            nodes = mod(gen_paths(p).idx_nodevar-1, Nan)+1;
+            slice.FlowTable{fid, 'Paths'}.Add(Path(nodes, gen_paths(p).bandwidth, ...
+              [], rmfield(gen_paths(p), 'bandwidth')));
+            idx = gen_paths(p).idx_edgevar;
             x(idx) = x(idx) + gen_paths(p).bandwidth; %#ok<SPRIX>
           end
         end
@@ -583,27 +601,63 @@ classdef NormalSliceOptimizer < SliceOptimizer
       
       %% Update Flow-Edge variables, Flow-Node variables and VNF capacity variables
       % After rounding procedure, update the variables.
-      link_load = this.getLinkLoad(false);
-      vnf_load = this.getVNFLoad(this.temp_vars.z);
       z = this.As_proc * x;
-      link_load_r = this.getLinkLoad(false, x);
-      vnf_load_r = this.getVNFLoad(z);
-      idx_links = (link_load~=0) & (link_load_r~=0);
-      idx_vnfs = (vnf_load~=0) & (vnf_load_r~=0);
-      af = min([link_load(idx_links)./link_load_r(idx_links); ...
-        vnf_load(idx_vnfs)./vnf_load_r(idx_vnfs)]);
-      this.Variables.x = af*x;
-      this.Variables.z = af*z;
+      link_re = this.getLinkLoad(false, this.temp_vars.x) - this.getLinkLoad(false, x);
+      node_re = this.getNodeLoad(false, this.temp_vars.z) - this.getNodeLoad(false, z);
+      %       
+      %       vnf_load = this.getVNFLoad(this.temp_vars.z);
+      %       link_load_r = this.getLinkLoad(false, x);
+      %       vnf_load_r = this.getVNFLoad(z);
+      %       idx_links = (link_load~=0) & (link_load_r~=0);
+      %       idx_vnfs = (vnf_load~=0) & (vnf_load_r~=0);
+      %       af = min([link_load(idx_links)./link_load_r(idx_links); ...
+      %         vnf_load(idx_vnfs)./vnf_load_r(idx_vnfs)]);
+
       pid = 0;
       for fid=1:Nf
         path_list = slice.FlowTable{fid, 'Paths'};
         for j = 1:path_list.Width
           pid = pid + 1;
-          path_list{j}.local_id = pid;
-          path_list{j}.MultiplyBandwidth(af);
+          path_list{j}.local_id = pid;          
+        end
+      end
+      [~, idx] = sort(this.temp_vars.r, 'descend');
+      Nl = slice.NumberLinks;
+      Nn = slice.NumberNodes;
+      Nvnf = slice.NumberVNFs;
+      for i = 1:Nf
+        fid = idx(i);
+        path_list = slice.FlowTable{fid, 'Paths'};
+        for j = 1:path_list.Width
+					if isempty(path_list{j}.userdata)   % dummy path
+						continue;
+					end
+          var_links = zeros(Nal, num_segs);
+          var_nodes = zeros(Nan, Nvnf*num_segs);
+          idx_links = mod(path_list{j}.userdata.idx_edgevar-1, Nal*num_segs)+1;
+          idx_nodes = mod(path_list{j}.userdata.idx_nodevar-1, Nan*Nvnf*num_segs)+1;
+          var_links(idx_links) = 1; 
+          var_links(Nl+1:Nal, :) = [];
+          var_nodes(idx_nodes) = 1; 
+          var_nodes(1:Nn, :) = [];
+          delta_load_links = sum(var_links,2);
+          delta_load_nodes = sum(var_nodes,2);
+          idx_links = delta_load_links~=0;
+          idx_nodes = delta_load_nodes~=0;
+          min_bd = min([link_re(idx_links); node_re(idx_nodes)]./...
+            [delta_load_links(idx_links); delta_load_nodes(idx_nodes)]);
+          if min_bd > 0
+            path_list{j}.bandwidth = path_list{j}.bandwidth + min_bd;
+            link_re(idx_links) = link_re(idx_links) - min_bd*delta_load_links(idx_links);
+            node_re(idx_nodes) = node_re(idx_nodes) - min_bd*delta_load_nodes(idx_nodes);
+            x(path_list{j}.userdata.idx_edgevar) = ...
+              x(path_list{j}.userdata.idx_edgevar) + min_bd; %#ok<SPRIX>
+          end
         end
       end
       
+      this.Variables.x = x;
+      this.Variables.z = this.As_proc * x;
       this.Variables.r = this.getFlowRate();
       
       if nargout >= 2
@@ -617,157 +671,18 @@ classdef NormalSliceOptimizer < SliceOptimizer
 		% Override <SliceOptimizer.setPathBandiwdth>
 		function setPathBandwidth(this, x)
 		end
-
-		%%
-		% Override <Slice.priceOptimalFlowRate>.
-		% We introduce the quadratic penalty item of the dual-ADMM method.
-		% The variables are the flow-edge variables  and the flow-node
-		% variables.
-		%
-		function [gamma, fval, output] = priceOptimalFlowRate0(this, x0, lambda, q, options)
-			global DEBUG INFO; %#ok<NUSED>
+		
+		%% Mapping the augmented nodes/links to Physical nodes/links
+		function aug_link_idx = AugmentedLinksMap(this, bOnlyAug)
 			slice = this.hs;
-			options = Dictionary(options);
-			if strcmpi(this.options.Form, 'compact')
-				options.bCompact = true;
+			dc_idx = slice.getDCPI();
+			end_nodes = [slice.Parent.DataCenters{dc_idx, {'AugmentedNode', 'Node'}};
+				slice.Parent.DataCenters{dc_idx, {'Node', 'AugmentedNode'}}];
+			aug_link_idx = slice.Parent.LinkId(end_nodes(:,1), end_nodes(:,2));
+			if nargin>= 2 && bOnlyAug
+				return;
 			else
-				options.bCompact = false;
-			end
-			Nf = slice.NumberFlows;
-			Nl = slice.NumberLinks;
-			Nsn = slice.NumberServiceNodes;
-			num_var_edge = this.num_vars(1);
-			num_var_node = this.num_vars(2);
-			% num_var_flow = this.num_vars(3);
-			
-			%%
-			if strcmpi(this.options.OptimizationTool, 'matlab')
-				minopts = optimoptions('fmincon');
-				minopts.Algorithm = 'interior-point';
-				%minopts.Algorithm = 'sqp';
-				minopts.SpecifyObjectiveGradient = true;
-				minopts.Display = 'off';   %'notify-detailed'; %'notify';
-				minopts.OptimalityTolerance = 1e-5;
-				minopts.ConstraintTolerance = 1e-3;
-				minopts.MaxIterations = 100;
-				% minopts.SubproblemAlgorithm = 'cg'; % only take cg steps.
-				%minopts.CheckGradients = true;
-				%minopts.FiniteDifferenceType = 'central';
-				if nargin >= 2 && ~isempty(x0)
-					var0 = x0;
-				elseif isempty(this.x0)
-					% set the initial solution.
-					%var0 = rand(this.num_flow_vars,1);
-					var0 = zeros(num_vars,1);
-				else
-					%var0 = this.x0;
-					% var0 = rand(this.num_flow_vars,1);
-					var0 = zeros(num_vars,1);
-				end
-				var0 = var0(this.I_active_variables);
-				lbs = sparse(length(var0),1);
-				if strcmpi(minopts.Algorithm, 'interior-point')
-					% The method could be overload by subclasses, so invoking it via class name
-					% should be safe.
-					minopts.HessianFcn = ...
-						@(x,lbd)NormalSliceOptimizer.fcnHessian(x, lbd, this, lambda, q, options);
-				end
-				warning('off')
-				[xs, fval, exitflag, foutput] = ...
-					fmincon(@(x)NormalDynamicSliceOptimizer.fcnProfitPrimal(x, this, lambda, q, options), var0, ... % avoid overloading issue
-					this.problem.A, this.problem.b, this.problem.Aeq, this.problem.beq, ...
-					lbs, [], [], minopts);
-				warning('on')
-				this.interpretExitflag(exitflag, foutput);
-			elseif strcmpi(this.options.OptimizationTool, 'cvx')
-				[xs, fval, exitflag, foutput] = cvx_method(lambda, q);
-				if exitflag<1
-					error('error: CVX failed to solve the problem.');
-				end
-			else
-				error('error: Un-recognized optimization tool.');
-			end
-			%% CVX
-			function [xs, fval, exitflag, output] = cvx_method(lambda, q)
-				w = this.hs.Weight;
-				p = [this.prices.Link; this.prices.Node];
-				plt = options.InterSlicePenalty;
-				c = [this.capacities.Link; this.capacities.Node];
-				Al = this.As_load(:, this.problem.I_active_xz);
-				cvx_problem = []; cvx_optbnd = []; %#ok<NASGU>
-				cvx_optval = []; cvx_status = [];
-				cvx_slvitr = []; cvx_slvtol = []; cvx_cputime = []; %#ok<NASGU>
-				if options.bCompact
-					c_nx = this.num_vars(1);
-					c_nz = this.num_vars(2);
-					c_nr = this.num_vars(3);
-				else
-					c_nx = this.num_vars(1);
-					c_nz = this.num_vars(2);
-					c_nr = this.num_vars(3);
-				end
-				c_nxz = c_nx + c_nz;
-				%{
-					cvx_begin
-					variable xs(n,1);
-					%maximize( w*sum(log(1+xs((nxz+1):n)))- p'*Al*xs(1:nxz)-plt/2*norm(max(0,1/plt*(Al*xs(1:nxz)-c+q)))^2 )
-					maximize( w*sum(log(1+xs((nxz+1):n)))- p'*Al*xs(1:nxz)-plt/2*sum(pow_pos(lambda+1/plt*(Al*xs(1:nxz)-c+q),2)) )
-					subject to
-					this.problem.A * xs <= this.problem.b;  %#ok<VUNUS>
-					this.problem.Aeq * xs == this.problem.beq;  %#ok<EQEFF>
-					xs >= lbs; %#ok<VUNUS>
-					cvx_end
-				%}
-				c_x = []; c_z = []; c_r = [];
-				cvx_begin
-				variable c_x(c_nx,1);
-				variable c_z(c_nz,1);
-				variable c_r(c_nr,1);
-				minimize( -w*sum(log(1+c_r))+p'*Al*[c_x;c_z]+plt/2*sum(pow_pos(lambda+1/plt*(Al*[c_x;c_z]-c+q),2)) )
-				subject to
-				this.problem.A(:,1:c_nxz) * [c_x;c_z] <= 0;  %#ok<VUNUS>
-				this.problem.Aeq(:,[1:c_nx, c_nxz+(1:c_nr)]) * [c_x;c_r] == 0;  %#ok<EQEFF>
-				[c_x;c_z;c_r] >= 0; %#ok<VUNUS>
-				cvx_end
-				fval = cvx_optval;
-				xs = [c_x;c_z;c_r];
-				switch cvx_status
-					case 'Solved'
-						exitflag = 1;
-					case 'Inaccurate/Solved'
-						exitflag = 2;
-					case 'Failed'
-						exitflag = -1;
-					otherwise
-						exitflag = 0;
-				end
-				output.iterations = cvx_slvitr;
-			end
-			
-			%% output solution
-			% assert(this.checkFeasible())
-			x = zeros(sum(this.num_vars), 1);
-			x(this.I_active_variables) = xs;
-			output.temp_vars.x = x(1:num_var_edge);
-			output.temp_vars.z = x(num_var_edge+(1:num_var_node));
-			output.x0 = x;
-			num_varxz = length(xs) - Nf;
-			gamma = zeros(slice.Parent.NumberDataCenters+slice.Parent.NumberLinks,1);
-			idx_gamma = [slice.Links.PhysicalLink; slice.Parent.NumberLinks+slice.getDCPI];
-			gamma(idx_gamma) = ...
-				max(0, NormalSliceOptimizer.fcnPenalty(xs(1:num_varxz), this, lambda, q, options.InterSlicePenalty));
-			
-			% 			output.load.Link = this.As_load(1:Nve,:) * xs(1:num_varxz);
-			% 			output.load.Node = this.As_load(Nve+(1:Nd),:) * xs(1:num_varxz);
-			output.loads = zeros(slice.Parent.NumberLinks+slice.Parent.NumberDataCenters, 1);
-			output.loads(idx_gamma) = [this.As_load(1:Nl,this.problem.I_active_xz) * xs(1:num_varxz);
-				this.As_load(Nl+(1:Nsn),this.problem.I_active_xz) * xs(1:num_varxz)];
-			output.net_profit = -fval;
-			output.iterations = foutput.iterations;
-			if strcmpi(this.options.OptimizationTool, 'cvx')
-				output.funcCount = foutput.iterations;
-			else
-				output.funcCount = foutput.funcCount;
+				aug_link_idx = [slice.Links.PhysicalLink; aug_link_idx];
 			end
 		end
 		
@@ -846,146 +761,6 @@ classdef NormalSliceOptimizer < SliceOptimizer
 			output.funcCount = foutput.funcCount;
 		end
 		
-		function [gamma, fval, x_prox, output] = priceOptimalFlowRatePP(this, x0, lambda, q, xp, options)
-			global DEBUG INFO; %#ok<NUSED>
-			options = Dictionary(options);
-			if strcmpi(this.options.Form, 'compact')
-				options.bCompact = true;
-			else
-				options.bCompact = false;
-			end
-			if options.InterSlicePenalty == 0
-				options.InterSlicePenalty = this.hs.Weight;
-			end
-			slice = this.hs;
-			Nf = slice.NumberFlows;
-			Nve = slice.NumberLinks;
-			Nd = slice.NumberServiceNodes;
-			num_var_edge = this.num_vars(1);
-			num_var_node = this.num_vars(2);
-			
-			%%
-			xp = xp(this.I_active_variables);
-			if strcmpi(this.options.OptimizationTool, 'matlab')
-				minopts = optimoptions('fmincon');
-				minopts.Algorithm = 'interior-point';
-				%minopts.Algorithm = 'sqp';
-				minopts.SpecifyObjectiveGradient = true;
-				minopts.Display = 'off';   %'notify-detailed'; %'notify';
-				minopts.OptimalityTolerance = 1e-5;
-				minopts.ConstraintTolerance = 1e-3;
-				minopts.MaxIterations = 100;
-				% minopts.SubproblemAlgorithm = 'cg'; % only take cg steps.
-				%minopts.CheckGradients = true;
-				%minopts.FiniteDifferenceType = 'central';
-				if nargin >= 2 && ~isempty(x0)
-					var0 = x0;
-				else
-					%var0 = this.x0;
-					% var0 = rand(this.num_flow_vars,1);
-					%var0 = zeros(this.num_flow_vars,1);
-					var0 = xp;
-				end
-				%var0 = var0(this.I_active_variables);
-				lbs = sparse(length(var0),1);
-				options.TrueValue = false;
-				if strcmpi(minopts.Algorithm, 'interior-point')
-					minopts.HessianFcn = ...
-						@(x,lbd)NormalSliceOptimizer.fcnHessianPP(x, lbd, this, lambda, q, options);
-				end
-				warning('off')
-				[xs, fval, exitflag, foutput] = ...
-					fmincon(@(x)NormalSliceOptimizer.fcnProfitPrimalPP(x, this, lambda, q, xp, options), var0, ...
-					this.problem.A, this.problem.b, this.problem.Aeq, this.problem.beq, ...
-					lbs, [], [], minopts);
-				warning('on')
-				this.interpretExitflag(exitflag, foutput);
-			elseif strcmpi(this.options.OptimizationTool, 'cvx')
-				[xs, fval, exitflag, foutput] = cvx_method(lambda, q, xp);
-				if exitflag<1
-					error('error: CVX failed to solve the problem.');
-				end
-			else
-				error('error: Un-recognized optimization tool.');
-			end
-			
-			%% CVX
-			function [xs, fval, exitflag, output] = cvx_method(lambda, q, xp)
-				w = this.hs.Weight;
-				p = [this.prices.Link; this.prices.Node];
-				r = options.InterSlicePenalty;
-				Ns = options.NumberSlices;
-				c = [this.capacities.Link; this.capacities.Node];
-				Al = this.As_load(:,this.problem.I_active_xz);
-				cvx_problem = []; cvx_optbnd = []; %#ok<NASGU>
-				cvx_optval = []; cvx_status = [];
-				cvx_slvitr = []; cvx_slvtol = []; cvx_cputime = []; %#ok<NASGU>
-				if options.bCompact
-					c_nx = this.num_vars(1);
-					c_nz = this.num_vars(2);
-					c_nr = this.num_vars(3);
-				else
-					c_nx = this.num_vars(1);
-					c_nz = this.num_vars(2);
-					c_nr = this.num_vars(3);
-				end
-				c_nxz = c_nx + c_nz;
-				c_x = []; c_z = []; c_r = [];
-				cvx_begin
-				variable c_x(c_nx,1);
-				variable c_z(c_nz,1);
-				variable c_r(c_nr,1);
-				minimize( -w*sum(log(1+c_r))+p'*Al*[c_x;c_z]+ 1/(2*r*Ns^2)*sum(pow_abs([c_x;c_z;c_r]-xp,2)) + r/2*sum(pow_pos(lambda+1/r*(Al*[c_x;c_z]-c+q),2)) )
-				subject to
-				this.problem.A(:,1:c_nxz) * [c_x;c_z] <= 0;  %#ok<VUNUS>
-				this.problem.Aeq(:,[1:c_nx, c_nxz+(1:c_nr)]) * [c_x;c_r] == 0;  %#ok<EQEFF>
-				[c_x;c_z;c_r] >= 0; %#ok<VUNUS>
-				cvx_end
-				fval = cvx_optval;
-				xs = [c_x;c_z;c_r];
-				switch cvx_status
-					case 'Solved'
-						exitflag = 1;
-					case 'Inaccurate/Solved'
-						exitflag = 2;
-					case 'Failed'
-						exitflag = -1;
-					otherwise
-						exitflag = 0;
-				end
-				output.iterations = cvx_slvitr;
-			end
-			
-			%% output solution
-			% assert(this.checkFeasible())
-			x = zeros(num_vars, 1);
-			xs(xs<10^-4*norm(xs)) = 0;
-			x(this.I_active_variables) = xs;
-			output.temp_vars.x = x(1:num_var_edge);
-			output.temp_vars.z = x(num_var_edge+(1:num_var_node));
-			output.temp_vars.r = x(num_var_edge+num_var_node+(1:Nf));
-			output.x0 = x;
-			options.TrueValue = true;
-			fval = fval + NormalSliceOptimizer.fcnProfitPrimalPP(xs, this, lambda, q, xp, options);
-			num_varxz = length(xs) - Nf;
-			x_prox = x;
-			
-			gamma = zeros(slice.Parent.NumberDataCenters+slice.Parent.NumberLinks,1);
-			idx = [slice.Links.PhysicalLink; slice.Parent.NumberLinks+slice.getDCPI];
-			gamma(idx) = ...
-				max(0, NormalSliceOptimizer.fcnPenalty(xs(1:num_varxz), this, lambda, q, options.InterSlicePenalty));
-			output.loads = zeros(slice.Parent.NumberLinks+slice.Parent.NumberDataCenters, 1);
-			output.loads(idx) = [this.As_load(1:Nve,this.problem.I_active_xz) * xs(1:num_varxz);
-				this.As_load(Nve+(1:Nd),this.problem.I_active_xz) * xs(1:num_varxz)];
-			output.net_profit = -fval;
-			output.iterations = foutput.iterations;
-			if strcmpi(this.options.OptimizationTool, 'cvx')
-				output.funcCount = foutput.iterations;
-			else
-				output.funcCount = foutput.funcCount;
-			end
-		end
-		
 	end
 	
 	methods (Access = protected)
@@ -1020,16 +795,16 @@ classdef NormalSliceOptimizer < SliceOptimizer
 		function [x, fval] = optimize(this, options)			
 			prbm = this.problem;
 			[xs, fval, exitflag, output] = ...
-				fmincon(@(x)SimpleSliceOptimizer.fcnProfit(x, this, options), ...
-				prbm.x0, prbm.A, prbm.b, prbm.Aeq, prbm.beq, lb, ub, [], prbm.minopts);
-			SimpleSliceOptimizer.interpretExitflag(exitflag, output);
+				fmincon(@(x)NormalSliceOptimizer.fcnProfitPrimalCC(x, this, options), ...
+				prbm.x0, prbm.A, prbm.b, prbm.Aeq, prbm.beq, prbm.lb, prbm.ub, [], prbm.minopts);
+			SliceOptimizer.interpretExitflag(exitflag, output);
 			if options.bCompact
 				x = zeros(sum(this.num_vars), 1);
 				x(this.I_active_variables) = xs;
 			else
 				x = xs;
 			end
-			constr_tol = getstructfields(this.problem.options, 'ConstraintTolerance', ...
+			constr_tol = getstructfields(prbm.minopts, 'ConstraintTolerance', ...
 				'default-ignore', {this.options.ConstraintTolerance});
 			assert(this.checkFeasible(x, constr_tol), 'error: infeasible solution.');
 		end
@@ -1065,12 +840,13 @@ classdef NormalSliceOptimizer < SliceOptimizer
 
 			if isempty(this.hs)
 				pardata = this.pardata;
+        Nvf = pardata.NumberFlowSections;
 			else
 				pardata = this.hs;
+        Nvf = this.NumberFlowSections;
 			end
 			Nf = pardata.NumberFlows;
 			Nv = pardata.NumberVNFs;
-			Nvf = this.NumberFlowSections;
 			prbm = this.problem;
 			
 			num_varxz = length(vars) - Nf;
@@ -1136,12 +912,13 @@ classdef NormalSliceOptimizer < SliceOptimizer
 		function [profit, grad] = fcnProfitPrimalDD(vars, this, lambda, options)
 			if isempty(this.hs)
 				pardata = this.pardata;
+        Nvf = pardata.NumberFlowSections;
 			else
 				pardata = this.hs;
+        Nvf = this.NumberFlowSections;
 			end
 			Nf = pardata.NumberFlows;
 			Nvnf = pardata.NumberVNFs;
-			Nvf = this.NumberFlowSections;
 			prbm = this.problem;
 			nx = prbm.num_vars(1);
 			nz = prbm.num_vars(2);
@@ -1194,12 +971,13 @@ classdef NormalSliceOptimizer < SliceOptimizer
 			
 			if isempty(this.hs)
 				pardata = this.pardata;
+        Nvf = pardata.NumberFlowSections;
 			else
 				pardata = this.hs;
+        Nvf = this.NumberFlowSections;
 			end
 			Nf = pardata.NumberFlows;
 			Nvnf = pardata.NumberVNFs;
-			Nvf = this.NumberFlowSections;
 			Ns = options.NumberSlices;
 			
 			num_varxz = length(vars) - Nf;
@@ -1268,14 +1046,14 @@ classdef NormalSliceOptimizer < SliceOptimizer
 			% |slice| acts as instance of <Slice> in normal mode or |pardata| in parallel mode.
 			if isempty(this.hs)
 				pardata = this.pardata;
+        Nvf = pardata.NumberFlowSections;
 			else
 				pardata = this.hs;
+        Nvf = this.NumberFlowSections;
 			end
 			Nf = pardata.NumberFlows;
 			Nvnf = pardata.NumberVNFs;
 			Nl = pardata.NumberLinks;
-			Nvf = this.NumberFlowSections;
-			base_price = [this.prices.Link; this.prices.Node];
 			prbm = this.problem;
 			
 			num_varxz = length(vars) - Nf;
@@ -1292,7 +1070,8 @@ classdef NormalSliceOptimizer < SliceOptimizer
 					
 					profit = profit + link_payment + node_payment;
 				case 'linear'
-					profit = profit + dot(base_price, load*unit);
+					base_price = [this.prices.Link; this.prices.Node];
+					profit = profit + dot(base_price*unit, load);
 				otherwise
 					error('%s: invalid pricing policy', calledby);
 			end
@@ -1308,8 +1087,8 @@ classdef NormalSliceOptimizer < SliceOptimizer
 						grad(~this.I_fake_edgevars) = repmat(link_price_grad,Nvf,1);
 						grad(this.num_vars(1)+(1:this.num_vars(2))) = repmat(node_price_grad,Nf*Nvnf,1);
 					case 'linear'
-						grad(~this.I_fake_edgevars) = repmat(this.prices.Link,Nvf,1);
-						grad(this.num_vars(1)+(1:this.num_vars(2))) = repmat(this.prices.Node,Nf*Nvnf,1);
+						grad(~this.I_fake_edgevars) = repmat(this.prices.Link*unit,Nvf,1);
+						grad(this.num_vars(1)+(1:this.num_vars(2))) = repmat(this.prices.Node*unit,Nf*Nvnf,1);
 				end
 				grad = grad(this.I_active_variables);
 				%% update gradient on r
@@ -1385,7 +1164,7 @@ classdef NormalSliceOptimizer < SliceOptimizer
 				weight = this.pardata.Weight*ones(this.pardata.NumberFlows, 1);
 			end
 			num_varxz = sum(prbm.num_vars(1:2));
-			loads = this.As_load(:, this.I_active_xz)*vars(1:num_varxz);
+			loads = this.As_load(:, prbm.I_active_xz)*vars(1:num_varxz);
 			load.Node = loads(Nl+(1:Nsn));
 			load.Link = loads(1:Nl);
 			profit = -sum(weight.*fcnUtility(flow_rate)) + slice.getResourceCost(load);
