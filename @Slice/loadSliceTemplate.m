@@ -12,6 +12,14 @@
 % 3: dimensioning trigger: 1 - Event-based, 2 - Time-based, 3 - Threshold-based;
 % 4: Ad-hoc mode;
 % 5: test mode.
+%% Service Function List
+% 1. Video Proxy
+% 2. IPS (Intrusion Prevention System)
+% 3. Video Optimizer
+% 4. Firewall
+% 5. NAT (Network Address Translation)
+% 6. Encipher
+% 7. Transcoder
 function [ slice_template ] = loadSliceTemplate(type_index)
 type_index = unique(type_index, 'stable');
 slice_template = struct;
@@ -46,7 +54,39 @@ for i = 1:length(type_index)
             slice_template(i).ServiceInterval = 4;
             slice_template(i).Probability = 3/4;
             slice_template(i).ConstantProfit = 100;
-						
+				
+      case 41      % Type 1 for experiment 1
+        slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
+        slice_template(i).Weight = 15;
+        slice_template(i).NumberPaths = 1;
+        slice_template(i).NumberFlows = 30;
+        slice_template(i).VNFList = [1,2];
+        slice_template(i).ServiceInterval = 10000;
+        slice_template(i).Probability = [];
+        slice_template(i).ConstantProfit = 100;
+				slice_template(i).DuplicateFlow = true;
+				% slcie_opt.DelayConstraint = [];
+      case 51     % Type 2 for experiment 1
+        slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
+        slice_template(i).Weight = 40;
+        slice_template(i).NumberPaths = 2;
+        slice_template(i).NumberFlows = 10;
+        slice_template(i).VNFList = [1,3,4];
+        slice_template(i).ServiceInterval = 12;
+        slice_template(i).Probability = 1/4;
+        slice_template(i).ConstantProfit = 100;
+				slice_template(i).DuplicateFlow = true;
+      case 61  % Type 3 for experiment 1
+        slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
+        slice_template(i).Weight = 200;
+        slice_template(i).NumberPaths = 3;
+        slice_template(i).NumberFlows = 3;
+        slice_template(i).VNFList = [4,6,2,5];
+        slice_template(i).ServiceInterval = 4;
+        slice_template(i).Probability = 3/4;
+        slice_template(i).ConstantProfit = 100;
+				slice_template(i).DuplicateFlow = true;
+            
         case 12  % Type 1 for experiment 2
             slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
             slice_template(i).Weight =25;
@@ -77,6 +117,36 @@ for i = 1:length(type_index)
             slice_template(i).Probability = 5/6;
             slice_template(i).MinRate = 50;      % Mbps
             slice_template(i).ConstantProfit = 600;
+				case 42  % Type 4 for experiment 22
+            slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
+            slice_template(i).Weight =25;
+            slice_template(i).NumberPaths = 1;
+            slice_template(i).NumberFlows = 120;    % at most 15*14 flows
+            slice_template(i).VNFList = [1,2,3];
+            slice_template(i).ServiceInterval = 1000;
+            slice_template(i).Probability = [];
+            slice_template(i).MinRate = 1;      % Mbps
+            slice_template(i).ConstantProfit = 600;
+        case 52  % Type 5 for experiment 22
+            slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
+            slice_template(i).Weight = 50;
+            slice_template(i).NumberPaths = 2;
+            slice_template(i).NumberFlows = 40;
+            slice_template(i).VNFList = [4,6,2,5];
+            slice_template(i).ServiceInterval = 15;
+            slice_template(i).Probability = 1/6;
+            slice_template(i).MinRate = 5;      % Mbps
+            slice_template(i).ConstantProfit = 600;
+        case 62  % Type 6 for experiment 22
+            slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
+            slice_template(i).Weight = 300;
+            slice_template(i).NumberPaths = 3;
+            slice_template(i).NumberFlows = 4;
+            slice_template(i).VNFList = [4,2,7];
+            slice_template(i).ServiceInterval = 6;
+            slice_template(i).Probability = 5/6;
+            slice_template(i).MinRate = 50;      % Mbps
+            slice_template(i).ConstantProfit = 600;
 						
         case 13     % Type 1 for experiment 3
             slice_template(i).FlowPattern = FlowPattern.RandomInterDataCenter;
@@ -91,7 +161,7 @@ for i = 1:length(type_index)
             slice_template(i).Weight = 20;
             slice_template(i).NumberPaths = 2;
             slice_template(i).NumberFlows = 200;
-            slice_template(i).VNFList = [1,2,4,5];
+            slice_template(i).VNFList = [4,6,2,5];
             slice_template(i).ServiceInterval = 12;
             slice_template(i).Probability = 1/6;
         case 33      % Type 3 for experiment 3
@@ -99,7 +169,7 @@ for i = 1:length(type_index)
             slice_template(i).Weight = 200;
             slice_template(i).NumberPaths = 3;
             slice_template(i).NumberFlows = 10;
-            slice_template(i).VNFList = [1,4,6];
+            slice_template(i).VNFList = [4,2,7];
             slice_template(i).ServiceInterval = 4;
             slice_template(i).Probability = 5/6;
         case 14     % Type 1 for experiment 4: dynamic flow arrival and departure.
@@ -250,7 +320,59 @@ for i = 1:length(type_index)
             slice_template(i).ReconfigScaler = 2;       % beta
             slice_template(i).PricingPolicy = 'quadratic';
             slice_template(i).UtilizationVariance = 0.03;
-        case 46     % Type 1 for experiment 6
+			case 15
+				%% Video on Demand (VoD) Prototype
+				% (UE)–Proxy–IPS–Optimizer–(Server)
+				slice_template(i).Weight = 10;
+				slice_template(i).NumberPaths = 1;
+				slice_template(i).VNFList = [1,2,3];
+				slice_template(i).ArrivalRate = 1/(3600*24);   % 1 arrivals/24 hour => 3600 sec/arrival
+				slice_template(i).ServiceInterval = 3600*24*7;
+				slice_template(i).NumberFlows = 100;
+				slice_template(i).Flow.ArrivalRate = 1800/3600;  % 2sec/arrival
+				slice_template(i).Flow.ServiceInterval = 200;
+				slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
+				slice_template(i).UtilizationVariance = 0.10;
+			case 25
+				%% Content Cache Prototype
+				% (Cache)–Firewall–NAT–(Content)
+				slice_template(i).Weight = 10;
+				slice_template(i).NumberPaths = 1;
+				slice_template(i).VNFList = [4,5];
+				slice_template(i).ArrivalRate = 1/(3600*24);   % 1 arrivals/24 hour => 3600 sec/arrival
+				slice_template(i).ServiceInterval = 3600*24*7;
+				slice_template(i).NumberFlows = 75;
+				slice_template(i).Flow.ArrivalRate = 900/3600;  % 4sec/arrival
+				slice_template(i).Flow.ServiceInterval = 300;
+				slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
+				slice_template(i).UtilizationVariance = 0.12;
+			case 35
+				%% VPN Access Prototype
+				% (UE)–Firewall–Encipher–IPS–NAT–(Server)
+				slice_template(i).Weight = 50;
+				slice_template(i).NumberPaths = 2;
+				slice_template(i).VNFList = [4,6,2,5];
+				slice_template(i).ArrivalRate = 1/(3600*24);   % 1 arrivals/24 hour => 3600 sec/arrival
+				slice_template(i).ServiceInterval = 3600*24*7;
+				slice_template(i).NumberFlows = 30;
+				slice_template(i).Flow.ArrivalRate = 120/3600;  % 30sec/arrival
+				slice_template(i).Flow.ServiceInterval = 900;
+				slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
+				slice_template(i).UtilizationVariance = 0.15;
+			case 45
+				%% Video Chat Prototype
+				% (UE)–Firewall–IPS–Transcoder–(UE)
+				slice_template(i).Weight = 300;
+				slice_template(i).NumberPaths = 3;
+				slice_template(i).VNFList = [4,2,7];
+				slice_template(i).ArrivalRate = 10/3600;   % 4 arrivals/hour
+				slice_template(i).ServiceInterval = 3600;
+				slice_template(i).NumberFlows = 4;
+				slice_template(i).Flow.ArrivalRate = 16/3600;  % 30sec/arrival
+				slice_template(i).Flow.ServiceInterval = 900;
+				slice_template(i).FlowPattern = FlowPattern.RandomMultiFlow;
+				slice_template(i).UtilizationVariance = 0.2;
+			case 46     % Type 1 for experiment 6
             slice_template(i).FlowPattern = FlowPattern.RandomInterDataCenter;
             slice_template(i).Weight = 20;
             slice_template(i).NumberPaths = 2;
@@ -268,7 +390,7 @@ for i = 1:length(type_index)
             slice_template(i).Probability = 1/6;
         case 66      % Type 3 for experiment 6
             slice_template(i).FlowPattern = FlowPattern.RandomDataCenter2BaseStation;
-            slice_template(i).Weight = 100;
+            slice_template(i).Weight = 300;
             slice_template(i).NumberPaths = 3;
             slice_template(i).NumberFlows = 10;
             slice_template(i).VNFList = [1,4,6];
@@ -283,13 +405,13 @@ for i = 1:length(type_index)
         case 1
             slice_template(i).Trigger = 'EventBased';
             switch mod(type_index(i),100)
-                case 44
+                case {44, 25}
                     slice_template(i).EventInterval = 40;       % {50}
-                case 54
+                case {54, 35}
                     slice_template(i).EventInterval = 20;
-                case 64
+                case {64, 45}
                     slice_template(i).EventInterval = 6;
-                case 74
+                case {74, 15}
                     slice_template(i).EventInterval = 60;
                 case 84
                     slice_template(i).EventInterval = 60;

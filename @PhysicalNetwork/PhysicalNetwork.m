@@ -161,23 +161,9 @@ classdef PhysicalNetwork < INetwork
   
   %% Public Methods
   methods
-		[output, runtime] = optimizeResourcePrice(this, sub_slices, options);
-		
-    %% CountSlices
-    % statistics of slices.
-    function type_count = CountSlices(this)
-      type_list = [this.slice_template.Type];
-      type_count = zeros(1,length(type_list));
-      type = zeros(1,this.NumberSlices);
-      for i = 1:this.NumberSlices
-        type(i) = this.slices(i).Type;
-      end
-      [~, tid] = ismember(type, type_list);
-      for t = tid
-        assert(t~=0, 'error: unknown slice type.');
-        type_count(t) = type_count(t) + 1;
-      end
-    end
+		varargout = optimizeResourcePrice(this, varargin);
+		[slices, capacities, unitcost, fields, options] = ...
+			preOptimizeResourcePrice(this, slices, options);
     
     %% LinkId
     % link index of links in the edge table
@@ -309,39 +295,52 @@ classdef PhysicalNetwork < INetwork
     % |slice_opt|:  option for the added slice;
     sl = AddSlice(this, slice_opt, varargin);
 
-    %% RemoveSlice:
-    % Remove the slice with identifier |id|.
-    % if no slice with identifier |id|, this method do not perform any operation.
-    % |b_update| should be 1, if using static slicing method.
-    function sl = RemoveSlice(this, arg1)
-      if isnumeric(arg1)
-        id = arg1;
-        sid = this.findSlice(id, 'Identifier');
-      elseif isa(arg1, 'Slice')
-        sl = arg1;
-        sid = this.findSlice(sl);
-      end
-      %             if nargin <= 2
-      %                 b_update = false;
-      %             end
-      if ~isempty(sid)
-        sl = this.slices(sid);
-        link_id = sl.Links.PhysicalLink;
-        this.AggregateLinkUsage(link_id) = this.AggregateLinkUsage(link_id) - 1;
-        node_id = sl.Nodes.PhysicalNode;
-        this.AggregateNodeUsage(node_id) = this.AggregateNodeUsage(node_id) - 1;
-        %                 if b_update
-        %                     %%%
-        %                     % Update the load of the substrate network.
-        %                     % for calculate the residual capacity.
-        %                     node_load = zeros(this.NumberNodes, 1);
-        %                     node_load(sl.Nodes.PhysicalNode) = sl.Nodes.Load;
-        %                     this.writeDataCenter('Load', node_load - node_load);
-        %                     link_load = zeros(this.NumberLinks, 1);
-        %                     link_load(sl.Links.PhysicalLink) = sl.Links.Load;
-        %                     this.writeLink('Load', link_load - link_load);
-        %                 end
-        this.slices(sid) = [];
+    %% RemoveSlice
+ 		%		sl = RemoveSlice(this, slice_id)		
+		%			Remove the slice with identifier |id|.
+		%			slice_id: slice's global identifier, not the slice's index in the storage.
+		%		sl = RemoveSlice(this, slice_ref)
+		%			Remove the specified slices.
+		%			slice_ref: reference to the slices.
+    function slices = RemoveSlice(this, varargin)
+			if nargin == 1
+				sidx = 1:this.NumberSlices;
+			elseif isnumeric(varargin{1})
+				slice_id = varargin{1};
+				sidx = this.findSlice(slice_id, 'Identifier');
+			elseif isa(varargin{1}, 'Slice')
+				slices = varargin{1};
+				sidx = this.findSlice(slices);
+			else
+				sidx = [];
+			end
+      if ~isempty(sidx)
+        slices = this.slices(sidx);
+				for i = 1:length(slices)
+					sl = slices(i);
+					link_id = sl.Links.PhysicalLink;
+					this.AggregateLinkUsage(link_id) = this.AggregateLinkUsage(link_id) - 1;
+					node_id = sl.Nodes.PhysicalNode;
+					this.AggregateNodeUsage(node_id) = this.AggregateNodeUsage(node_id) - 1;
+					%                 if b_update
+					%                     %%%
+					%                     % Update the load of the substrate network.
+					%                     % for calculate the residual capacity.
+					%                     node_load = zeros(this.NumberNodes, 1);
+					%                     node_load(sl.Nodes.PhysicalNode) = sl.Nodes.Load;
+					%                     this.writeDataCenter('Load', node_load - node_load);
+					%                     link_load = zeros(this.NumberLinks, 1);
+					%                     link_load(sl.Links.PhysicalLink) = sl.Links.Load;
+					%                     this.writeLink('Load', link_load - link_load);
+					%                 end
+				end
+        this.slices(sidx) = [];
+				if nargout == 0
+					slices.delete();
+				end
+				load = this.getNetworkLoad();
+				this.writeLink('Load', load.Link);
+				this.writeDataCenter('Load', load.Node);
         %
         % Since the flow/path id might be used by other associate entities, the
         % cost to reallocate flow id is large. And reallocation is not necessary,
@@ -349,48 +348,38 @@ classdef PhysicalNetwork < INetwork
         %    this.AllocateFlowId(sid);
         %    this.AllocatePathId(sid);
       else
-        sl = [];
+        slices = Slice.empty(0,1);
       end
     end
     
     %% findSlice
-    %   sid = findSlice(this, slice)
-    %   sid = findSlice(this, key, field)
+    %   sid = findSlice(this, slices)
+    %   sid = findSlice(this, key, field = 'Type')
     % (1) Find the given slice's Index.
     % (2) Find the index of slices with Type |key|, return a row vector of index.
-    function sid = findSlice(this, key, field)
-      sid = [];
-      if isa(key, 'Slice')
-        for s = 1:this.NumberSlices
-          if key == this.slices(s)
-            sid = s;
-            return;
-          end
-        end
-      else
-        if nargin <= 2
-          field = 'Type';
-        end
-        switch field
-          case 'Type'
-            sid = false(1,this.NumberSlices);
-            for s = 1:this.NumberSlices
-              if key == this.slices(s).Type
-                sid(s) = true;
-              end
-            end
-            sid = find(sid);
-          case 'Identifier'
-            for s = 1:this.NumberSlices
-              if key == this.slices(s).Identifier
-                sid = s;
-                break;
-              end
-            end
-          otherwise
-            warning('undefined key type [%s].', key);
-        end
+    function sid = findSlice(this, varargin)
+      if isa(varargin{1}, 'Slice')
+				ss = varargin{1}; 
+				ns = length(ss); 
+				sid = false(this.NumberSlices,1);
+				for i = 1:ns
+					sid(ss(i) == this.slices) = true; 
+				end
+			else
+				key = varargin{1};
+				if nargin <= 2
+					field = 'Type';
+				else
+					field = varargin{2};
+				end
+				sid = false(1,this.NumberSlices);
+				for s = 1:this.NumberSlices
+					if key == this.slices(s).(field)
+						sid(s) = true;
+					end
+				end
       end
+			sid = find(sid);
     end
     
     %% Modify Options by User
@@ -400,7 +389,7 @@ classdef PhysicalNetwork < INetwork
         opt_name = string(opt_name);
       elseif iscell(opt_name) || isstring(opt_name)
       else
-        error('[%s]error: %s', calledby(0), ...
+        error('[%s] error: %s%s', calledby(0), ...
           '''opt_name'' must be specified as character array, string array',...
           'or cell array with characters');
       end
@@ -464,16 +453,28 @@ classdef PhysicalNetwork < INetwork
       if nargout >= 4
         r_std = std(ratio);
       end
-    end
+		end
     
-    function theta = utilizationRatio(this, load)
-      if nargin == 1
-        load.Node = this.readDataCenter('Load');
-        load.Link = this.readLink('Load');
-      end
-      theta_v = sum(load.Node)/this.totalNodeCapacity;
-      theta_l = sum(load.Link)/this.totalLinkCapacity;
-      theta = 0.5*(theta_v + theta_l);
+		%% Compute network resource utilization ratio.
+		%		[theta, t_link, t_node] = utilizationRatio(this, isfinal=false)
+		%		[theta, t_link, t_node] = utilizationRatio(this, isfinal=false, load)
+		%					If 'isfinal=true', the results are structs (see also <INetwork>); otherwise,
+		%					the results are type of numeric.
+    function [theta, t_link, t_node] = utilizationRatio(this, isfinal, load)
+			if nargin <= 1 || isempty(isfinal)
+				isfinal = false;
+			end
+			if isfinal
+				[theta, t_link, t_node] = utilizationRatio@INetwork(this);
+			else
+				if nargin <= 1 || isempty(load)
+					load.Node = this.readDataCenter('Load');
+					load.Link = this.readLink('Load');
+				end
+				t_link = sum(load.Node)/this.totalNodeCapacity;
+				t_node = sum(load.Link)/this.totalLinkCapacity;
+				theta = 0.5*(t_link + t_node);
+			end
     end
     
     %%%
@@ -516,38 +517,48 @@ classdef PhysicalNetwork < INetwork
       end
 		end
         
-    %% statistics of the output
-    % type_index is a scalar.
-    % Profit, Rate
-    % TODO: formulate the output as a table
-    function [p,r] = statSlice(this, type_index, profit)
-      s_index = this.findSlice(type_index);
-      if isempty(s_index)
-        p = [0, 0, 0, 0];
-        if nargout >= 2
-          r = [0, 0, 0, 0];
-        end
-      else
-        %%%
-        % Only the statistics of the admitted slices are counted.
-        p = [mean(profit(s_index)), max(profit(s_index)), min(profit(s_index)), ...
-          std(profit(s_index))];
-        if nargout >= 2
-          rate = zeros(this.NumberFlows,1);
-          total_num_flow = 0;
-          for s = s_index     % s_index is a row vector
-            num_flow = this.slices(s).NumberFlows;
-            rate(total_num_flow + (1:num_flow)) = this.slices(s).FlowTable.Rate;
-            total_num_flow = total_num_flow + num_flow;
-          end
-          rate = rate(1:total_num_flow);
-          r = [mean(rate), max(rate), min(rate), std(rate)];
-        end
-      end
-    end
+		% [stat, slice_stat, results] = optimizeResourcePrice(this, sub_slices, options);
+		function varargout = singleSliceOptimization(this, varargin)
+			[slice_refs, capacity, unitcost, fields, options] = ...
+				this.preOptimizeResourcePrice(varargin{:});
+			options.UnitCost = unitcost;
+			options.Capacity = capacity;
+			defaultopts = Dictionary('bCountTime', false);
+			options = setdefault(options, defaultopts);
+			if options.bCountTime
+				t_start = tic; prt = 0; srt = 0;
+			end
+			for i = 1:length(slice_refs)
+				slice_refs(i).initialize();
+			end
+			if options.bCountTime
+				t_stop = toc(t_start); prt = prt + t_stop; srt = srt + t_stop; t_start = tic;
+			end
+			
+			warning('slice reference is not utilized.');
+			[prices, output] = this.op.singleSliceOptimization(slice_refs, options);
+			% Finalize substrate network
+			if options.bCountTime
+				prt = prt + output.runtime.Parallel; srt = srt + output.runtime.Serial;
+				t_start = tic;
+			end
+			this.finalize(prices);
+			if options.bCountTime
+				t_stop = toc(t_start); prt = prt + t_stop/Ns; srt = srt + t_stop;
+				this.op.runtime = struct('Parallel', prt, 'Serial', srt);
+			end
+			[varargout{1:nargout}] = this.calculateOutput(this.slices, fields, options);
+			if nargout >= 3
+				varargout{3}.WelfareOptimal = output.WelfareOptimal;
+			end
+		end
 
 	end
   
+	methods (Static)
+		[stat, slice_stat] = createStatTable(num_point, num_type, type);
+	end
+
 	%% Friend Methods
 	methods (Access ={?PhysicalNetwork, ?NetworkOptimizer})
 		    %% getNetworkLoad
@@ -583,26 +594,42 @@ classdef PhysicalNetwork < INetwork
 				link_id = sl.Links.PhysicalLink;
 				dc_id = sl.getDCPI;
 				if sl.isFinal() || strcmpi(options.Stage, 'final')
-					load.Node(dc_id) = load.Node(dc_id) + sl.getNodeCapacity;
-					load.Link(link_id) = load.Link(link_id) + sl.getLinkCapacity;
+					isfinal = true; % include those determined slices in the calculation.
 				elseif strcmpi(options.Stage, 'temp')
-					load.Node(dc_id) = load.Node(dc_id) + sl.getNodeCapacity(false);
-					load.Link(link_id) = load.Link(link_id)+ sl.getLinkCapacity(false);
+					isfinal = false; 
 				else
 					error('error:[%s] Invalid value for options ''Stage''=''%s''.', options.Stage);
 				end
+				load.Node(dc_id) = load.Node(dc_id) + sl.getNodeCapacity(isfinal);
+				load.Link(link_id) = load.Link(link_id) + sl.getLinkCapacity(isfinal);
 			end
 		end
 
     %% Price Adjustment Methods
     [prices, runtime] = pricingFactorAdjustment(this, new_opts);
+		
+		% Convert parameters, such as price, capacity, and load between struct and vector.
+		function param = convertParameter(this, param, Type)
+			if nargin >=3
+				assert(contains(Type, {'struct', 'vector'}), ...
+					sprintf('error: invalid type <%s>', Type));
+			end
+			if isnumeric(param) && (nargin<= 2 || strcmpi(Type, 'struct'))
+				param = struct('Link', param(1:this.NumberLinks), ...
+					'Node', param(this.NumberLinks+(1:this.NumberDataCenters)));
+			elseif (isstruct(param) || isa(param, 'Dictionary')) && ...
+					(nargin<=2 || strcmpi(Type, 'vector'))
+				param = [param.Link(:); param.Node(:)];
+			end
+		end
+		
 	end
 	
   %% Protected Methods
 	methods (Access = protected)
-		[sp_profit, b_violate, violates] = SolveSCPCC(this, slices, prices, options);
+		[sp_profit, b_violate, output] = SolveSCPCC(this, slices, prices, options);
 		
-		argout = calculateOutput(this, argin, new_opts);
+		varargout = calculateOutput(this, slices, fields, options);
 
 		function newobj = copyElement(this)
 			%% Make a shallow copy of all properties
@@ -655,7 +682,7 @@ classdef PhysicalNetwork < INetwork
 			if isfield(VNF_opt, 'ProcessEfficiency')
 				assert(VNF_opt.Number==length(VNF_opt.ProcessEfficiency), ...
 					'error: process efficiency data is missing.');
-				this.VNFTable.ProcessEfficiency = VNF_opt.ProcessEfficiency;
+				this.VNFTable.ProcessEfficiency = VNF_opt.ProcessEfficiency(:);
 			else
 				if isfield(VNF_opt, 'RandomSeed')
 					rng(VNF_opt.RandomSeed(1));
@@ -771,8 +798,8 @@ classdef PhysicalNetwork < INetwork
         % links should be removed from the graph.
         link_capacity = this.readLink('ResidualCapacity');
         node_capacity = this.readDataCenter('ResidualCapacity');
-        link_capacity(link_capacity<1) = 0;
-        node_capacity(node_capacity<1) = 0;
+        link_capacity(link_capacity<0.01*max(link_capacity)) = 0;
+        node_capacity(node_capacity<0.01*max(node_capacity)) = 0;
         A = spalloc(this.NumberNodes, this.NumberNodes, this.NumberLinks);
         C = spalloc(this.NumberNodes, this.NumberNodes, this.NumberLinks);
         for i = 1:this.NumberLinks
@@ -805,7 +832,8 @@ classdef PhysicalNetwork < INetwork
     %%%
     % Called by <generateFlowTable>
     function end_points = generateEndPoints(this, slice_opt) %#ok<INUSL>
-      end_points = slice_opt.NodeSet(unique_randi(numel(slice_opt.NodeSet), 2, 'stable'));
+      end_points = zeros(1,2);
+      end_points(:) = slice_opt.NodeSet(unique_randi(numel(slice_opt.NodeSet), 2, 'stable'));
     end
 	
     %%%
@@ -820,7 +848,8 @@ classdef PhysicalNetwork < INetwork
     % the optimization problem.
     function [b, profit_gap] = checkProfitRatio(this, prices, options)
       global DEBUG;
-      
+      prices = this.convertParameter(prices, 'struct');
+			
       slice_profit_ratio = zeros(this.NumberSlices,1);
 			for s = 1:this.NumberSlices
 				sl = this.slices(s);
@@ -843,6 +872,8 @@ classdef PhysicalNetwork < INetwork
           profit_threshold = mean(slice_profit_ratio);
         case 'max'
           profit_threshold = max(slice_profit_ratio);
+        case 'off'
+          profit_threshold = inf;
         otherwise
           error('error: invalid option (Threshold = %s)', this.op.options.Threshold);
       end
@@ -865,34 +896,6 @@ classdef PhysicalNetwork < INetwork
       if ~isempty(DEBUG) && DEBUG
         disp('Profit ratio {slices|network}:');
         disp([slice_profit_ratio; network_profit_ratio]);
-      end
-    end
-    
-    %% ISSUE: VNFlist is not conmmonly shared.
-    function runtime = priceIteration(this, prices, options)
-      if nargout == 1
-        slice_runtime = 0;
-        runtime.Serial = 0;
-			end
-			warning('TODO: parallel, see <SolveSCPCC>.');
-      for s = 1:this.NumberSlices
-        sl = this.slices(s);
-        sl.Optimizer.setProblem('Price', prices);
-        %%%
-        % optimize each slice with price and resource constraints.
-        if nargout == 1
-          tic;
-        end
-        sl.Optimizer.optimalFlowRate(options);
-        if nargout == 1
-          t = toc;
-          slice_runtime = max(slice_runtime, t);
-          runtime.Serial = runtime.Serial + t;
-        end
-        sl.Optimizer.setProblem('Price', [])
-      end
-      if nargout == 1
-        runtime.Parallel = slice_runtime;
       end
 		end
     
@@ -920,6 +923,8 @@ classdef PhysicalNetwork < INetwork
       if nargin <= 2 || isempty(prices)
         prices.Node = this.readDataCenter('Price');
         prices.Link = this.readLink('Price');
+			else
+				prices = this.convertParameter(prices, 'struct');
       end
       load = this.getNetworkLoad(slices, options);
       revenue = 0;
@@ -928,15 +933,34 @@ classdef PhysicalNetwork < INetwork
           for s = 1:length(slices)
             sl = slices(s);
             link_id = sl.Links.PhysicalLink;
-            dc_id = sl.getDCPI;
+            dc_id = sl.getDCPI();
             % To get the revenue of slice provider, we need to how much
             % resource the slices occupy.
-            revenue = revenue + ...
-              sl.Optimizer.fcnLinkPricing(prices.Link(link_id), sl.getLinkCapacity(false)) + ...
-              sl.Optimizer.fcnNodePricing(prices.Node(dc_id), sl.getNodeCapacity(false));
+						if sl.isFinal() % for StaticSlicing, existing slices with fixed price and capacity.
+							revenue = revenue + ...
+								sl.Optimizer.fcnLinkPricing(sl.Links.Price, sl.getLinkCapacity()) + ...
+								sl.Optimizer.fcnNodePricing(sl.ServiceNodes.Price, sl.getNodeCapacity());							
+						else
+							revenue = revenue + ...
+								sl.Optimizer.fcnLinkPricing(prices.Link(link_id), sl.getLinkCapacity(false)) + ...
+								sl.Optimizer.fcnNodePricing(prices.Node(dc_id), sl.getNodeCapacity(false));
+						end
           end
         case 'linear'
-          revenue = dot(load.Node, prices.Node) + dot(load.Link, prices.Link);
+          for s = 1:length(slices)
+            sl = slices(s);
+            link_id = sl.Links.PhysicalLink;
+            dc_id = sl.getDCPI();
+            if sl.isFinal()
+              revenue = revenue + ...
+                dot(sl.ServiceNodes.Capacity, sl.ServiceNodes.Price) + ...
+                dot(sl.Links.Capacity, sl.Links.Price);
+            else
+              revenue = revenue + ...
+                dot(prices.Node(dc_id), sl.getNodeLoad(false)) + ...
+                dot(prices.Link(link_id), sl.getLinkLoad(false));
+            end
+          end
         otherwise
           error('%s: invalid pricing policy', calledby);
       end
@@ -966,7 +990,7 @@ classdef PhysicalNetwork < INetwork
       for i = 1:num_slices
         slices(i).finalize(prices);
       end
-      load = this.getNetworkLoad;
+      load = this.getNetworkLoad();
       this.writeLink('Load', load.Link);
       this.writeDataCenter('Load', load.Node);
       if nargin >= 3
@@ -981,9 +1005,9 @@ classdef PhysicalNetwork < INetwork
         prices.Node(pre_node_idx) = this.readDataCenter('Price', pre_node_idx);
         this.writeDataCenter('Price', prices.Node);
       end
-    end
+		end
     
-  end
+	end
 	
   %% Static Methods
 	methods (Static)
