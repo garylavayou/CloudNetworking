@@ -3,7 +3,7 @@ classdef (HandleCompatible) IDynamicNetworkOptimizer
 	%   Detailed explanation goes here
 	
 	properties (Abstract, SetAccess = protected)
-		options Dictionary;
+		options;
 	end
 	
 	%% Constructor

@@ -31,15 +31,15 @@ classdef (Abstract) IDynamicSliceOptimizer < handle
 	end
 	
 	properties (Abstract)
-		temp_vars Dictionary;
-		problem Dictionary;	% inlcuding 'numvar': the actuall number of each component variable
-		pardata Dictionary;    % pass data to parallel workers
+		temp_vars;
+		problem;	  % inlcuding 'numvar': the actuall number of each component variable
+		pardata;    % pass data to parallel workers
 	end
 	
   properties (Abstract, SetAccess = protected)
 		hs;
 		num_vars;
-    options Dictionary;        % Options on performing optimizarion.
+    options;        % Options on performing optimizarion.
   end
   
 	properties (Access = protected)
@@ -62,8 +62,6 @@ classdef (Abstract) IDynamicSliceOptimizer < handle
 		upper_bounds = struct([]);
 		topts;              % used in optimization, avoid passing extra arguments.
 		max_flow_rate;
-		init_gamma_k;
-		init_q_k;
 		diff_state;         % reset each time before reconfiguration.
 
     raw_beta;
@@ -131,7 +129,7 @@ classdef (Abstract) IDynamicSliceOptimizer < handle
         otherwise
           this.options = structmerge(this.options, ...
             getstructfields(slice_data, 'bReserve', 'default', 1));
-			end
+      end
       if this.options.ReconfigMethod == ReconfigMethod.DimconfigReserve
         this.sh_options = structmerge(this.sh_options, ...
           getstructfields(slice_data, 'UtilizationVariance', 'default', 0.05));

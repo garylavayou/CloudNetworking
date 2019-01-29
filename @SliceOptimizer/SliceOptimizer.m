@@ -1,13 +1,18 @@
 classdef SliceOptimizer < handle & matlab.mixin.Heterogeneous
+	properties (Abstract)
+		temp_vars Dictionary;  % Temporary variables that directly resulted from optimization.
+		problem Dictionary;	   % inlcuding 'numvar': the actual number of each component variable
+		pardata Dictionary;    % pass data to parallel workers
+	end
+	properties (Abstract, SetAccess = protected)
+		options Dictionary;
+	end
 	properties
     Variables Dictionary;  % Variables after post processing.
-		temp_vars Dictionary; % Temporary variables that directly resulted from optimization.
     prices Dictionary;
     capacities Dictionary;
-		problem Dictionary;	% inlcuding 'numvar': the actual number of each component variable
-		pardata Dictionary;    % pass data to parallel workers
-  end
-  
+	end
+  	
   properties (SetAccess = protected)
     hs;									% reference to the host slice.
 		num_vars;		% the raw number of each component variable
@@ -17,7 +22,6 @@ classdef SliceOptimizer < handle & matlab.mixin.Heterogeneous
 		I_flow_path logical;    % Flow-Path Incidence Matrix
 		x0;         % start point
 		flow_rate;          % Temporary results of flow rate.
-    options Dictionary;
 	end
   
 	properties (Dependent)
@@ -55,7 +59,9 @@ classdef SliceOptimizer < handle & matlab.mixin.Heterogeneous
   methods 
     function this = SliceOptimizer(slice, options)
       this.hs = slice;
-			defaultopts = getstructfields(slice.Parent.Optimizer.options, {...
+			op = slice.Parent.Optimizer;
+			assert(~isempty(op), 'error: network optimizer not initialized.');
+			defaultopts = getstructfields(op.options, {...
 				'NonzeroTolerance', ...
 				'PostProcessing', ...
 				'ConstraintTolerance', ...
@@ -81,13 +87,13 @@ classdef SliceOptimizer < handle & matlab.mixin.Heterogeneous
 	%% Property Access Methods
 	methods
 		%% Host
-		function h = het.Host(this)
+		function h = get.Host(this)
 			h = this.hs;
 		end
 		function set.Host(this, hs)
-			if hs.op == this
+			if isempty(hs) && isa(hs, 'Slice')
 				this.hs = hs;
-			elseif isempty(hs) && isa(hs, 'Slice')
+			elseif hs.Optimizer == this
 				this.hs = hs;
 			else
 				error('error: host slice and optimizer do not match.');
@@ -95,7 +101,7 @@ classdef SliceOptimizer < handle & matlab.mixin.Heterogeneous
 		end
 		
 	end
-	
+
   %% Public Methods
   methods
 		function initializeParallel(this, procedure, ~)
@@ -155,7 +161,7 @@ classdef SliceOptimizer < handle & matlab.mixin.Heterogeneous
 						else
 							% Raw price: corresponding price of links and nodes should be selected out.
 							this.prices.Link = p.Link(this.hs.Links.PhysicalLink);
-							this.prices.Node = p.Node(this.hs.getDCPI);
+							this.prices.Node = p.Node(this.hs.getDCPI());
 						end
 					case 'Capacity'
 						c= varargin{i+1};
@@ -164,7 +170,7 @@ classdef SliceOptimizer < handle & matlab.mixin.Heterogeneous
 							this.capacities.Node = [];
 						else
 							this.capacities.Link = c.Link(this.hs.Links.PhysicalLink);
-							this.capacities.Node = c.Node(this.hs.getDCPI);
+							this.capacities.Node = c.Node(this.hs.getDCPI());
 						end
 					case 'NodePrice'
 						this.prices.Node = varargin{i+1};
@@ -179,11 +185,11 @@ classdef SliceOptimizer < handle & matlab.mixin.Heterogeneous
 							prbm = this.problem(1);
 							if isfield(prbm, 'num_full_vars')  % only valid in parallel mode.
 								this.num_vars = prbm.num_full_vars;
-								rmfield(prbm, 'num_full_vars'); %#ok<RMFLD>
+								prbm = rmfield(prbm, 'num_full_vars'); 
 							end
 							if isfield(prbm, 'I_active_variables') % only valid in parallel mode.
 								this.I_active_variables = prbm.I_active_variables;
-								rmfield(prbm, 'I_active_variables'); %#ok<RMFLD>
+								prbm = rmfield(prbm, 'I_active_variables');  %#ok<NASGU>
 							end
 						end
 					case 'Index'

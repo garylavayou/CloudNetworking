@@ -1,7 +1,9 @@
 classdef SimpleNetworkOptimizer < NetworkOptimizer
 	%UNTITLED5 Summary of this class goes here
 	%   Detailed explanation goes here
-	
+	properties (SetAccess = protected)
+		options Dictionary;
+	end
 	%% Constructor
 	methods
 		function this = SimpleNetworkOptimizer(net, varargin)
@@ -11,7 +13,7 @@ classdef SimpleNetworkOptimizer < NetworkOptimizer
   end
   
   methods
-		[output, prices, runtime] = singleSliceOptimization(this, new_opts);
+		[prices, results] = singleSliceOptimization(this, new_opts);
   end
 
   methods (Access = protected)
