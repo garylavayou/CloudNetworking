@@ -14,6 +14,7 @@ classdef NormalCloudNetwork < PhysicalNetwork
 		% forwarding node;
 		ext_links;
 		ext_nodes;
+		augraph DirectedGraph;
 	end
 	
 	%% Constructor
@@ -62,74 +63,104 @@ classdef NormalCloudNetwork < PhysicalNetwork
 			%			node maps to the Data Center.
 			% Cost: Data Center's cost (the cost of the colocated forwarding
 			%       node is set to 0)
+			num_aug_links = 2*length(new_heads);
+			ext_link_idx = this.NumberLinks+(1:num_aug_links);
+			ext_node_idx = this.NumberNodes+(1:numel(new_heads));
 			warning off
-			this.ext_links{this.NumberLinks+(1:2*length(new_heads)), 'EndNodes'} ...
+			this.ext_links{ext_link_idx, 'EndNodes'} ...
 				= [[new_heads; new_tails], [new_tails; new_heads]];
-			this.ext_nodes{this.NumberNodes+(1:numel(new_heads)), 'Location'} = new_poss;
+			this.ext_nodes{ext_node_idx, 'Location'} = new_poss;
 			warning on
-			this.ext_links{(this.NumberLinks+1):end, 'Capacity'} = inf;
+			this.ext_links{ext_link_idx, 'Delay'} = eps*ones(num_aug_links,1);
+			this.ext_links{ext_link_idx, 'Capacity'} = inf;
 			this.ext_nodes{:, 'DataCenter'} = 0;
-			this.ext_nodes{(this.NumberNodes+1):end, 'DataCenter'} = ...
-				(1:height(this.DataCenters))';
+			this.ext_nodes{ext_node_idx, 'DataCenter'} = (1:height(this.DataCenters))';
+			this.augraph = DirectedGraph(this.ext_links, this.ext_nodes);
 		end
 	end
 	
 	%% Public Methods
 	methods
-		[output, runtime] = optimizeResourcePrice1(this, slices);
-		[output, runtime] = optimizeResourcePrice2(this, slices, options);
-		[output, runtime] = optimizeResourcePriceScaling(this, slices, options);
-
-		function op = getOptimizer(this, options)
-			if nargin == 1
-				this.op = NormalNetworkOptimizer(this);
-			else
-				this.op = NormalNetworkOptimizer(this, options);
-			end
+		varargout = optimizeResourcePriceDual(this, slices, options);
+		varargout = optimizeResourcePriceDual2(this, slices, options);
+		varargout = optimizeResourcePriceScaling(this, slices, options);
+		varargout = optimizeResourcePriceScaling2(this, slices, options);
+		varargout = staticSlicing(this, slices, options);
+		varargout = fixResourcePricing(this, slices, options)
+		varargout = pricingResourceDual(this, slices, options);
+		varargout = optimizeResourcePrice3(this, slices);
+		
+		function op = getOptimizer(this, varargin)
+			this.op = NormalNetworkOptimizer(this, varargin{:});
 			op = this.op;
 		end
-		
-		% [output, runtime] = optimizeResourcePrice(this, sub_slices, options);
-
-		function plot(this, b_undirect)
-			hold on;
-			fig = gcf;
-			ax = fig.Children(1);
-			aug_edge_idx = (this.NumberLinks+1):height(this.ext_links);
-			aug_node_idx = (this.NumberNodes+1):height(this.ext_nodes);
-			aug_part = digraph(this.ext_links(aug_edge_idx, :));
-			sub_aug_part = subgraph(aug_part, aug_node_idx);
-			locations = this.ext_nodes{aug_node_idx, 'Location'};
-			nodelabels = cell(1,sub_aug_part.numnodes);
-			num_new_nodes = height(this.ext_nodes) - this.NumberNodes;
-			nodelabels(1:(sub_aug_part.numnodes - num_new_nodes)) = {' '};
-			for i = (sub_aug_part.numnodes-num_new_nodes+1):sub_aug_part.numnodes
-				nodelabels{i} = ['DC', num2str(i-(sub_aug_part.numnodes - num_new_nodes))];
-			end
-			axes(ax);
-			args = {'XData', locations(:,1), ...
-				'YData', locations(:,2), ...
-				'NodeLabel', nodelabels, ...
-				'Marker', 's',...
-				'MarkerSize', 7,...
-				'LineStyle', ':', ...
-				'LineWidth', 2, ...
-				'NodeColor', PhysicalNetwork.NodeColor(2,:), ...
-				'EdgeColor', PhysicalNetwork.EdgeColor(2,:)};
-			if b_undirect
-				g = graph(sub_aug_part.adjacency+sub_aug_part.adjacency');
-				g.plot(args{:});
+    
+		% plot(this, b_undirect, b_extend)
+		function plot(this, varargin)
+			plot@PhysicalNetwork(this, varargin{:})
+			if nargin >= 3
+				b_extend = varargin{3};
 			else
-				sub_aug_part.plot(args{:});
+				b_extend = false;
 			end
-			hold off;
+			if b_extend
+				b_undirect = varargin{2};
+				hold on;
+				fig = gcf;
+				ax = fig.Children(1);
+				aug_edge_idx = (this.NumberLinks+1):height(this.ext_links);
+				aug_node_idx = (this.NumberNodes+1):height(this.ext_nodes);
+				aug_part = digraph(this.ext_links(aug_edge_idx, :));
+				sub_aug_part = subgraph(aug_part, aug_node_idx);
+				locations = this.ext_nodes{aug_node_idx, 'Location'};
+				nodelabels = cell(1,sub_aug_part.numnodes);
+				num_new_nodes = height(this.ext_nodes) - this.NumberNodes;
+				nodelabels(1:(sub_aug_part.numnodes - num_new_nodes)) = {' '};
+				for i = (sub_aug_part.numnodes-num_new_nodes+1):sub_aug_part.numnodes
+					nodelabels{i} = ['DC', num2str(i-(sub_aug_part.numnodes - num_new_nodes))];
+				end
+				axes(ax);
+				args = {'XData', locations(:,1), ...
+					'YData', locations(:,2), ...
+					'NodeLabel', nodelabels, ...
+					'Marker', 's',...
+					'MarkerSize', 7,...
+					'LineStyle', ':', ...
+					'LineWidth', 2, ...
+					'NodeColor', PhysicalNetwork.NodeColor(2,:), ...
+					'EdgeColor', PhysicalNetwork.EdgeColor(2,:)};
+				if b_undirect
+					g = graph(sub_aug_part.adjacency+sub_aug_part.adjacency');
+					g.plot(args{:});
+				else
+					sub_aug_part.plot(args{:});
+				end
+				hold off;
+			end
 		end
+		
+		% Compatible with <PhysicalNetwork.LinkId>
+		function [argout_1, argout_2] = LinkId(this, argin_1, argin_2)
+			switch nargin
+				case 1
+					argout_1 = this.ext_links.EndNodes(:,1);
+					argout_2 = this.ext_links.EndNodes(:,2);
+				case 2
+					argout_1 = this.ext_links.EndNodes(argin_1,1);
+					argout_2 = this.ext_links.EndNodes(argin_1,2);
+				otherwise
+					% Link index: link is indexed by [head, tail] pairs. The appended augmented
+					% links dose not change the indices of original links.
+					argout_1 = this.augraph.IndexEdge(argin_1,argin_2);
+			end
+		end
+		
 	end
 	
 	methods (Access = protected)
-		results = SolveSCP(this, slices, node_price, link_price, options);
-		results = SolveSCPDD(this, slices, node_price, link_price, options);		% Dual Decomposition
-		results = SolveSCPPP(this, slices, node_price, link_price, options);
+		[sp_profit, b_violate, output] = SolveSCPDA(this, slices, prices, options);
+		[sp_profit, b_violate, output] = SolveSCPDD(this, slices, prices, options);		% Dual Decomposition
+		[sp_profit, b_violate, output] = SolveSCPPP(this, slices, prices, options);
 	
 		function sl = createslice(this, slice_opt, varargin)
 			this.slices(end+1) = NormalSlice(slice_opt);

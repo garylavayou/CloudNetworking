@@ -1,206 +1,127 @@
-function [output, runtime] = optimizeResourcePriceScaling(this, slices, options)
+function varargout = optimizeResourcePriceScaling(this, varargin)
 global DEBUG; %#ok<NUSED>
 
 %% Initialization
-if nargin <= 1 || isempty(slices)
-	slices = this.slices;       % all slices are involved in slice dimensioning
-	capacities.Node = this.readDataCenter('Capacity');
-	capacities.Link = this.readLink('Capacity');
-else
-	% residual capacity + reallocatable capacity.
-	capacities.Node = this.readDataCenter('ResidualCapacity');
-	capacities.Link = this.readLink('ResidualCapacity');
-	for i = 1:length(slices)
-		sl = slices(i);
-		capacities.Node(sl.getDCPI) = capacities.Node(sl.getDCPI) + ...
-			sl.VirtualDataCenters.Capacity;
-		capacities.Link(sl.VirtualLinks.PhysicalLink) = ...
-			capacities.Link(sl.VirtualLinks.PhysicalLink) + sl.VirtualLinks.Capacity;
-	end	
+[slices, ~, unitcosts, fields, options] = this.preOptimizeResourcePrice(varargin{:});
+defaultopts = Dictionary('PricingPolicy', 'linear', 'unit', 1);
+options = structmerge(options, defaultopts, 'exclude');
+if options.bCountTime
+	t_start = tic; prt = 0; srt = 0;
 end
 Ns = length(slices);
-Ne = this.NumberLinks;
-Ndc = this.NumberDataCenters;
-if nargin <= 2 || ~isfield(options, 'PricingMethod')
-	cost_init_method = 'RandomizeCost';
-else
-	cost_init_method = options.PricingMethod;
-	options = rmfield('PricingMethod');
+for i = 1:Ns
+	slices(i).initialize();
+	slices(i).Optimizer.initializeParallel('priceOptimalFlowRate', options);
 end
-switch cost_init_method
-	case 'RandomizeCost'
-		st = rng;
-		rng(20180909);
-		link_uc = this.getLinkCost().*((rand(Ne,1)-0.5)/100+1);
-		node_uc = this.getNodeCost().*((rand(Ndc,1)-0.5)/100+1);
-		rng(st);
-	case 'UniformCost'
-		link_uc = ones(Ne,1)*mean(this.getLinkCost());
-		node_uc = ones(Ndc,1)*mean(this.getNodeCost());
-	case 'OriginCost'
-		link_uc = this.getLinkCost();
-		node_uc = this.getNodeCost();
-	otherwise
-		error('error: %s.',cost_init_method);
-end
-defaultopts = Dictionary('ResidualCapacity', capacities, ...
-	'Slices', {slices}, ...
-	'PricingPolicy', 'linear', ...
-	'Stage', 'temp', ...
-	'bFinal', false);
-if nargin <= 2
-	options = defaultopts;
-else
-	options = structmerge(defaultopts, options);
-end
-if nargout >= 2 
-	options.CountTime = true;
-	t_start = tic;
-else
-	options.CountTime = false;
-end
-sp_profit = -inf*ones(3,1);
-t = 0;
-
-%% Parallel initialization
-M = getParallelInfo();
-array = cell(Ns, 1);
-problem = cell(Ns, 1);
-indices = cell(Ns, 1);
-parfor (pj = 1:Ns,M)
-	%% TODO if return handle objects is valid.
-	sl = slices(pj);
-	[array{pj}, problem{pj}, indices{pj}] = sl.op.initializeParallel(options);  
-	% slices(i).Optimizer.initializeParallel('priceOptimalFlowRate', options);
-end
-for j = 1:Ns
-	slices(j).setProblem(array{j}, problem{j}, indices{j});
+if options.bCountTime
+	t_stop = toc(t_start); prt = prt + t_stop; srt = srt + t_stop; t_start = tic;
 end
 
 %% Trial Prices
 % Find the price 'αp' that possibly maximize the profit of SP.
-b_violate = true;
-k = 0;
+sp_profit = -inf*ones(3,1); b_violate = true(3,1);
+num_iters = 0;
+t = 0;
 while true
-	trial_price_node = node_uc * 2^t;
-	trial_price_link = link_uc * 2^t;
-	b_violate__ = b_violate;
+	trial_price = unitcosts * 2^t;
+	b_violate(1:2) = b_violate(2:3);
 	sp_profit(1:2) = sp_profit(2:3);
-	[sp_profit(3), b_violate] = SolveSCPCC(trial_price_node, trial_price_link);
-	k = k + 1;
-	if sp_profit(3) <= sp_profit(2) && ~b_violate
+	[sp_profit(3), b_violate(3), output] = ...
+		this.SolveSCPCC(slices, trial_price, options); %#ok<ASGLU>
+	RECORD_SUBROUTINE_TIME;
+	num_iters = num_iters + 1;
+	if num_iters == 1
+		options.bInitialize = false;
+	end
+	if sp_profit(3) <= sp_profit(2) && ~b_violate(3)
 		break;
 	end
 	t = t+1;
 end
-% statisfy condition: sp_profit(3) <= sp_profit(2) && ~b_violate
+% statisfy condition: sp_profit(3) <= sp_profit(2) && ~b_violate(3)
 beta_R = 2^t;
 epsilon = 10^-3;
 sp_profit_N = zeros(2,1);
-if ~b_violate__
+if ~b_violate(2)
+	% =>    sp_profit(2) >= sp_profit(1) && sp_profit(2) >= sp_profit(3).
+	%
+	% Both the last price and current price are feasible in terms of capacity.
+	% serach with 'pure-tri-section' method.
 	beta_L = 2^(t-2);
-	while abs(beta_L-beta_R)/beta_L > epsilon
+	while abs((sp_profit(2)-sp_profit(1))/sp_profit(1)) >= epsilon || ...
+			abs((sp_profit(2)-sp_profit(3))/sp_profit(3)) >= epsilon
+		% abs(beta_L-beta_R)/beta_L > epsilon
 		beta_N = [beta_L*2+beta_R; beta_L+beta_R*2]/3;
 		for i = 2:-1:1
-			trial_price_node = node_uc * beta_N(i);
-			trial_price_link = link_uc * beta_N(i);
-			sp_profit_N(i) = SolveSCPCC(trial_price_node, trial_price_link);
-			k = k + 1;
+			trial_price = unitcosts* beta_N(i);
+			[sp_profit_N(i), ~, output] = ...
+				this.SolveSCPCC(slices, trial_price, options); %#ok<ASGLU>
+			RECORD_SUBROUTINE_TIME;
 		end
-		if sp_profit_N(1)<=sp_profit_N(2)
-			beta_L = beta_N(1);
-			sp_profit(1) = sp_profit_N(1);
-			sp_profit(2) = sp_profit_N(2);
+		num_iters = num_iters + 2;
+		if sp_profit_N(1) > sp_profit_N(2)
+			beta_R = beta_N(2);	sp_profit(3) = sp_profit_N(2); sp_profit(2) = sp_profit_N(1);
 		else
-			beta_R = beta_N(2);
-			sp_profit(3) = sp_profit_N(2);
-			sp_profit(2) = sp_profit_N(1);
+			beta_L = beta_N(1);	sp_profit(1) = sp_profit_N(1); sp_profit(2) = sp_profit_N(2);
 		end
 	end
-	output.sp_profit = sp_profit_N(1);
-	output.beta = beta_N(1);
-	output.procedure = 'max';
+	results.sp_profit = sp_profit_N(1);
+	results.beta = beta_N(1);
+	results.procedure = 'max';
 else
+	% =>	sp_profit(1) >= sp_profit(2) >= sp_profit(3)   or 
+	% =>	sp_profit(2) >= sp_profit(1) && sp_profit(2) >= sp_profit(3).
+	%
+	% The last price is not feasible, while current price is feasible in terms of capacity.
+	% serach with 'trim-tri-section' method.
 	beta_L = 2^(t-1);
-	while abs(beta_R-beta_L)/beta_L > epsilon
+	while abs((sp_profit(2)-sp_profit(1))/sp_profit(1)) >= epsilon || ...
+			abs((sp_profit(2)-sp_profit(3))/sp_profit(3)) >= epsilon
+		% abs(beta_R-beta_L)/beta_L > epsilon
 		beta_N = [beta_L*2+beta_R; beta_L+beta_R*2]/3;
 		for i = 1:2
-			trial_price_node = node_uc * beta_N(i);
-			trial_price_link = link_uc * beta_N(i);
-			[sp_profit_N(i), b_violate(i)] = SolveSCPCC(trial_price_node, trial_price_link);
-			k = k+ 1;
+			trial_price = unitcosts * beta_N(i);
+			[sp_profit_N(i), b_violate(i), output] = ...
+				this.SolveSCPCC(slices, trial_price, options); %#ok<ASGLU>
+			RECORD_SUBROUTINE_TIME;
 		end
+		num_iters = num_iters + 2;
 		if b_violate(2)
-			beta_L = beta_N(2); sp_profit(2) = sp_profit_N(2);
+			beta_L = beta_N(2); sp_profit(1) = sp_profit_N(2); sp_profit(2) = sp_profit_N(2);
 		elseif b_violate(1)
-			beta_L = beta_N(1); sp_profit(2) = sp_profit_N(1);
+			beta_L = beta_N(1); sp_profit(1) = sp_profit_N(1); sp_profit(2) = sp_profit_N(2);
 			if sp_profit_N(1) > sp_profit_N(2)
 				beta_R = beta_N(2); sp_profit(3) = sp_profit_N(2);
 			end
 		else
 			if sp_profit_N(1) > sp_profit_N(2)
-				beta_R = beta_N(2); sp_profit(3) = sp_profit_N(2);
+				beta_R = beta_N(2); sp_profit(3) = sp_profit_N(2); sp_profit(2) = sp_profit_N(1);
 			else
-				beta_L = beta_N(1); sp_profit(2) = sp_profit_N(1);
+				beta_L = beta_N(1); sp_profit(1) = sp_profit_N(1); sp_profit(2) = sp_profit_N(2);
 			end
 		end
 	end
-	output.sp_profit = sp_profit(3);
-	output.beta = beta_R;
-	output.procedure = 'feas-max';
+	results.sp_profit = sp_profit(3);
+	results.beta = beta_R;
+	results.procedure = 'feas-max';
 end
-output.LinkPrice = trial_price_link;
-output.NodePrice = trial_price_node;
-output.numiters = k;	
+
 %% Finalize substrate network
-this.finalize(output.Prices, slices);
-output = this.calculateOutput(output, struct('Slices', {slices}, 'PricingPolicy', 'linear'));
-output.utilization = this.utilizationRatio;
-if nargout == 2
-	runtime = toc(t_start);
+if options.bCountTime
+	t_start = tic;
+end
+this.finalize(this.convertParameter(trial_price), slices);
+if options.bCountTime
+	t_stop = toc(t_start); prt = prt + t_stop/Ns; srt = srt + t_stop;
+	this.op.runtime = struct('Parallel', prt, 'Serial', srt);
+	this.op.iterations = num_iters;
+end
+[varargout{1:nargout}] = this.calculateOutput(slices, fields, ...
+	struct('PricingPolicy', 'linear'));
+if nargout >= 3
+	varargout{3}.Beta = results.beta;
+	varargout{3}.Procedure = results.procedure;
 end
 
-
-	function [sp_profit, b_violate, violates] = SolveSCPCC(prices, capacities)
-		num_process = Ns;
-		output_k = cell(num_process,1);
-		loads = zeros(Ne+Ndc, num_process);
-		nin = nargin;
-		for si = 1:num_process
-			sl = slices(si);
-			dc_id = sl.getDCPI;
-			link_id = sl.VirtualLinks.PhysicalLink;
-			sl.prices.Link = prices.Link(link_id);
-			sl.prices.Node = prices.Node(dc_id);
-			if nin >= 3
-				sl.setProblem([],[],[],capacities(1:Ne,si), capacities(Ne+(1:Ndc),si));
-			end
-		end
-		nout = nargout;
-		opts = options;
-		if nargin >= 2 && ~isempty(capacities)
-			opts.CapacityConstrained = true;
-		end
-		parfor (sj = 1:Ns,M)
-			%for sj = 1:num_process
-			sl = slices(sj);
-			if nout >= 2
-				[output_k{sj}, loads(:,sj)] = sl.priceOptimalFlowRateCC([], opts);
-			else
-				output_k{sj} = sl.priceOptimalFlowRateCC([], opts);
-			end
-		end
-		for si = 1:Ns
-			sl = slices(si);
-			sl.op.saveTempResults(output_k{si});
-		end
-		
-		%% Output
-		sp_profit = this.getSliceProviderProfit(slices, prices, struct('PricingPolicy', 'linear'));
-		if nargout >= 2
-			violates = sum(loads,2)>[capacities.Link; capacities.Node];
-			b_violate = ~isempty(find(violates,1)); 
-		end
-	end
 end
 
