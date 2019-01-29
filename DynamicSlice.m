@@ -135,6 +135,11 @@ classdef (Abstract) DynamicSlice < EventSender & EventReceiver & Slice
 				% if strcmp(this.options.PricingPolicy, 'quadratic-price')
 				[~, this.Links.ReconfigCost] = this.Optimizer.fcnLinkPricing(...
 					this.Links.Price, this.Links.Capacity);
+        go = IDynamicSliceOptimizer.GLOBAL_OPTIONS;
+        if ~isfield(go, 'eta')
+          warning('the global option ''eta'' should be initialized, but disappeared.');
+          go.eta = this.Parent.options.UnitReconfigureCost;
+        end
 				eta = this.op.GLOBAL_OPTIONS.eta;
 				this.Links.ReconfigCost = ...
 					(eta/this.time.ConfigureInterval) * this.Links.ReconfigCost;

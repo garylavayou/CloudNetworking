@@ -15,7 +15,7 @@ Nf = pardata.NumberFlows;
 
 if options.bInitialize
 	Nal = this.NumberAugmentedLinks;
-	Nvf = this.NumberFlowSections;
+	Nvf = pardata.NumberFlowSections;
 	Nvnf = pardata.NumberVNFs;
 	num_lcon_res = size(this.As_proc, 1);
 	num_lcon_flow = size(this.As_flow,1);
@@ -30,16 +30,22 @@ if options.bInitialize
 	% Slice     54   44
 	%	Weight    50   10
 	% Unit    0.02  0.01
-	switch this.pardata.Weight
-		case 50
-			unit = 0.02;
-		case 10
-			unit = 0.2;
-		case 300
-			unit = 0.01;
-		otherwise
-			unit = 1;
-	end			%%
+	if ~isfield(options, 'unit')
+		switch pardata.Weight
+			case 10
+				unit = 0.2;
+			case 25
+				unit = 0.03;
+			case 50
+				unit = 0.02;
+			case 300
+				unit = 0.01;
+			otherwise
+				unit = 1;
+		end			%%
+	else
+		unit = options.unit;
+	end
 	
 	%% Flow reservation constraints and processing resource constraints
 	%		[As -Ir] * [F; r]  = 0   ==> As*F  = r
@@ -86,7 +92,7 @@ if options.bInitialize
 		num_varxz = sum(prbm.num_vars(1:2));
 		prbm.A(num_lcon_res+(1:Nl+Nsn), 1:num_varxz) = this.As_load(:,prbm.I_active_xz);
 		prbm.b(num_lcon_res+(1:Nl+Nsn)) = [this.capacities.Link; this.capacities.Node]/unit;
-		idx_off = find(sum(this.As_load(:,prbm.I_active_xz),2));
+		idx_off = find(sum(this.As_load(:,prbm.I_active_xz),2)==0);
 		prbm.A(num_lcon_res+idx_off, :) = [];
 		prbm.b(num_lcon_res+idx_off) = [];
 	end
@@ -95,12 +101,11 @@ if options.bInitialize
 	prbm.minopts = optimoptions(@fmincon);
 	prbm.minopts.Algorithm = 'interior-point';
 	prbm.minopts.SpecifyObjectiveGradient = true;
-	prbm.minopts.Display = 'iter';   %{'notify-detailed'|'notify'|'iter'}
 	% prbm.minopts.OptimalityTolerance = 1e-5;
-	% minopts.ConstraintTolerance = 1e-3;
+	prbm.minopts.ConstraintTolerance = 1e-4;
 	prbm.minopts.MaxIterations = 50;
-	% prbm.minopts.CheckGradients = true;
-	% prbm.minopts.FiniteDifferenceType = 'central';
+% 	prbm.minopts.CheckGradients = true;
+% 	prbm.minopts.FiniteDifferenceType = 'central';
 	% prbm.minopts.InitTrustRegionRadius = sqrt(sum(prbm.num_vars)/100); [little effect]
 	% prbm.minopts.ScaleProblem = 'obj-and-constr'; [even slower]
 	% prbm.minopts.SubproblemAlgorithm = 'cg'; % only take cg steps. [even slower]
@@ -116,20 +121,29 @@ else
 	num_varx = this.num_vars(1);
 	num_varz = this.num_vars(2);
 end
+if isfield(options, 'Display')
+	prbm.minopts.Display = options.Display;
+else
+	prbm.minopts.Display = 'iter';   %{'notify-detailed'|'notify'|'iter'}
+end
 options = structupdate(options, prbm, {'bCompact', 'unit'});
-setdefault(options, this.pardata, {'PricingPolicy'}, 'warning');
+setdefault(options, pardata, {'PricingPolicy'}, 'warning');
 options.bFinal = false;
 if strcmpi(this.options.OptimizationTool, 'matlab')
 	if strcmpi(prbm.minopts.Algorithm, 'interior-point')
 		prbm.minopts.HessianFcn = ...
 			@(x,lbd)NormalSliceOptimizer.fcnHessianCC(x, lbd, this, options);
 	end
-	%warning('off')
-	x0 = prbm.x0/options.unit;
+	if isfield(options, 'Warning') && strcmpi(options.Warning, 'off')
+		warning('off');
+	end
+	x0 = prbm.x0/prbm.unit;
 	[xs, fval, exitflag, foutput] = ...
 		fmincon(@(x)NormalSliceOptimizer.fcnProfitPrimalCC(x, this, options), ...
 		x0, prbm.A, prbm.b, prbm.Aeq, prbm.beq, prbm.lb, [], [], prbm.minopts);
-	%warning('on')
+	if isfield(options, 'Warning') && strcmpi(options.Warning, 'off')
+		warning('on');
+	end
 	this.interpretExitflag(exitflag, foutput);
 	xs = xs*options.unit;
 else

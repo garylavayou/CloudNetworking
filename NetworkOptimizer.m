@@ -1,11 +1,15 @@
 classdef NetworkOptimizer < handle
   %UNTITLED5 Summary of this class goes here
   %   Detailed explanation goes here
-  
+	properties (Abstract, SetAccess = protected)
+		options Dictionary;
+	end
+	properties (Access = {?NetworkOptimizer, ?PhysicalNetwork})
+    runtime = 0;
+		iterations = 1;
+	end
   properties (SetAccess = protected)
     hn;
-    runtime;
-		options Dictionary;
   end
   
   %% Constructor
@@ -17,7 +21,7 @@ classdef NetworkOptimizer < handle
 				'ConstraintTolerance', 10^-3, ...
 				'Form', 'normal', ...
 				'Threshold', 'min', ...
-				'InterSlicePenalty', 1, ...
+				'InterSlicePenalty', 0.1, ...
 				'OptimizationTool', 'matlab' ... % {matlab|cvx}
 				);
 			if nargin >= 2
@@ -40,28 +44,28 @@ classdef NetworkOptimizer < handle
     slice_data = updateSliceData(this, slice_data, options);
     
 		function prices = initPrice(this, slices, unitcost, options)
-			t1 = 1;           % {0.1|0.8|1}
+			if isfield(options, 't1')
+				t1 = options.t1;
+			else
+				t1 = 1;           % {0.1|0.8|1}
+			end
+			unitcost = this.hn.convertParameter(unitcost, 'vector');
 			if nargin >= 4 && isfield(options, 'InitPrice')
-				link_usage = false(this.hn.NumberLinks,1);
-				node_usage = false(this.hn.NumberDataCenters,1);
+				Ne = this.hn.NumberLinks;
+				res_usage = false(Ne+this.hn.NumberDataCenters,1);
 				for i = 1:length(slices)
-					link_usage(slices(i).Links.PhysicalLink) = true;
-					node_usage(slices(i).getDCPI) = true;
+					res_usage(slices(i).Links.PhysicalLink) = true;
+					res_usage(Ne+slices(i).getDCPI()) = true;
 				end
-				if find([options.InitPrice.Link(link_usage)==0;options.InitPrice.Node(node_usage)==0],1)
-					prices.Link = t1* unitcost.Link;
-					prices.Node = t1* unitcost.Node;
-					%         init_price.Link = prices.Link
-					%         init_price.Node = prices.Node;
+				init_price = convertParameter(options.InitPrice, 'vector');
+				if find(init_price(res_usage)==0,1)
+					prices = t1* unitcost;
 				else
-					prices.Link = options.InitPrice.Link;
-					prices.Node = options.InitPrice.Node;
+					prices = init_price;
 				end
 			else
-				prices.Link = t1* unitcost.Link;
-				prices.Node = t1* unitcost.Node;
+				prices = t1* unitcost;
 			end
 		end
   end
 end
-

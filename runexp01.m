@@ -2,7 +2,7 @@
 % comparison of methods, global optimization, resource pricing, static
 % partitioning, and static slicing method.
 %
-% Network Model: Sample1/Sample2/SD_RAN
+% Network Model: Sample1/Sample2/SDRAN
 
 %% Specification of Substrate Network
 clearvars -except progress_bar;
@@ -41,7 +41,7 @@ switch node_opt.Model
 		link_opt.CapacityFactor = 1000;
 		link_opt.RandomSeed = 20171017;
 		net_opt.ClassName = 'CloudNetwork';
-	case NetworkModel.SD_RAN
+	case NetworkModel.SDRAN
 		% description = 'average profit ratio, middle cost, low price';
 		node_opt.CostUnit = 0.2;
 		link_opt.CostUnit = 0.1;
@@ -58,7 +58,7 @@ switch node_opt.Model
 		VNF_opt.Number = 4;            % number of VNF type
 	case NetworkModel.Sample2
 		VNF_opt.Number = 6;            % number of VNF type
-	case NetworkModel.SD_RAN
+	case NetworkModel.SDRAN
 		VNF_opt.Number = 6;            % number of VNF type
 end
 VNF_opt.Model = VNFIntegrateModel.AllInOne;
@@ -84,7 +84,7 @@ switch node_opt.Model
 		seed_dynamic = 20170415;   % 20161231
 		arrival.Interval = 1/6;     % Average of arrival interval.
 		arrival.Number = 100;
-	case NetworkModel.SD_RAN
+	case NetworkModel.SDRAN
 		type.Index = [13; 23; 33];
 		seed_dynamic = 20170410;   % 20161231
 		arrival.Number = 150;
@@ -118,7 +118,7 @@ if b_plot
 				1000, 8000;
 				1000, 8000];
 			slice_profit_limit = [0, 7000; 0, 7000; 0, 7000];
-		case NetworkModel.SD_RAN
+		case NetworkModel.SDRAN
 			x_tick = 1:200;
 			welfare_limit = [0 200000];
 			cost_limit = [0 5000];
@@ -139,7 +139,7 @@ if b_save
 		case NetworkModel.Sample2
 			description = '1-2';
 			expnum = '12';
-		case NetworkModel.SD_RAN
+		case NetworkModel.SDRAN
 			description = '1-3';
 			expnum = '13';
 	end

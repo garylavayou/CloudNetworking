@@ -78,7 +78,7 @@ switch node_opt.Model
         location = [96,-211; 221,-76; 173,-178; 138,-290; 327,-51; 278,-147; 234,-250;
             211,-341; 315,-327; 348,-256; 359,-119; 474,-84; 425,-184; 468,-259; 422,-327]; 
         [head, tail, link_capacity]=find(capacity);
-    case NetworkModel.SD_RAN
+    case NetworkModel.SDRAN
         capacity = link_opt.Capacity;
         [head, tail, link_capacity]=find(capacity);
         location = node_opt.Location;
@@ -108,7 +108,7 @@ switch link_opt.DelayModel
             warning('random number seed is not specified (set as %d).', floor(now));
             rng(floor(now));
         end
-        link_delay = 10*rand(size(link_capacity));
+        link_delay = 2+4*rand(size(link_capacity));			% D ~ U([2,6]) (ms)
         description = 'Each link''s latency is random within a range';
 end
 

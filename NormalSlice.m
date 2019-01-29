@@ -20,10 +20,15 @@ classdef NormalSlice < Slice
 	%% Public Methods
 	methods
 		function op = getOptimizer(this, options)
-			if nargin == 1
-				this.op = NormalSliceOptimizer(this);
+			if nargin >= 2 && isfield(options, 'Optimizer')
+				Optimizer = options.Optimizer;
 			else
-				this.op = NormalSliceOptimizer(this, options);
+				Optimizer = 'NormalSliceOptimizer';
+			end
+			if nargin == 1
+				this.op = instantiateclass(Optimizer, this);
+			else
+				this.op = instantiateclass(Optimizer, this, options);
 			end
 			op = this.op;
 			op.initializeState();

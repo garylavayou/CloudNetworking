@@ -51,7 +51,7 @@ Nsn = pardata.NumberServiceNodes;
 if options.bInitialize
 	Nan = this.NumberAugmentedNodes;
 	Nal = this.NumberAugmentedLinks;
-	Nvf = this.NumberFlowSections;   % Removed flows not involved in optimization.
+	Nvf = pardata.NumberFlowSections;   % Removed flows not involved in optimization.
 	Nf = pardata.NumberFlows;
 	this.num_vars = [	Nvf*Nal; 	Nvnf*Nf*Nsn; 	Nf; Nvnf*Nsn];  % MUST be reset here in the continue updating process
 	theta0 = this.GLOBAL_OPTIONS.theta0;

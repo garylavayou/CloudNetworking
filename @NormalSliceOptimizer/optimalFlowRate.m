@@ -85,6 +85,7 @@ if options.bInitialize
 	prbm.minopts.SpecifyObjectiveGradient = true;
 	prbm.minopts.Display = 'iter';
 	prbm.minopts.MaxIterations = 60;
+	prbm.minopts.ConstraintTolerance = 10^-4;
 % 	prbm.minopts.CheckGradients = true;
 % 	prbm.minopts.FiniteDifferenceType = 'central';
 	%% Save innformation

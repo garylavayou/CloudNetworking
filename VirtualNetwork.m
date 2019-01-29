@@ -28,7 +28,11 @@ classdef VirtualNetwork < INetwork
 			this.Parent = vnet_data.Parent;		% 'Parent' fields is mandatory.
 			% Virtual Links
 			this.Links = array2table(vnet_data.LinkMapS2P, 'VariableNames', {'PhysicalLink'});
-			this.Links.Capacity = zeros(height(this.Links),1);	% Link capacity
+			if isfield(vnet_data, 'LinkCapacity')
+				this.Links.Capacity = vnet_data.LinkCapacity(vnet_data.LinkMapS2P);
+			else
+				this.Links.Capacity = zeros(height(this.Links),1);	% Link capacity
+			end
 			this.Links.Load = zeros(height(this.Links), 1); 	  % Link load
 			% Virtual Nodes
 			this.Nodes = array2table(vnet_data.NodeMapS2P, 'VariableNames', {'PhysicalNode'});
@@ -43,7 +47,11 @@ classdef VirtualNetwork < INetwork
 			this.ServiceNodes = array2table(dc_vn_index, 'VariableNames', {'VirtualNode'});
 			this.Nodes.ServiceNode = zeros(this.NumberNodes,1);
 			this.Nodes{dc_vn_index, 'ServiceNode'} = (1:height(this.ServiceNodes))';
-			this.ServiceNodes.Capacity = zeros(height(this.ServiceNodes),1);	% Data center node capacity
+			if isfield(vnet_data, 'NodeCapacity')
+				this.ServiceNodes.Capacity = vnet_data.NodeCapacity(this.getDCPI());
+			else
+				this.ServiceNodes.Capacity = zeros(height(this.ServiceNodes),1);	% Data center node capacity
+			end
 			this.ServiceNodes.Load = zeros(height(this.ServiceNodes), 1); 		% Data center node load
 		end
 		

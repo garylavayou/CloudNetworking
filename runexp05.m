@@ -131,10 +131,10 @@ for i = 1:num_vars
 			user_opt.NumberFlows = numberflow(i);
 			options.UnitReconfigureCost = etas(1);
 			if ~isempty(penalty)
-				user_opt.penalty = penalty(1);
+				user_opt.IntraSlicePenalty = penalty(1);
 			end
 		case 'varpenalty'
-			user_opt.penalty = penalty(i);
+			user_opt.IntraSlicePenalty = penalty(i);
 			user_opt.Weight = weight(1);
 			user_opt.NumberFlows = numberflow(1);
 			options.UnitReconfigureCost = etas(1);

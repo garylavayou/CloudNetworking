@@ -11,9 +11,9 @@ TRACE = true;
 %% Create Network
 if ~isfield(options, 'NetworkType')
 	if ~isempty(DEBUG) && DEBUG
-		warning('Network type is not provided, use the ''DynamicCloudNetwork'' class.');
+		warning('Network type is not provided, use the ''SimpleDynamicNetwork'' class.');
 	end
-	options.NetworkType = 'DynamicCloudNetwork';
+	options.NetworkType = 'SimpleDynamicNetwork';
 end
 PN = instantiateclass(options.NetworkType, node_opt, link_opt, VNF_opt, options);
 % otherwise

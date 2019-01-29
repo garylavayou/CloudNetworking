@@ -1,10 +1,6 @@
 %%
-% if b_single_optimal
-%     %     plot(x, profit_approx.optimal(x), x, profit_accurate.optimal(x));
-% end
-% if b_price_adjust
-% %     plot(x, profit_approx.price(x), x, profit_accurate.price(x));
-% end
+% called by <runexp01>
+
 %%
 color.blue = 'blue';
 color.red = 'red';
@@ -22,7 +18,7 @@ legend_label_compact = {'PS', 'DS', 'SS'};
 line_width = 1;
 font_name = 'Calibri';
 font_size = 12;
-%%
+%% Number of Slices with Time
 if exist('fig_number_slice', 'var') && fig_number_slice.isvalid
     figure(fig_number_slice);
 else
@@ -64,7 +60,7 @@ legend({'Type-1', 'Type-2', 'Type-3', 'Total', 'Total Static'}, ...
 xlabel('Time (hour)');
 ylabel('Number of Slices');
 xlim([stat.times(1), stat.times(x_tick(end))]);
-%%
+%% Net Social Welfare with Time
 if exist('fig_netsocialwelfare', 'var') && fig_netsocialwelfare.isvalid
     figure(fig_netsocialwelfare);
 else

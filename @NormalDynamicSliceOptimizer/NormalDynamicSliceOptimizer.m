@@ -47,8 +47,8 @@ classdef NormalDynamicSliceOptimizer < NormalSliceOptimizer & IDynamicSliceOptim
 			Nvf = this.NumberFlowSections;
 			Nsn = slice.NumberServiceNodes;
 			Nvnf = slice.NumberVNFs;
-			nnf = numel(fidx);
-			nnvf = num_segs*nnf;
+			nnf = numel(fidx);   % number of new flows
+			nnfs = num_segs*nnf;  % number of new flow sections
 			Nl = slice.NumberLinks;
 			Nn = slice.NumberNodes;
 			
@@ -147,8 +147,8 @@ classdef NormalDynamicSliceOptimizer < NormalSliceOptimizer & IDynamicSliceOptim
 				Nvnf*Nf*Nsn;...  % number of node variables: z(n,v,f)
 				Nf ...					 % number of flows: r(f)
 				];
-			I_effect_varx = reshape(repmat(this.I_flow_edge_ex(fidx,:)', num_segs, 1), nnvf*Nal, 1);
-			I_effect_rows = reshape(repmat(this.I_flow_node_ex(fidx,:)', num_segs, 1), Nan*nnvf, 1);
+			I_effect_varx = reshape(repmat(this.I_flow_edge_ex(fidx,:)', num_segs, 1), nnfs*Nal, 1);
+			I_effect_rows = reshape(repmat(this.I_flow_node_ex(fidx,:)', num_segs, 1), Nan*nnfs, 1);
 			I_unused_varx = logical(sparse(Nal*num_segs,1)); 
 			idx = find(sum(As(1:Nn,aug_eid),1)==1); % 2(c) 1st segment has no traffic out from dc
 			I_unused_varx(Nl+idx) = true; 			
@@ -172,14 +172,14 @@ classdef NormalDynamicSliceOptimizer < NormalSliceOptimizer & IDynamicSliceOptim
 			end
 			%% Fake vars
 			xoffset = 0;
-			I_fake_edgevars = logical(sparse(nnvf*Nal,1));
+			I_fake_edgevars = logical(sparse(nnfs*Nal,1));
 			for i =1:nnf
 				for j = 1:num_segs
 					I_fake_edgevars(xoffset+aug_eid) = true;
 					xoffset = xoffset + Nal;
 				end
 			end
-			b_filter_dc = logical(sparse(Nan*nnvf,1));
+			b_filter_dc = logical(sparse(Nan*nnfs,1));
 			nidx_offset = 0;
 			for k = 1:nnf
 				for j = 1:Nvnf

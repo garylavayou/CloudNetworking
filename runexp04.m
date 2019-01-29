@@ -54,16 +54,16 @@ if nargin <= 1 && startsWith(task,'testparam')
 	end
 end
 %% Set Simulation Parameters
-if endsWith(task, 'hsr')
+if endsWith(task, 'hsr', 'IgnoreCase', true)
 	NUM_EVENT = 401;            % the trigger-interval is set to 60.
 	test_methods = {'DimBaseline', 'Dimconfig', 'DimconfigReserve'}; %#ok<*NASGU>
-elseif endsWith(task, 'fsr')
+elseif endsWith(task, 'fsr', 'IgnoreCase', true)
 	NUM_EVENT = 51;
 	test_methods = {'Baseline', 'Fastconfig'};
 end
-if startsWith(task,'perfeval')
+if startsWith(task,'perfeval', 'IgnoreCase', true)
 	mode = 'vareta'; etas = 1; numberflow = 100; weight = 10; num_vars = 1;
-elseif startsWith(task,'testparam')
+elseif startsWith(task,'testparam', 'IgnoreCase', true)
 	switch mode
 		case 'vareta'
 			etas = [1/32 1/16 1/8 1/4 1/2 1 2 4 8]; 
@@ -99,7 +99,7 @@ if b_plot
 	end
 	%%
 	options.bSavePlot = b_plotsave;
-	if endsWith(task, 'hsr')
+	if endsWith(task, 'hsr', 'IgnoreCase',true)
 		dataplot3l1approx
 		%%
 		load('Results/singles/EXP41_OUTPUT241s0100.mat', 'results');
@@ -126,17 +126,17 @@ if b_plot
 end
 %% Save Results
 if b_save
-	if endsWith(task, 'hsr')
+	if endsWith(task, 'hsr', 'IgnoreCase', true)
 		tag = 'HSR and HSR-RSV';
 		suffix = '';
-	elseif endsWith(task, 'fsr')
+	elseif endsWith(task, 'fsr', 'IgnoreCase', true)
 		tag = 'FSR';
 		suffix = '_fast';
 	end
-	if startsWith(task, 'testparam')
+	if startsWith(task, 'testparam', 'IgnoreCase', true)
 		description = 'Experiment 4-11: verify the influence of network settings to ';
 		output_name = sprintf('Results/%s1_%s%s.mat', EXPNAME, mode, suffix);
-	elseif startsWith(task, 'perfeval')
+	elseif startsWith(task, 'perfeval', 'IgnoreCase', true)
 		description = 'Experiment 4-12: Performance evaluation of ';
 		output_name = sprintf('Results/%s2_%se%04d.mat', EXPNAME, suffix, round(etas(1)*100));
 	end
@@ -144,9 +144,9 @@ if b_save
 			'(un-ordered SFC, without warm-up phase, disable ad-hoc mode).', newline, ...
 			'Topology = ', node_opt.Model.char, newline, ...
 			sprintf('SliceType = %d\n', type.Index(type.Permanent))];
-	if startsWith(task, 'testparam')
+	if startsWith(task, 'testparam', 'IgnoreCase', true)
 		description = [description, 'variables = ' mode(4:end), '.']; 
-	elseif  startsWith(task, 'perfeval')
+	elseif  startsWith(task, 'perfeval', 'IgnoreCase', true)
 		description = [description, '.']; 
 	end
 	save(output_name, 'description', 'results', ...

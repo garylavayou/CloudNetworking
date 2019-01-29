@@ -2,7 +2,7 @@
 % Giving a combination of different types of slices, calculate the
 % performace metrics. 
 %
-% Network Model: Sample1/Sample2/SD_RAN
+% Network Model: Sample1/Sample2/SDRAN
 
 %% NOTE
 % Compared with <run_exp301.m>, in this program, each iteration will not
@@ -22,12 +22,12 @@ switch node_opt.Model
 	case NetworkModel.Sample1
 		link_opt.CostUnit = 100;        % 75 | 100 | 150
 		node_opt.CostUnit = 300;        % 250 | 300 | 500
-	case NetworkModel.SD_RAN
+	case NetworkModel.SDRAN
 		link_opt.CostUnit = 0.2;
 		node_opt.CostUnit = 0.1;
 end
-net_opt.PricingFactor = 2;      % 1 | 2 | 3 ,
-net_opt.Threshold = 'average';
+options.PricingFactor = 2;      % 1 | 2 | 3 ,
+options.Threshold = 'average';
 % Experiment Control
 b_single_optimal = true;
 b_price_adjust1 = true;
@@ -38,28 +38,28 @@ b_plot = false;
 
 %% Specification of VNFs and Network Slices
 link_opt.RandomSeed = 20170423;
-link_opt.delay = LinkDelayOption.Random;
+link_opt.DelayModel = LinkDelayOption.Random;
 switch node_opt.Model
 	case NetworkModel.Sample1
-		link_opt.cost = LinkCostOption.CapacityInverse;
+		link_opt.CostModel = LinkCostOption.CapacityInverse;
 		link_opt.CapacityFactor = 30;
-		node_opt.capacity = NodeCapacityOption.BandwidthProportion;
-		node_opt.cost = NodeCostOption.CapacityInverse;
+		node_opt.CapacityModel = NodeCapacityOption.BandwidthProportion;
+		node_opt.CostModel = NodeCostOption.CapacityInverse;
 		node_opt.CapacityFactor = 1.5;     % [0.3; 0.5; 0.8; 1]
-		net_opt.ClassName = 'CloudNetwork';
+		options.ClassName = 'SimpleCloudNetwork';
 		VNF_opt.Number = 4;            % number of VNF type
-	case NetworkModel.SD_RAN
-		net_opt.ClassName = 'CloudAccessNetwork';
+	case NetworkModel.SDRAN
+		options.ClassName = 'SimpleAccessNetwork';
 end
-net_opt.AdmitPolicy = 'reject-flow';
+options.AdmitPolicy = 'reject-flow';
 VNF_opt.Model = VNFIntegrateModel.AllInOne;
 VNF_opt.RandomSeed = [20161101 0];
 
 %% Slice Combination
 switch node_opt.Model
 	case NetworkModel.Sample1
-slice_config.Type = [11; 21; 31];
-	case NetworkModel.SD_RAN
+    slice_config.Type = [11; 21; 31];
+	case NetworkModel.SDRAN
 end
 slice_config.RatioSet = {[1;1;1],[4; 1; 1],[1; 4; 1], [1; 1; 4]};
 slice_config.Count = 4:4:36;
@@ -103,18 +103,18 @@ for exp_id = 1:num_config
     if b_static_slice
         [stat_static, slice_stat_static] = ...
             CloudNetwork.createStatTable(num_point, num_type, 'static');  
-        net_opt.SlicingMethod = SlicingMethod.StaticPricing;
-        PN_static = instantiateclass(net_opt.ClassName, ...
-            node_opt, link_opt, VNF_opt, net_opt);
+        options.SlicingMethod = SlicingMethod.StaticPricing;
+        PN_static = instantiateclass(options.ClassName, ...
+            node_opt, link_opt, VNF_opt, options);
         PN_static.slice_template = Slice.loadSliceTemplate(slice_config.Type);
-        link_price = PN_static.getLinkCost * (1 + net_opt.PricingFactor);
-        node_price = PN_static.getNodeCost * (1 + net_opt.PricingFactor);
+        link_price = PN_static.getLinkCost * (1 + options.PricingFactor);
+        node_price = PN_static.getNodeCost * (1 + options.PricingFactor);
         PN_static.writeLink('Price', link_price);
         PN_static.writeDataCenter('Price', node_price);
     end
     if b_single_optimal || b_price_adjust1 || b_price_adjust2
-        PN = instantiateclass(net_opt.ClassName, ...
-            node_opt, link_opt, VNF_opt, net_opt);
+        PN = instantiateclass(options.ClassName, ...
+            node_opt, link_opt, VNF_opt, options);
         PN.slice_template = Slice.loadSliceTemplate(slice_config.Type);
     end
     %%
@@ -225,8 +225,8 @@ for exp_id = 1:num_config
         if b_single_optimal
             fprintf('(%s)Global SPP.\n', datestr(now));
 						PN.setOptions({'SlicingMethod', 'PricingFactor'}, ...
-							{SlicingMethod.SingleNormal, net_opt.PricingFactor});
-            [output_optimal, rt] = PN.singleSliceOptimization(net_opt);
+							{SlicingMethod.SingleNormal, options.PricingFactor});
+            [output_optimal, rt] = PN.singleSliceOptimization(options);
             [tb, stbs] = saveStatTable(PN, output_optimal, rt, ...
 							slice_config.Type, 'optimal-spp');
             stat_optimal(point_id, tb.Properties.VariableNames) = tb;
@@ -300,33 +300,33 @@ if b_plot
 end
 
 if b_save
-		switch net_opt.Model
+		switch options.Model
 		case NetworkModel.Sample1
 			description = '2-1';
 			expnum = '21';
 		case NetworkModel.Sample2
 			description = '2-2';
 			expnum = '22';
-		case NetworkModel.SD_RAN
+		case NetworkModel.SDRAN
 			description = '2-3';
 			expnum = '23';
 	end
 	description = sprintf('Experiment(No. %s): Different Consitition of Network Slices\n',...
 		description);
-	description = sprintf('%sNetwork Topology = %s\n', description, net_opt.Model.char);
-	description = sprintf('%sThreshold = %s\n', desciption, net_opt.Threshold);
+	description = sprintf('%sNetwork Topology = %s\n', description, options.Model.char);
+	description = sprintf('%sThreshold = %s\n', desciption, options.Threshold);
 	description = sprintf('%sLink Cost Unit = %g\nNode Cost Unit%g\n', ...
 		desciption, link_opt.CostUnit, node_opt.CostUnit);
-	description = sprintf('%sPricingFactor = %g\n', net_opt.PricingFactor);
-	if net_opt.Model == NetworkModel.SD_RAN
+	description = sprintf('%sPricingFactor = %g\n', options.PricingFactor);
+	if options.Model == NetworkModel.SDRAN
 		cost_desc = '_LC--_NC--';
 	else
 		cost_desc = strcat('_LC', replace(num2str(link_opt.CostUnit), '.', ''),...
 			'_NC', replace(num2str(node_opt.CostUnit), '.', ''))'
 	end
 	output_file_name = strcat('Results\EXP02', exp_num, cost_desc, ...
-		'_PF', replace(num2str(net_opt.PricingFactor, '%02d'), '.', ''),...
-		'_TH', net_opt.Threshold(1:3),...
+		'_PF', replace(num2str(options.PricingFactor, '%02d'), '.', ''),...
+		'_TH', options.Threshold(1:3),...
 		'.mat');
 	save(output_filename, 'output_results', 'description', 'link_opt', 'node_opt', ...
 		'net_opt', 'VNF_opt', 'slice_config');

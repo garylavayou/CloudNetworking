@@ -32,7 +32,7 @@ slice_opt = this.preAddingSlice(slice_opt);
 %% create flow table
 graph = this.residualgraph(slice_opt);
 [slice_opt.FlowTable, phy_adjacent, flag] = this.generateFlowTable(graph, slice_opt);
-sl = [];
+sl = Slice.empty(0,1);
 if flag == false
     return;
 end

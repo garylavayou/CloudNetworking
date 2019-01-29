@@ -126,7 +126,7 @@ classdef (Abstract) INetwork < BaseCopyable & HeteroObject
 				t_link.Overall = sum(load.link(eidx))/sum(cap.link(eidx));
 			end
 			if nargout >= 3
-				nidx = caop.node>eps;
+				nidx = cap.node>eps;
 				if isempty(nidx)
 					t_link = struct([]);
 					warning('no node capacity.');

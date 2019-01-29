@@ -169,27 +169,20 @@ classdef RequestEvent < handle
         end
         
         function T = countArriveType(this)
-            % current_arrive_pos is the position for next arrival.
-            arrive_pos = this.current_arrive_pos-1;
-            tbl = tabulate(this.arrive_type(1:arrive_pos));
-            if isempty(tbl)
-                T = table([],[],[], 'VariableNames', {'Value', 'Count', 'Percent'});
-            else
-                T = array2table(tbl, 'VariableNames', {'Value', 'Count', 'Percent'});
-            end
+          % current_arrive_pos is the position for next arrival.
+          arrive_pos = this.current_arrive_pos-1;
+          [types, counts, percents] = count(this.arrive_type(1:arrive_pos));
+          T = table(types, counts, percents, 'VariableNames', {'Value', 'Count', 'Percent'});
         end
         
         function T = countCurrentType(this)
-            arrive_ids = 1:(this.current_arrive_pos-1);
-            depart_ids = this.depart_id(1:this.current_depart_pos - 1);
-            % SETDIFF returns elements in |arrive_ids| but not in |depart_ids|.
-            current_ids = setdiff(arrive_ids, depart_ids);
-            tbl = tabulate(this.arrive_type(current_ids));
-            if isempty(tbl)
-                T = table([],[],[], 'VariableNames', {'Value', 'Count', 'Percent'});
-            else
-                T = array2table(tbl, 'VariableNames', {'Value', 'Count', 'Percent'});
-            end
+          arrive_ids = 1:(this.current_arrive_pos-1);
+          depart_ids = this.depart_id(1:this.current_depart_pos - 1);
+          % SETDIFF returns elements in |arrive_ids| but not in |depart_ids|.
+          current_ids = setdiff(arrive_ids, depart_ids);
+          [types, counts, percents] = count(this.arrive_type(current_ids));
+          T = table(types, counts, percents, ...
+            'VariableNames', {'Value', 'Count', 'Percent'});
         end
         
         function reset(this)

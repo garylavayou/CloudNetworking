@@ -32,7 +32,7 @@ classdef NormalDynamicNetwork < DynamicNetwork
 					sl = NormalSlice(slice_opt);
 				elseif isempty(slice_opt.ArrivalRate) || isempty(slice_opt.ServiceInterval)
 					sl = NormalSlice(slice_opt);
-					warning('slice created with type SimpleSlice.');
+					warning('slice created with type NormalSlice.');
 				else
 					sl = NormalDynamicSlice(slice_opt);
 				end

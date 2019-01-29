@@ -84,7 +84,7 @@ classdef IAccessNetwork < handle
 			%                 link_opt.Cost = link_opt.Cost * link_opt.CostUnit;
 			%             end
 			%% Set node capacity
-			node_opt.Model = NetworkModel.SD_RAN;
+			node_opt.Model = NetworkModel.SDRAN;
 			node_opt.Location = net.node(:,1:2);
 			node_opt.Capacity = zeros(net.Size,1);
 			node_opt.Capacity(node_opt.dc_index.Core) = 5000;
@@ -137,10 +137,11 @@ classdef IAccessNetwork < handle
 		end
 		
 		function end_points = generateEndPoints(this, slice_opt) %#ok<INUSL>
+      end_points = zeros(1,2);
 			switch slice_opt.FlowPattern
 				case FlowPattern.RandomInterBaseStation
 					id = unique_randi(length(slice_opt.NodeSet), 2, 'stable');
-					end_points = slice_opt.NodeSet(id);
+					end_points(:) = slice_opt.NodeSet(id);
 				case FlowPattern.RandomDataCenter2BaseStation
 					id = randi(length(slice_opt.DCNodeSet), 1);
 					end_points(1) = slice_opt.DCNodeSet(id);
